@@ -8,15 +8,15 @@ Derived from PLAN.md. Features are grouped by domain and ordered by implementati
 
 ### 1. Project Foundation
 
-- [ ] **F-001**: Monorepo setup with npm workspaces (client + server)
-- [ ] **F-002**: TypeScript configuration for both client and server
-- [ ] **F-003**: Vite dev server for React client
-- [ ] **F-004**: ESLint + Prettier configuration
-- [ ] **F-005**: Express server with Socket.io
-- [ ] **F-006**: MongoDB connection with Mongoose
-- [ ] **F-007**: Health check REST endpoint
-- [ ] **F-008**: Concurrent dev scripts (client + server hot reload)
-- [ ] **F-009**: Environment variable configuration (.env)
+- [x] **F-001**: Monorepo setup with npm workspaces (client + server)
+- [x] **F-002**: TypeScript configuration for both client and server
+- [x] **F-003**: Vite dev server for React client
+- [x] **F-004**: ESLint + Prettier configuration
+- [x] **F-005**: Express server with Socket.io
+- [x] **F-006**: MongoDB connection with Mongoose
+- [x] **F-007**: Health check REST endpoint
+- [x] **F-008**: Concurrent dev scripts (client + server hot reload)
+- [x] **F-009**: Environment variable configuration (.env)
 
 ### 2. Data Models & Types
 
