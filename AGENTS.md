@@ -37,6 +37,7 @@ A feature is only considered complete when ALL of the following pass:
 ### How to Test
 
 1. **After every implementation**, run the build checks:
+
    ```bash
    # Type check both packages
    cd server && npx tsc --noEmit && cd ../client && npx tsc --noEmit && cd ..
@@ -49,8 +50,8 @@ A feature is only considered complete when ALL of the following pass:
    ```
 
 2. **Server-side features** (game logic, socket handlers, validators):
-   - If unit tests exist, run them and confirm they pass.
-   - If no tests exist yet, manually verify by tracing the logic: call the function with expected inputs and edge-case inputs, confirm correct outputs.
+   - **Every server-side feature must have unit tests.** When adding new server logic (utility functions, socket handlers, game engine functions, validators, etc.), always write corresponding Vitest tests in `server/src/__tests__/`. No server feature is considered complete without passing tests.
+   - Run tests with `npm run test --workspace=server` and confirm they all pass.
    - For socket handlers, confirm the event is registered and the handler executes without errors.
 
 3. **Client-side features** (components, pages, context):
