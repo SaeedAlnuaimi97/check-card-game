@@ -62,10 +62,10 @@ Derived from PLAN.md. Features are grouped by domain and ordered by implementati
 
 ### 7. Action: Draw from Deck (Two-Phase)
 
-- [ ] **F-037**: Phase 1 — player emits `playerAction` with `type: 'drawDeck'`, server draws card and sends privately via `cardDrawn` event
-- [ ] **F-038**: Phase 2 — player sees drawn card, emits `discardAfterDraw` with slot choice ('drawn' to discard drawn card, or slot label to replace hand card)
-- [ ] **F-039**: Server validates discard choice and updates game state
-- [ ] **F-040**: Red face card effect detection — if discarded card is a red J/Q/K that was just drawn, trigger special effect
+- [x] **F-037**: Phase 1 — player emits `playerAction` with `type: 'drawDeck'`, server draws card and sends privately via `cardDrawn` event
+- [x] **F-038**: Phase 2 — player sees drawn card, emits `discardAfterDraw` with slot choice ('drawn' to discard drawn card, or slot label to replace hand card)
+- [x] **F-039**: Server validates discard choice and updates game state
+- [x] **F-040**: Red face card effect detection — if discarded card is a red J/Q/K that was just drawn, trigger special effect
 
 ### 8. Action: Take from Discard
 
