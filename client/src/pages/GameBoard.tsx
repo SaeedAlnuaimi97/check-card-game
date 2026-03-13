@@ -3,6 +3,7 @@ import {
   Box,
   Flex,
   Grid,
+  IconButton,
   Text,
   VStack,
   HStack,
@@ -98,7 +99,7 @@ const OpponentRow: FC<OpponentProps> = ({ player, isCurrentTurn, debugRevealed }
                   bg="card.back"
                   border="1px solid"
                   borderColor="gray.600"
-                  opacity={h.card === undefined ? 0.3 : 1}
+                  opacity={h.card === null ? 0.3 : 1}
                 />
               )}
             </Box>
@@ -130,6 +131,7 @@ export const GameBoard: FC = () => {
     endPeek,
     performAction,
     discardChoice,
+    leaveRoom,
     debugPeek,
   } = useSocket();
   const toast = useToast();
@@ -275,6 +277,11 @@ export const GameBoard: FC = () => {
     [canAct, hasDrawnCard, discardChoice, toast],
   );
 
+  const handleExitGame = useCallback(() => {
+    leaveRoom();
+    navigate('/');
+  }, [leaveRoom, navigate]);
+
   if (!gameState || !playerId) {
     return null;
   }
@@ -292,7 +299,14 @@ export const GameBoard: FC = () => {
   }
 
   return (
-    <Box minH="100vh" bg="gray.900" display="flex" flexDirection="column" position="relative">
+    <Box
+      h="100dvh"
+      bg="gray.900"
+      display="flex"
+      flexDirection="column"
+      position="relative"
+      overflow="hidden"
+    >
       {/* Peek overlay / countdown */}
       {isPeeking && peekedCards && peekedCards.length > 0 && (
         <Box
@@ -380,12 +394,27 @@ export const GameBoard: FC = () => {
             </Text>
           </Text>
         </HStack>
-        <Text fontSize="sm" color="gray.400">
-          Phase:{' '}
-          <Text as="span" color="gray.100" fontWeight="bold">
-            {gameState.phase}
+        <HStack spacing={2}>
+          <Text fontSize="sm" color="gray.400">
+            Phase:{' '}
+            <Text as="span" color="gray.100" fontWeight="bold">
+              {gameState.phase}
+            </Text>
           </Text>
-        </Text>
+          <IconButton
+            aria-label="Exit game"
+            size="xs"
+            variant="ghost"
+            color="gray.400"
+            _hover={{ color: 'red.300', bg: 'whiteAlpha.100' }}
+            onClick={handleExitGame}
+            icon={
+              <Text fontSize="md" lineHeight={1}>
+                {'\u{1F6AA}'}
+              </Text>
+            }
+          />
+        </HStack>
       </Flex>
 
       {/* Main game area */}
@@ -393,10 +422,11 @@ export const GameBoard: FC = () => {
         flex={1}
         templateRows="auto 1fr auto"
         p={{ base: 2, md: 4 }}
-        gap={{ base: 3, md: 4 }}
+        gap={{ base: 2, md: 3 }}
         maxW="900px"
         mx="auto"
         w="100%"
+        overflow="hidden"
       >
         {/* Top: Opponents */}
         <Flex wrap="wrap" justify="center" gap={{ base: 2, md: 3 }}>
@@ -537,7 +567,7 @@ export const GameBoard: FC = () => {
         </Flex>
 
         {/* Bottom: Player's hand + actions */}
-        <VStack spacing={3}>
+        <VStack spacing={2}>
           {/* Turn indicator */}
           {gameState.phase === 'peeking' ? (
             <Text fontSize="sm" color="yellow.300" fontWeight="bold">
