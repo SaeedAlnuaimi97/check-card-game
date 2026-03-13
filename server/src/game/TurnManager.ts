@@ -36,7 +36,11 @@ export function getAvailableActions(gameState: GameState): ActionType[] {
   const actions: ActionType[] = ['drawDeck'];
 
   if (gameState.discardPile.length > 0) {
-    actions.push('takeDiscard');
+    // Burned cards on top of the discard pile cannot be picked up
+    const topDiscard = gameState.discardPile[gameState.discardPile.length - 1];
+    if (!topDiscard.isBurned) {
+      actions.push('takeDiscard');
+    }
     actions.push('burn');
   }
 
@@ -86,6 +90,55 @@ export function transitionFromPeeking(gameState: GameState): void {
 export function getCurrentTurnPlayerId(gameState: GameState): string | null {
   const player = gameState.players[gameState.currentTurnIndex];
   return player?.playerId ?? null;
+}
+
+// ============================================================
+// Check Mechanism (F-059 to F-064)
+// ============================================================
+
+export interface CallCheckResult {
+  success: boolean;
+  error?: string;
+}
+
+/**
+ * Validates and processes a check call.
+ *
+ * F-059: Player calls CHECK at start of their turn (before action).
+ * F-061: Server marks checkCalledBy and checkCalledAtIndex.
+ *
+ * The caller still takes their normal turn action afterward (F-060).
+ * This function does NOT advance the turn — the caller acts next.
+ *
+ * Mutates gameState: sets checkCalledBy and checkCalledAtIndex.
+ */
+export function callCheck(gameState: GameState, playerId: string): CallCheckResult {
+  // Must be playing phase
+  if (gameState.phase !== 'playing') {
+    return { success: false, error: 'Game is not in playing phase' };
+  }
+
+  // Must be this player's turn
+  const currentPlayer = gameState.players[gameState.currentTurnIndex];
+  if (!currentPlayer || currentPlayer.playerId !== playerId) {
+    return { success: false, error: 'It is not your turn' };
+  }
+
+  // No one else has already called check (F-059)
+  if (gameState.checkCalledBy !== null) {
+    return { success: false, error: 'Check has already been called' };
+  }
+
+  // Must not have a pending drawn card (check is called BEFORE action)
+  if (gameState.drawnCard !== null) {
+    return { success: false, error: 'Cannot call check after drawing a card' };
+  }
+
+  // Mark the check (F-061)
+  gameState.checkCalledBy = playerId;
+  gameState.checkCalledAtIndex = gameState.currentTurnIndex;
+
+  return { success: true };
 }
 
 // ============================================================

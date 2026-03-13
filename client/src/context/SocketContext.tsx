@@ -19,6 +19,9 @@ import type {
   SpecialEffectType,
   WaitingForSpecialEffectPayload,
   BurnResultPayload,
+  CheckCalledPayload,
+  RoundEndedPayload,
+  GameEndedPayload,
 } from '../types/game.types';
 import type { SlotLabel } from '../types/player.types';
 
@@ -55,11 +58,19 @@ interface SocketContextValue {
   pendingEffect: WaitingForSpecialEffectPayload | null;
   /** Last burn result received */
   lastBurnResult: BurnResultPayload | null;
+  /** Data from when someone called check (F-062) */
+  checkCalledData: CheckCalledPayload | null;
+  /** Round end results, including all hands and scores (F-070) */
+  roundEndData: RoundEndedPayload | null;
+  /** Game end results, including winner and loser (F-075) */
+  gameEndData: GameEndedPayload | null;
   createRoom: (username: string) => Promise<{ success: boolean; error?: string }>;
   joinRoom: (roomCode: string, username: string) => Promise<{ success: boolean; error?: string }>;
   leaveRoom: () => void;
   startGame: () => Promise<{ success: boolean; error?: string }>;
   endPeek: () => Promise<{ success: boolean; error?: string }>;
+  /** Call check at the start of your turn (F-059) */
+  callCheck: () => Promise<{ success: boolean; error?: string }>;
   performAction: (
     actionType: ActionType,
     slot?: string,
@@ -87,6 +98,10 @@ interface SocketContextValue {
     targetPlayerId: string,
     slot: string,
   ) => Promise<{ success: boolean; card?: Card; error?: string }>;
+  /** Clear round end data (used by UI after showing modal) */
+  clearRoundEndData: () => void;
+  /** Clear game end data (used by UI after showing modal) */
+  clearGameEndData: () => void;
 }
 
 const SocketContext = createContext<SocketContextValue | null>(null);
@@ -113,6 +128,9 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
   const [drawnFromDiscard, setDrawnFromDiscard] = useState(false);
   const [pendingEffect, setPendingEffect] = useState<WaitingForSpecialEffectPayload | null>(null);
   const [lastBurnResult, setLastBurnResult] = useState<BurnResultPayload | null>(null);
+  const [checkCalledData, setCheckCalledData] = useState<CheckCalledPayload | null>(null);
+  const [roundEndData, setRoundEndData] = useState<RoundEndedPayload | null>(null);
+  const [gameEndData, setGameEndData] = useState<GameEndedPayload | null>(null);
 
   // Use a ref for navigate to avoid re-registering socket listeners
   const navigateRef = useRef(navigate);
@@ -146,6 +164,13 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
       setPeekedCards(data.peekedCards);
       setIsMyTurn(false);
       setTurnData(null);
+      setCheckCalledData(null);
+      setRoundEndData(null);
+      setGameEndData(null);
+      setDrawnCard(null);
+      setDrawnFromDiscard(false);
+      setPendingEffect(null);
+      setLastBurnResult(null);
       navigateRef.current('/game');
     });
 
@@ -205,10 +230,39 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
         setDrawnFromDiscard(false);
         setPendingEffect(null);
         setLastBurnResult(null);
+        setCheckCalledData(null);
+        setRoundEndData(null);
+        setGameEndData(null);
         setIsMyTurn(false);
         setTurnData(null);
         navigateRef.current('/');
       }
+    });
+
+    // F-062: Someone called check
+    socket.on('checkCalled', (data: CheckCalledPayload) => {
+      console.log(`${data.username} called CHECK!`);
+      setCheckCalledData(data);
+    });
+
+    // F-070: Round ended — all hands revealed, scores updated
+    socket.on('roundEnded', (data: RoundEndedPayload) => {
+      console.log('Round ended:', data);
+      setRoundEndData(data);
+      setIsMyTurn(false);
+      setTurnData(null);
+      setDrawnCard(null);
+      setDrawnFromDiscard(false);
+      setPendingEffect(null);
+      setCheckCalledData(null);
+    });
+
+    // F-075: Game ended — final scores, winner, loser
+    socket.on('gameEnded', (data: GameEndedPayload) => {
+      console.log('Game ended:', data);
+      setGameEndData(data);
+      setIsMyTurn(false);
+      setTurnData(null);
     });
 
     return () => {
@@ -225,6 +279,9 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
       socket.off('specialEffectResolved');
       socket.off('playerUsingSpecialEffect');
       socket.off('playerLeftGame');
+      socket.off('checkCalled');
+      socket.off('roundEnded');
+      socket.off('gameEnded');
       socket.disconnect();
     };
   }, []);
@@ -298,6 +355,11 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
     setDrawnFromDiscard(false);
     setPendingEffect(null);
     setLastBurnResult(null);
+    setCheckCalledData(null);
+    setRoundEndData(null);
+    setGameEndData(null);
+    setIsMyTurn(false);
+    setTurnData(null);
   }, [roomData, playerId]);
 
   // ----------------------------------------------------------
@@ -333,6 +395,25 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
         { roomCode: roomData.roomCode, playerId },
         (response: { success: boolean; error?: string }) => {
           setPeekedCards(null);
+          resolve(response);
+        },
+      );
+    });
+  }, [roomData, playerId]);
+
+  // ----------------------------------------------------------
+  // Call Check — call check at start of turn (F-059)
+  // ----------------------------------------------------------
+  const callCheck = useCallback((): Promise<{ success: boolean; error?: string }> => {
+    return new Promise((resolve) => {
+      if (!roomData || !playerId) {
+        resolve({ success: false, error: 'Not in a room' });
+        return;
+      }
+      socket.emit(
+        'callCheck',
+        { roomCode: roomData.roomCode, playerId },
+        (response: { success: boolean; error?: string }) => {
           resolve(response);
         },
       );
@@ -440,9 +521,9 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
           'redQueenPeek',
           { roomCode: roomData.roomCode, playerId, slot },
           (response: { success: boolean; card?: Card; error?: string }) => {
-            if (response.success) {
-              setPendingEffect(null);
-            }
+            // Do NOT clear pendingEffect here — the modal needs to stay open
+            // for the 3-second peek display. GameBoard handles clearing it
+            // after the peek timer expires.
             resolve(response);
           },
         );
@@ -506,6 +587,17 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
     [roomData],
   );
 
+  // ----------------------------------------------------------
+  // Clear round/game end data (for UI after showing modals)
+  // ----------------------------------------------------------
+  const clearRoundEndData = useCallback(() => {
+    setRoundEndData(null);
+  }, []);
+
+  const clearGameEndData = useCallback(() => {
+    setGameEndData(null);
+  }, []);
+
   const value: SocketContextValue = {
     isConnected,
     playerId,
@@ -519,17 +611,23 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
     drawnFromDiscard,
     pendingEffect,
     lastBurnResult,
+    checkCalledData,
+    roundEndData,
+    gameEndData,
     createRoom,
     joinRoom,
     leaveRoom,
     startGame,
     endPeek,
+    callCheck,
     performAction,
     discardChoice,
     redJackSwap,
     redQueenPeek,
     redKingChoice,
     debugPeek,
+    clearRoundEndData,
+    clearGameEndData,
   };
 
   return <SocketContext.Provider value={value}>{children}</SocketContext.Provider>;

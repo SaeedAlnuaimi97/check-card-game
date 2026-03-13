@@ -765,6 +765,106 @@ describe('handleBurnAttempt', () => {
     expect(result.burnSuccess).toBe(true);
     expect(player.hand).toHaveLength(0);
   });
+
+  it('marks successfully burned card with isBurned=true on discard pile', () => {
+    const handCard = makeCard('h7', '7', '♣');
+    const topDiscard = makeCard('d7', '7', '♥');
+    const player = makePlayer('p1', [
+      { slot: 'A', card: handCard },
+      { slot: 'B', card: makeCard('b', '3') },
+    ]);
+    const gs = createTestGameState({
+      players: [player],
+      discardPile: [topDiscard],
+    });
+
+    const result = handleBurnAttempt(gs, 'p1', 'A');
+
+    expect(result.burnSuccess).toBe(true);
+    // The burned card on the discard pile should have isBurned=true
+    const burnedOnDiscard = gs.discardPile[gs.discardPile.length - 1];
+    expect(burnedOnDiscard.id).toBe('h7');
+    expect(burnedOnDiscard.isBurned).toBe(true);
+  });
+
+  it('does not mark failed burn card with isBurned', () => {
+    const handCard = makeCard('h5', '5', '♣');
+    const topDiscard = makeCard('d7', '7', '♥');
+    const player = makePlayer('p1', [{ slot: 'A', card: handCard }]);
+    const gs = createTestGameState({
+      players: [player],
+      discardPile: [topDiscard],
+      deck: [makeCard('penalty')],
+    });
+
+    const result = handleBurnAttempt(gs, 'p1', 'A');
+
+    expect(result.burnSuccess).toBe(false);
+    // The discard pile top should still be the original card (no isBurned)
+    const topCard = gs.discardPile[gs.discardPile.length - 1];
+    expect(topCard.id).toBe('d7');
+    expect(topCard.isBurned).toBeUndefined();
+  });
+});
+
+// ============================================================
+// handleTakeDiscard — burned card blocking
+// ============================================================
+
+describe('handleTakeDiscard — burned card blocking', () => {
+  it('returns null when top discard card is burned', () => {
+    const burnedCard = makeCard('burned', '7', '♥');
+    burnedCard.isBurned = true;
+    const gs = createTestGameState({
+      discardPile: [makeCard('bottom'), burnedCard],
+    });
+
+    const result = handleTakeDiscard(gs, 'player1');
+
+    expect(result).toBeNull();
+    // Discard pile should be unchanged
+    expect(gs.discardPile).toHaveLength(2);
+    expect(gs.drawnCard).toBeNull();
+  });
+
+  it('allows take when top discard card is NOT burned', () => {
+    const normalCard = makeCard('normal', '7', '♥');
+    const gs = createTestGameState({
+      discardPile: [normalCard],
+    });
+
+    const result = handleTakeDiscard(gs, 'player1');
+
+    expect(result).toEqual(normalCard);
+    expect(gs.drawnCard).toEqual(normalCard);
+    expect(gs.drawnSource).toBe('discard');
+  });
+
+  it('allows take when top card has isBurned=false', () => {
+    const card = makeCard('card', '5', '♠');
+    card.isBurned = false;
+    const gs = createTestGameState({
+      discardPile: [card],
+    });
+
+    const result = handleTakeDiscard(gs, 'player1');
+
+    expect(result).toEqual(card);
+  });
+
+  it('allows take when burned card is NOT on top (another card was discarded on top)', () => {
+    const burnedCard = makeCard('burned', '7', '♥');
+    burnedCard.isBurned = true;
+    const normalTop = makeCard('normal-top', '3', '♠');
+    const gs = createTestGameState({
+      discardPile: [burnedCard, normalTop],
+    });
+
+    const result = handleTakeDiscard(gs, 'player1');
+
+    expect(result).toEqual(normalTop);
+    expect(gs.drawnCard).toEqual(normalTop);
+  });
 });
 
 // ============================================================

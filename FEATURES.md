@@ -92,91 +92,91 @@ Derived from PLAN.md. Features are grouped by domain and ordered by implementati
 
 ### 11. Hand Management
 
-- [ ] **F-055**: Dynamic hand size — starts at 4, grows with penalties, shrinks with burns
-- [ ] **F-056**: Slot label persistence — burned slot labels are not re-assigned (A, C, D stays A, C, D)
-- [ ] **F-057**: New penalty slots labeled sequentially (E, F, G, H...)
-- [ ] **F-058**: Hand size zero is valid — player has 0 cards and scores 0
+- [x] **F-055**: Dynamic hand size — starts at 4, grows with penalties, shrinks with burns
+- [x] **F-056**: Slot label persistence — burned slot labels are not re-assigned (A, C, D stays A, C, D)
+- [x] **F-057**: New penalty slots labeled sequentially (E, F, G, H...)
+- [x] **F-058**: Hand size zero is valid — player has 0 cards and scores 0
 
 ### 12. Check Mechanism
 
-- [ ] **F-059**: Player calls CHECK at start of their turn (before action)
-- [ ] **F-060**: Checker still takes their normal turn action after calling check
-- [ ] **F-061**: Server marks checker ID and turn index
-- [ ] **F-062**: Broadcast check notification to all players
-- [ ] **F-063**: Each remaining player gets one more turn
-- [ ] **F-064**: Round ends when turn returns to checker (no action taken on return)
+- [x] **F-059**: Player calls CHECK at start of their turn (before action)
+- [x] **F-060**: Checker still takes their normal turn action after calling check
+- [x] **F-061**: Server marks checker ID and turn index
+- [x] **F-062**: Broadcast check notification to all players
+- [x] **F-063**: Each remaining player gets one more turn
+- [x] **F-064**: Round ends when turn returns to checker (no action taken on return)
 
 ### 13. Scoring & Round End
 
-- [ ] **F-065**: Calculate hand value — sum of all card point values per player
-- [ ] **F-066**: Round winner — lowest sum scores 0
-- [ ] **F-067**: Tied lowest sum — all tied players score 0
-- [ ] **F-068**: All non-winners add their hand sum to total score
-- [ ] **F-069**: Reveal all hands simultaneously at round end
-- [ ] **F-070**: `roundEnded` event with all hands, sums, winner, updated scores
+- [x] **F-065**: Calculate hand value — sum of all card point values per player
+- [x] **F-066**: Round winner — lowest sum scores 0
+- [x] **F-067**: Tied lowest sum — all tied players score 0
+- [x] **F-068**: All non-winners add their hand sum to total score
+- [x] **F-069**: Reveal all hands simultaneously at round end
+- [x] **F-070**: `roundEnded` event with all hands, sums, winner, updated scores
 
 ### 14. Game End
 
-- [ ] **F-071**: Game ends when any player reaches 100+ total points
-- [ ] **F-072**: Player with 100+ loses
-- [ ] **F-073**: Multiple players at 100+ — highest score loses; if tied, all tied players lose
-- [ ] **F-074**: Winner is player with lowest total score
-- [ ] **F-075**: `gameEnded` event with final scores, winner, loser
-- [ ] **F-076**: Multi-round play — new round starts automatically until game end condition
+- [x] **F-071**: Game ends when any player reaches 100+ total points
+- [x] **F-072**: Player with 100+ loses
+- [x] **F-073**: Multiple players at 100+ — highest score loses; if tied, all tied players lose
+- [x] **F-074**: Winner is player with lowest total score
+- [x] **F-075**: `gameEnded` event with final scores, winner, loser
+- [x] **F-076**: Multi-round play — new round starts automatically until game end condition
 
 ### 15. State Sanitization & Anti-Cheat
 
-- [ ] **F-077**: Server constructs per-player `ClientGameState` — own cards included, others' cards null
-- [ ] **F-078**: Deck contents never sent to client (only `deckCount`)
-- [ ] **F-079**: Penalty card draws send `card: null` to client
-- [ ] **F-080**: All game logic server-authoritative — client cannot modify game state directly
-- [ ] **F-081**: Server validates every action (turn order, slot existence, action type)
+- [x] **F-077**: Server constructs per-player `ClientGameState` — own cards included, others' cards null
+- [x] **F-078**: Deck contents never sent to client (only `deckCount`)
+- [x] **F-079**: Penalty card draws send `card: null` to client
+- [x] **F-080**: All game logic server-authoritative — client cannot modify game state directly
+- [x] **F-081**: Server validates every action (turn order, slot existence, action type)
 
 ### 16. Socket Event System
 
-- [ ] **F-082**: Client → Server: `createRoom`, `joinRoom`, `leaveRoom`, `startGame`
-- [ ] **F-083**: Client → Server: `playerAction` (drawDeck / takeDiscard / burn)
-- [ ] **F-084**: Client → Server: `discardAfterDraw` (phase 2 of deck draw)
-- [ ] **F-085**: Client → Server: `callCheck`
-- [ ] **F-086**: Client → Server: `redJackSwap`, `redQueenPeek`, `redKingChoice`
-- [ ] **F-087**: Server → Client: `roomUpdated`, `error`
-- [ ] **F-088**: Server → Client: `gameStarted`, `gameStateUpdated`, `yourTurn`
-- [ ] **F-089**: Server → Client: `cardDrawn` (with isPenalty and awaitingDiscard flags)
-- [ ] **F-090**: Server → Client: `waitingForSpecialEffect`, `roundEnded`, `gameEnded`
-- [ ] **F-091**: All `Record<string, number>` for scores (not Map — JSON-serializable)
+- [x] **F-082**: Client → Server: `createRoom`, `joinRoom`, `leaveRoom`, `startGame`
+- [x] **F-083**: Client → Server: `playerAction` (drawDeck / takeDiscard / burn)
+- [x] **F-084**: Client → Server: `discardAfterDraw` (phase 2 of deck draw)
+- [x] **F-085**: Client → Server: `callCheck`
+- [x] **F-086**: Client → Server: `redJackSwap`, `redQueenPeek`, `redKingChoice`
+- [x] **F-087**: Server → Client: `roomUpdated`, `error`
+- [x] **F-088**: Server → Client: `gameStarted`, `gameStateUpdated`, `yourTurn`
+- [x] **F-089**: Server → Client: `cardDrawn` (with isPenalty and awaitingDiscard flags)
+- [x] **F-090**: Server → Client: `waitingForSpecialEffect`, `roundEnded`, `gameEnded`
+- [x] **F-091**: All `Record<string, number>` for scores (not Map — JSON-serializable)
 
 ### 17. UI: Pages
 
 - [x] **F-092**: Home page — username input, create room button, join room input + button
 - [x] **F-093**: Room lobby — room code display with copy, player list (4-6 slots), host indicator, start/leave buttons
-- [ ] **F-094**: Game board — opponents (top), draw/discard piles (center), player hand + actions (bottom), scores sidebar
+- [x] **F-094**: Game board — opponents (top), draw/discard piles (center), player hand + actions (bottom), scores sidebar
 
 ### 18. UI: Game Board Components
 
-- [ ] **F-095**: Card component — face up/down, slot label, selected state, click handler
-- [ ] **F-096**: PlayerHand — own cards with slot labels, click to select for discard/burn
-- [ ] **F-097**: OpponentDisplay — username, card count, card backs, score, current turn indicator
-- [ ] **F-098**: DrawPile — face-down deck, clickable to draw
-- [ ] **F-099**: DiscardPile — stacked cards, top card visible, clickable to take
-- [ ] **F-100**: ActionButtons — Draw from Deck, Take from Discard, Burn Card (with disabled states)
-- [ ] **F-101**: CheckButton — prominent styling, disabled when not your turn
+- [x] **F-095**: Card component — face up/down, slot label, selected state, click handler
+- [x] **F-096**: PlayerHand — own cards with slot labels, click to select for discard/burn
+- [x] **F-097**: OpponentDisplay — username, card count, card backs, score, current turn indicator
+- [x] **F-098**: DrawPile — face-down deck, clickable to draw
+- [x] **F-099**: DiscardPile — stacked cards, top card visible, clickable to take
+- [x] **F-100**: ActionButtons — Draw from Deck, Take from Discard, Burn Card (with disabled states)
+- [x] **F-101**: CheckButton — prominent styling, disabled when not your turn
 
 ### 19. UI: Modals
 
-- [ ] **F-102**: Red Jack modal — select target player + their slot + your slot, or skip
-- [ ] **F-103**: Red Queen modal — select which of your slots to peek
-- [ ] **F-104**: Red King modal — show 2 drawn cards, choose return both / keep 1 / keep 2
-- [ ] **F-105**: Round end modal — all hands revealed, scores, winner highlighted
-- [ ] **F-106**: Game end modal — final scores, winner, loser, play again option
+- [x] **F-102**: Red Jack modal — select target player + their slot + your slot, or skip
+- [x] **F-103**: Red Queen modal — select which of your slots to peek
+- [x] **F-104**: Red King modal — show 2 drawn cards, choose return both / keep 1 / keep 2
+- [x] **F-105**: Round end modal — all hands revealed, scores, winner highlighted
+- [x] **F-106**: Game end modal — final scores, winner, loser, play again option
 
 ### 20. UI: Polish & UX
 
-- [ ] **F-107**: Loading states for async operations
-- [ ] **F-108**: Error messages via toast notifications
-- [ ] **F-109**: Responsive design (mobile / tablet / desktop)
-- [ ] **F-110**: Turn indicator — clear visual of whose turn it is
-- [ ] **F-111**: Check notification banner
-- [ ] **F-112**: Card selection highlighting
+- [x] **F-107**: Loading states for async operations
+- [x] **F-108**: Error messages via toast notifications
+- [x] **F-109**: Responsive design (mobile / tablet / desktop)
+- [x] **F-110**: Turn indicator — clear visual of whose turn it is
+- [x] **F-111**: Check notification banner
+- [x] **F-112**: Card selection highlighting
 
 ---
 

@@ -12,4 +12,6 @@ export interface Card {
   rank: Rank;
   value: number;
   isRed: boolean;
+  /** True when this card was successfully burned — cannot be picked up from discard. */
+  isBurned?: boolean;
 }

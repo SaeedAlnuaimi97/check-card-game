@@ -100,3 +100,45 @@ export interface SpecialEffectResolvedPayload {
   cardsKept?: number;
   discardedCards?: Card[];
 }
+
+// ============================================================
+// Check & Scoring Payloads (F-055 to F-076)
+// ============================================================
+
+export interface CheckCalledPayload {
+  playerId: string;
+  username: string;
+}
+
+export interface PlayerRoundResult {
+  playerId: string;
+  username: string;
+  cards: Card[];
+  slots: string[];
+  handSum: number;
+}
+
+export interface RoundEndedPayload {
+  roundNumber: number;
+  checkCalledBy: string;
+  allHands: PlayerRoundResult[];
+  roundWinners: string[];
+  updatedScores: Record<string, number>;
+  gameEnded: boolean;
+  nextRoundStarting: boolean;
+}
+
+export interface GameEndedPayload {
+  finalScores: Record<string, number>;
+  winner: {
+    playerId: string;
+    username: string;
+    score: number;
+  };
+  loser: {
+    playerId: string;
+    username: string;
+    score: number;
+  };
+  allHands: PlayerRoundResult[];
+}

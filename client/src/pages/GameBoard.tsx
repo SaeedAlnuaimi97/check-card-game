@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, FC } from 'react';
 import {
   Box,
   Button,
+  Divider,
   Flex,
   Grid,
   IconButton,
@@ -11,7 +12,13 @@ import {
   ModalFooter,
   ModalHeader,
   ModalOverlay,
+  Table,
+  Tbody,
+  Td,
   Text,
+  Th,
+  Thead,
+  Tr,
   VStack,
   HStack,
   Badge,
@@ -28,7 +35,7 @@ import { Card } from '../components/cards/Card';
 import { CardBack } from '../components/cards/CardBack';
 import type { Card as CardType } from '../types/card.types';
 import type { ClientHandSlot, ClientPlayerState } from '../types/player.types';
-import type { PeekedCard } from '../types/game.types';
+import type { PeekedCard, PlayerRoundResult } from '../types/game.types';
 
 // ============================================================
 // Constants
@@ -138,7 +145,11 @@ export const GameBoard: FC = () => {
     drawnFromDiscard,
     pendingEffect,
     lastBurnResult,
+    checkCalledData,
+    roundEndData,
+    gameEndData,
     endPeek,
+    callCheck,
     performAction,
     discardChoice,
     redJackSwap,
@@ -146,12 +157,22 @@ export const GameBoard: FC = () => {
     redKingChoice,
     leaveRoom,
     debugPeek,
+    clearRoundEndData,
+    clearGameEndData,
   } = useSocket();
   const toast = useToast();
 
   // Peek animation state
   const [isPeeking, setIsPeeking] = useState(true);
   const [peekProgress, setPeekProgress] = useState(100);
+
+  // Reset peeking state when a new round starts (component is not remounted)
+  useEffect(() => {
+    if (peekedCards && peekedCards.length > 0 && gameState?.phase === 'peeking') {
+      setIsPeeking(true);
+      setPeekProgress(100);
+    }
+  }, [peekedCards, gameState?.phase]);
 
   // Debug: track revealed cards by key `${playerId}:${slot}`
   const [debugRevealed, setDebugRevealed] = useState<Record<string, CardType>>({});
@@ -240,6 +261,36 @@ export const GameBoard: FC = () => {
       });
     }
   }, [lastBurnResult, playerId, gameState?.players, toast]);
+
+  // Check called toast notification (F-062)
+  useEffect(() => {
+    if (!checkCalledData) return;
+    const callerName = checkCalledData.playerId === playerId ? 'You' : checkCalledData.username;
+    toast({
+      title: `${callerName} called CHECK!`,
+      description: 'Final round — one more turn each.',
+      status: 'warning',
+      duration: 4000,
+      isClosable: true,
+      position: 'top',
+    });
+  }, [checkCalledData, playerId, toast]);
+
+  // Handle calling check
+  const handleCallCheck = useCallback(async () => {
+    const result = await callCheck();
+    if (!result.success && result.error) {
+      toast({ title: result.error, status: 'error', duration: 2000, position: 'top' });
+    }
+  }, [callCheck, toast]);
+
+  // Handle returning to lobby after game end
+  const handleReturnToLobby = useCallback(() => {
+    clearGameEndData();
+    clearRoundEndData();
+    leaveRoom();
+    navigate('/');
+  }, [clearGameEndData, clearRoundEndData, leaveRoom, navigate]);
 
   // Peek countdown — when timer expires, call endPeek to transition to playing (F-031, F-033)
   useEffect(() => {
@@ -369,15 +420,15 @@ export const GameBoard: FC = () => {
   const [kingLoading, setKingLoading] = useState(false);
 
   // Reset special effect state when pendingEffect changes
+  // (but preserve queen peek display while timer is running)
   useEffect(() => {
     if (!pendingEffect) {
       setJackMySlot(null);
       setJackTargetPlayer(null);
       setJackTargetSlot(null);
       setJackLoading(false);
-      setQueenPeekedCard(null);
+      // Don't clear queen peek state here — the peek timer handles it
       setQueenLoading(false);
-      setQueenPeekTimer(false);
       setKingKeepIndex(null);
       setKingReplaceSlot(null);
       setKingReplaceSlots([null, null]);
@@ -593,6 +644,12 @@ export const GameBoard: FC = () => {
               {gameState.phase}
             </Text>
           </Text>
+          {/* Check called banner */}
+          {checkCalledData && (
+            <Badge colorScheme="red" fontSize="xs" px={2} py={1}>
+              CHECK ({checkCalledData.playerId === playerId ? 'You' : checkCalledData.username})
+            </Badge>
+          )}
           <IconButton
             aria-label="Exit game"
             size="xs"
@@ -651,7 +708,7 @@ export const GameBoard: FC = () => {
           >
             <VStack spacing={2}>
               <CardBack
-                size="md"
+                size="lg"
                 isClickable={
                   canAct &&
                   !hasDrawnCard &&
@@ -682,7 +739,7 @@ export const GameBoard: FC = () => {
                   shadow="0 0 16px rgba(255, 214, 0, 0.4)"
                   animation="pulse 1.5s ease-in-out infinite"
                 >
-                  <Card card={drawnCard} size="md" />
+                  <Card card={drawnCard} size="lg" />
                 </Box>
                 <Text fontSize="xs" color="yellow.300" fontWeight="bold">
                   {drawnFromDiscard ? 'From Discard' : 'Drawn'}
@@ -698,35 +755,63 @@ export const GameBoard: FC = () => {
                 ? 'Must swap with a hand card'
                 : hasDrawnCard
                   ? 'Discard drawn card'
-                  : canAct && turnData?.availableActions.includes('takeDiscard')
-                    ? 'Take from discard'
-                    : !canAct
-                      ? 'Not your turn'
-                      : ''
+                  : topDiscard?.isBurned
+                    ? 'Burned card — cannot pick up'
+                    : canAct && turnData?.availableActions.includes('takeDiscard')
+                      ? 'Take from discard'
+                      : !canAct
+                        ? 'Not your turn'
+                        : ''
             }
             isDisabled={!canAct && gameState.phase !== 'playing'}
           >
             <VStack spacing={2}>
               {topDiscard ? (
-                <Card
-                  card={topDiscard}
-                  isClickable={
-                    hasDrawnCard
-                      ? !drawnFromDiscard
-                      : canAct && (turnData?.availableActions.includes('takeDiscard') ?? false)
-                  }
-                  onClick={
-                    hasDrawnCard && !drawnFromDiscard
-                      ? () => handleDiscardChoice(null)
-                      : !hasDrawnCard
-                        ? handleTakeDiscard
-                        : undefined
-                  }
-                />
+                <Box position="relative">
+                  <Card
+                    card={topDiscard}
+                    size="lg"
+                    isClickable={
+                      hasDrawnCard
+                        ? !drawnFromDiscard
+                        : canAct &&
+                          !topDiscard.isBurned &&
+                          (turnData?.availableActions.includes('takeDiscard') ?? false)
+                    }
+                    onClick={
+                      hasDrawnCard && !drawnFromDiscard
+                        ? () => handleDiscardChoice(null)
+                        : !hasDrawnCard && !topDiscard.isBurned
+                          ? handleTakeDiscard
+                          : undefined
+                    }
+                  />
+                  {topDiscard.isBurned && (
+                    <Box
+                      position="absolute"
+                      top="-6px"
+                      right="-6px"
+                      bg="orange.500"
+                      borderRadius="full"
+                      w="24px"
+                      h="24px"
+                      display="flex"
+                      alignItems="center"
+                      justifyContent="center"
+                      shadow="md"
+                      border="2px solid"
+                      borderColor="orange.300"
+                    >
+                      <Text fontSize="12px" lineHeight={1}>
+                        {'\uD83D\uDD25'}
+                      </Text>
+                    </Box>
+                  )}
+                </Box>
               ) : (
                 <Box
-                  w="80px"
-                  h="112px"
+                  w="100px"
+                  h="140px"
                   borderRadius="md"
                   border="2px dashed"
                   borderColor={hasDrawnCard && !drawnFromDiscard ? 'yellow.400' : 'gray.600'}
@@ -760,10 +845,14 @@ export const GameBoard: FC = () => {
 
         {/* Bottom: Player's hand + actions */}
         <VStack spacing={2}>
-          {/* Turn indicator */}
+          {/* Turn indicator + Check button */}
           {gameState.phase === 'peeking' ? (
             <Text fontSize="sm" color="yellow.300" fontWeight="bold">
               Memorizing...
+            </Text>
+          ) : gameState.phase === 'roundEnd' || gameState.phase === 'gameEnd' ? (
+            <Text fontSize="sm" color="orange.300" fontWeight="bold">
+              Round Over
             </Text>
           ) : hasDrawnCard && drawnFromDiscard ? (
             <Text fontSize="sm" color="yellow.300" fontWeight="bold">
@@ -774,9 +863,22 @@ export const GameBoard: FC = () => {
               Click a hand card to swap, or click discard to keep hand
             </Text>
           ) : gameState.players[gameState.currentTurnIndex]?.playerId === playerId ? (
-            <Heading size="sm" color="yellow.300">
-              Your Turn
-            </Heading>
+            <HStack spacing={3}>
+              <Heading size="sm" color="yellow.300">
+                Your Turn
+              </Heading>
+              {turnData?.canCheck && !hasDrawnCard && !pendingEffect && (
+                <Button
+                  size="sm"
+                  colorScheme="red"
+                  variant="solid"
+                  fontWeight="bold"
+                  onClick={handleCallCheck}
+                >
+                  CHECK
+                </Button>
+              )}
+            </HStack>
           ) : (
             <Text fontSize="sm" color="gray.500">
               {gameState.players[gameState.currentTurnIndex]?.username}&apos;s turn
@@ -961,7 +1063,7 @@ export const GameBoard: FC = () => {
       {/* Red Queen Modal (F-050) — Peek at own card                    */}
       {/* ============================================================ */}
       <Modal
-        isOpen={pendingEffect?.effect === 'redQueen'}
+        isOpen={pendingEffect?.effect === 'redQueen' || queenPeekTimer}
         onClose={() => {}}
         isCentered
         closeOnOverlayClick={false}
@@ -1197,6 +1299,297 @@ export const GameBoard: FC = () => {
               }
             >
               Confirm
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+
+      {/* ============================================================ */}
+      {/* Round End Modal (F-070) — Show all hands and scores           */}
+      {/* ============================================================ */}
+      <Modal
+        isOpen={roundEndData !== null && gameEndData === null}
+        onClose={() => {}}
+        isCentered
+        closeOnOverlayClick={false}
+        closeOnEsc={false}
+        size={{ base: 'md', md: 'lg' }}
+      >
+        <ModalOverlay bg="blackAlpha.800" />
+        <ModalContent bg="gray.800" color="white" maxH="90vh" overflow="auto">
+          <ModalHeader textAlign="center">
+            <Heading size="md" color="orange.300">
+              Round {roundEndData?.roundNumber} Complete
+            </Heading>
+            <Text fontSize="sm" color="gray.400" fontWeight="normal" mt={1}>
+              {roundEndData?.checkCalledBy === playerId
+                ? 'You'
+                : (gameState?.players.find((p) => p.playerId === roundEndData?.checkCalledBy)
+                    ?.username ?? 'Someone')}{' '}
+              called check
+            </Text>
+          </ModalHeader>
+          <ModalBody>
+            <VStack spacing={4} align="stretch">
+              {/* All hands revealed */}
+              {roundEndData?.allHands.map((hand: PlayerRoundResult) => {
+                const isWinner = roundEndData.roundWinners.includes(hand.playerId);
+                const isMe = hand.playerId === playerId;
+                return (
+                  <Box
+                    key={hand.playerId}
+                    p={3}
+                    borderRadius="md"
+                    border="2px solid"
+                    borderColor={isWinner ? 'green.400' : 'gray.600'}
+                    bg={isWinner ? 'whiteAlpha.100' : 'transparent'}
+                  >
+                    <Flex justify="space-between" align="center" mb={2}>
+                      <HStack spacing={2}>
+                        <Text fontWeight="bold" fontSize="sm">
+                          {hand.username}
+                          {isMe ? ' (You)' : ''}
+                        </Text>
+                        {isWinner && (
+                          <Badge colorScheme="green" fontSize="2xs">
+                            Winner
+                          </Badge>
+                        )}
+                      </HStack>
+                      <Text
+                        fontWeight="bold"
+                        fontSize="sm"
+                        color={isWinner ? 'green.300' : 'red.300'}
+                      >
+                        {hand.handSum} pts
+                      </Text>
+                    </Flex>
+                    <HStack spacing={2} flexWrap="wrap">
+                      {hand.cards.map((c, i) => (
+                        <VStack key={i} spacing={0}>
+                          <Box
+                            w={{ base: '40px', md: '52px' }}
+                            h={{ base: '56px', md: '74px' }}
+                            borderRadius="sm"
+                            border="1px solid"
+                            borderColor={isWinner ? 'green.400' : 'gray.500'}
+                            bg="white"
+                            display="flex"
+                            flexDirection="column"
+                            alignItems="center"
+                            justifyContent="center"
+                            fontSize={{ base: '2xs', md: 'xs' }}
+                          >
+                            <Text
+                              color={c.isRed ? 'red.500' : 'gray.800'}
+                              fontWeight="bold"
+                              lineHeight={1}
+                            >
+                              {c.rank}
+                            </Text>
+                            <Text color={c.isRed ? 'red.500' : 'gray.800'} lineHeight={1}>
+                              {c.suit}
+                            </Text>
+                          </Box>
+                          <Text fontSize="2xs" color="gray.500">
+                            {hand.slots[i]}
+                          </Text>
+                        </VStack>
+                      ))}
+                    </HStack>
+                  </Box>
+                );
+              })}
+
+              {/* Cumulative scores */}
+              <Divider borderColor="gray.600" />
+              <Box>
+                <Text fontWeight="bold" fontSize="sm" mb={2} color="gray.300">
+                  Cumulative Scores
+                </Text>
+                <Table size="sm" variant="simple">
+                  <Thead>
+                    <Tr>
+                      <Th color="gray.400">Player</Th>
+                      <Th color="gray.400" isNumeric>
+                        Total
+                      </Th>
+                    </Tr>
+                  </Thead>
+                  <Tbody>
+                    {gameState?.players
+                      .slice()
+                      .sort(
+                        (a, b) =>
+                          (roundEndData?.updatedScores[a.playerId] ?? 0) -
+                          (roundEndData?.updatedScores[b.playerId] ?? 0),
+                      )
+                      .map((p) => (
+                        <Tr key={p.playerId}>
+                          <Td color="gray.100" fontSize="sm">
+                            {p.username}
+                            {p.playerId === playerId ? ' (You)' : ''}
+                          </Td>
+                          <Td
+                            isNumeric
+                            fontWeight="bold"
+                            color={
+                              (roundEndData?.updatedScores[p.playerId] ?? 0) >= 100
+                                ? 'red.400'
+                                : 'gray.100'
+                            }
+                          >
+                            {roundEndData?.updatedScores[p.playerId] ?? 0}
+                          </Td>
+                        </Tr>
+                      ))}
+                  </Tbody>
+                </Table>
+              </Box>
+            </VStack>
+          </ModalBody>
+          <ModalFooter justifyContent="center">
+            <Text fontSize="xs" color="gray.500">
+              {roundEndData?.nextRoundStarting ? 'Next round starting soon...' : 'Game over!'}
+            </Text>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+
+      {/* ============================================================ */}
+      {/* Game End Modal (F-075) — Final scores, winner, loser          */}
+      {/* ============================================================ */}
+      <Modal
+        isOpen={gameEndData !== null}
+        onClose={() => {}}
+        isCentered
+        closeOnOverlayClick={false}
+        closeOnEsc={false}
+        size={{ base: 'md', md: 'lg' }}
+      >
+        <ModalOverlay bg="blackAlpha.800" />
+        <ModalContent bg="gray.800" color="white" maxH="90vh" overflow="auto">
+          <ModalHeader textAlign="center">
+            <Heading size="lg" color="yellow.300" mb={2}>
+              Game Over
+            </Heading>
+            <VStack spacing={1}>
+              <Text fontSize="md" color="green.300">
+                Winner: {gameEndData?.winner.username}
+                {gameEndData?.winner.playerId === playerId ? ' (You!)' : ''} —{' '}
+                {gameEndData?.winner.score} pts
+              </Text>
+              <Text fontSize="md" color="red.300">
+                Loser: {gameEndData?.loser.username}
+                {gameEndData?.loser.playerId === playerId ? ' (You)' : ''} —{' '}
+                {gameEndData?.loser.score} pts
+              </Text>
+            </VStack>
+          </ModalHeader>
+          <ModalBody>
+            <VStack spacing={4} align="stretch">
+              {/* Final scores table */}
+              <Table size="sm" variant="simple">
+                <Thead>
+                  <Tr>
+                    <Th color="gray.400">Player</Th>
+                    <Th color="gray.400" isNumeric>
+                      Final Score
+                    </Th>
+                  </Tr>
+                </Thead>
+                <Tbody>
+                  {Object.entries(gameEndData?.finalScores ?? {})
+                    .sort(([, a], [, b]) => a - b)
+                    .map(([pid, score]) => {
+                      const playerName =
+                        gameState?.players.find((p) => p.playerId === pid)?.username ?? pid;
+                      const isWinner = pid === gameEndData?.winner.playerId;
+                      const isLoser = pid === gameEndData?.loser.playerId;
+                      return (
+                        <Tr key={pid}>
+                          <Td fontSize="sm">
+                            <HStack spacing={2}>
+                              <Text color="gray.100">
+                                {playerName}
+                                {pid === playerId ? ' (You)' : ''}
+                              </Text>
+                              {isWinner && (
+                                <Badge colorScheme="green" fontSize="2xs">
+                                  Winner
+                                </Badge>
+                              )}
+                              {isLoser && (
+                                <Badge colorScheme="red" fontSize="2xs">
+                                  Loser
+                                </Badge>
+                              )}
+                            </HStack>
+                          </Td>
+                          <Td
+                            isNumeric
+                            fontWeight="bold"
+                            color={isWinner ? 'green.300' : isLoser ? 'red.300' : 'gray.100'}
+                          >
+                            {score}
+                          </Td>
+                        </Tr>
+                      );
+                    })}
+                </Tbody>
+              </Table>
+
+              {/* Last round hands */}
+              {gameEndData?.allHands && gameEndData.allHands.length > 0 && (
+                <Box>
+                  <Text fontWeight="bold" fontSize="sm" mb={2} color="gray.300">
+                    Final Hands
+                  </Text>
+                  {gameEndData.allHands.map((hand: PlayerRoundResult) => (
+                    <Box key={hand.playerId} mb={2}>
+                      <Flex justify="space-between" align="center" mb={1}>
+                        <Text fontSize="xs" fontWeight="bold" color="gray.300">
+                          {hand.username} — {hand.handSum} pts
+                        </Text>
+                      </Flex>
+                      <HStack spacing={1} flexWrap="wrap">
+                        {hand.cards.map((c, i) => (
+                          <Box
+                            key={i}
+                            w={{ base: '36px', md: '44px' }}
+                            h={{ base: '50px', md: '62px' }}
+                            borderRadius="sm"
+                            border="1px solid"
+                            borderColor="gray.500"
+                            bg="white"
+                            display="flex"
+                            flexDirection="column"
+                            alignItems="center"
+                            justifyContent="center"
+                            fontSize="2xs"
+                          >
+                            <Text
+                              color={c.isRed ? 'red.500' : 'gray.800'}
+                              fontWeight="bold"
+                              lineHeight={1}
+                            >
+                              {c.rank}
+                            </Text>
+                            <Text color={c.isRed ? 'red.500' : 'gray.800'} lineHeight={1}>
+                              {c.suit}
+                            </Text>
+                          </Box>
+                        ))}
+                      </HStack>
+                    </Box>
+                  ))}
+                </Box>
+              )}
+            </VStack>
+          </ModalBody>
+          <ModalFooter justifyContent="center">
+            <Button colorScheme="blue" size="md" onClick={handleReturnToLobby}>
+              Return to Home
             </Button>
           </ModalFooter>
         </ModalContent>

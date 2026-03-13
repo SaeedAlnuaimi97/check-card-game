@@ -39,6 +39,12 @@ export function handleTakeDiscard(gameState: GameState, playerId: string): Card 
     return null; // Already has a pending card
   }
 
+  // Burned cards on top of the discard pile cannot be picked up
+  const topDiscard = gameState.discardPile[gameState.discardPile.length - 1];
+  if (topDiscard?.isBurned) {
+    return null;
+  }
+
   const card = drawFromDiscard(gameState);
   if (!card) return null;
 
@@ -259,6 +265,8 @@ export function handleBurnAttempt(
   if (ranksMatch) {
     // F-046: Burn success — remove card from hand, add to discard pile
     player.hand.splice(handSlotIndex, 1);
+    // Mark the card as burned so it cannot be picked up from the discard pile
+    cardToBurn.isBurned = true;
     addToDiscard(gameState, cardToBurn);
 
     return {

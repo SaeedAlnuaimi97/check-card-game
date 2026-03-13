@@ -1,10 +1,12 @@
 import { Server as SocketIOServer, Socket } from 'socket.io';
 import { RoomModel } from '../models/Room';
-import { sanitizeGameState } from '../game/GameSetup';
+import { sanitizeGameState, initializeGameState } from '../game/GameSetup';
 import {
   validatePlayerTurn,
   getAvailableActions,
   advanceTurn,
+  isRoundOver,
+  callCheck,
   transitionFromPeeking,
   getCurrentTurnPlayerId,
 } from '../game/TurnManager';
@@ -19,7 +21,10 @@ import {
   drawRedKingCards,
   processRedKingChoice,
 } from '../game/ActionHandler';
+import { computeRoundResult, computeGameEndResult } from '../game/Scoring';
 import { getSocketByPlayer } from './playerMapping';
+import { getRoomMutex } from '../utils/roomLock';
+import { getPeekedCards } from '../game/GameSetup';
 import type { GameState, ActionType, SlotLabel, Card } from '../types/game.types';
 
 // ============================================================
@@ -59,6 +64,129 @@ function emitYourTurn(io: SocketIOServer, gameState: GameState): void {
 }
 
 // ============================================================
+// Helper: Advance turn and check for round/game end (F-064)
+// ============================================================
+
+/**
+ * Advances the turn. If the round is over (turn returns to checker),
+ * computes scoring and either starts a new round or ends the game.
+ *
+ * Returns true if the round ended (caller should NOT emit yourTurn).
+ */
+async function advanceTurnAndCheckRoundEnd(
+  io: SocketIOServer,
+  roomCode: string,
+  room: InstanceType<typeof RoomModel>,
+  gameState: GameState,
+): Promise<boolean> {
+  advanceTurn(gameState);
+
+  // F-064: Check if round is over (turn returned to checker)
+  if (!isRoundOver(gameState)) {
+    return false;
+  }
+
+  // Round is over — compute scoring
+  const roundResult = computeRoundResult(gameState);
+
+  // Save state with updated scores and phase
+  room.gameState = gameState;
+  room.markModified('gameState');
+  await room.save();
+
+  // Broadcast round results to all players (F-070)
+  for (const player of gameState.players) {
+    const sid = getSocketByPlayer(player.playerId);
+    if (sid) {
+      io.to(sid).emit('roundEnded', {
+        roundNumber: roundResult.roundNumber,
+        checkCalledBy: roundResult.checkCalledBy,
+        allHands: roundResult.allHands,
+        roundWinners: roundResult.roundWinners,
+        updatedScores: roundResult.updatedScores,
+        gameEnded: roundResult.gameEnded,
+        nextRoundStarting: !roundResult.gameEnded,
+      });
+    }
+  }
+
+  if (roundResult.gameEnded) {
+    // F-075: Game ended — compute final results
+    const gameEndResult = computeGameEndResult(gameState, roundResult.allHands);
+
+    // Update room status
+    room.status = 'finished';
+    room.markModified('status');
+    await room.save();
+
+    // Broadcast game end
+    for (const player of gameState.players) {
+      const sid = getSocketByPlayer(player.playerId);
+      if (sid) {
+        io.to(sid).emit('gameEnded', gameEndResult);
+      }
+    }
+
+    console.log(
+      `Room ${roomCode}: GAME ENDED — Winner: ${gameEndResult.winner.username} (${gameEndResult.winner.score}), Loser: ${gameEndResult.loser.username} (${gameEndResult.loser.score})`,
+    );
+  } else {
+    // F-076: Start a new round automatically
+    console.log(`Room ${roomCode}: Round ${roundResult.roundNumber} ended. Starting new round...`);
+
+    // Delay new round start to let clients show the round-end modal
+    setTimeout(async () => {
+      const release = await getRoomMutex(roomCode).acquire();
+      try {
+        // Re-fetch room to avoid stale state
+        const freshRoom = await RoomModel.findOne({ roomCode });
+        if (!freshRoom || !freshRoom.gameState) return;
+
+        const oldGameState = freshRoom.gameState as unknown as GameState;
+
+        // Initialize new round with existing scores and incremented round number
+        const players = oldGameState.players.map((p) => ({
+          id: p.playerId,
+          username: p.username,
+        }));
+        const newGameState = initializeGameState(
+          players,
+          oldGameState.scores,
+          oldGameState.roundNumber + 1,
+        );
+
+        // Save new game state
+        freshRoom.gameState = newGameState;
+        freshRoom.markModified('gameState');
+        await freshRoom.save();
+
+        // Send personalized gameStarted events to each player (same as initial start)
+        for (const player of newGameState.players) {
+          const socketId = getSocketByPlayer(player.playerId);
+          if (!socketId) continue;
+
+          const clientState = sanitizeGameState(newGameState, player.playerId);
+          const peeked = getPeekedCards(player);
+
+          io.to(socketId).emit('gameStarted', {
+            gameState: clientState,
+            peekedCards: peeked,
+          });
+        }
+
+        console.log(`Room ${roomCode}: New round ${newGameState.roundNumber} started`);
+      } catch (error) {
+        console.error('Error starting new round:', error);
+      } finally {
+        release();
+      }
+    }, 5000); // 5-second delay for round-end modal
+  }
+
+  return true;
+}
+
+// ============================================================
 // Game Event Handlers (F-033 to F-036)
 // ============================================================
 
@@ -72,6 +200,7 @@ export function registerGameHandlers(io: SocketIOServer, socket: Socket): void {
       data: { roomCode: string; playerId: string },
       callback?: (response: { success: boolean; error?: string }) => void,
     ) => {
+      const release = await getRoomMutex(data.roomCode).acquire();
       try {
         const room = await RoomModel.findOne({ roomCode: data.roomCode });
         if (!room || !room.gameState) {
@@ -114,6 +243,70 @@ export function registerGameHandlers(io: SocketIOServer, socket: Socket): void {
       } catch (error) {
         console.error('Error in endPeek:', error);
         callback?.({ success: false, error: 'Failed to end peek phase' });
+      } finally {
+        release();
+      }
+    },
+  );
+
+  // ----------------------------------------------------------
+  // callCheck — player calls check at start of their turn
+  // (F-059 to F-064)
+  // ----------------------------------------------------------
+  socket.on(
+    'callCheck',
+    async (
+      data: { roomCode: string; playerId: string },
+      callback?: (response: { success: boolean; error?: string }) => void,
+    ) => {
+      const release = await getRoomMutex(data.roomCode).acquire();
+      try {
+        const room = await RoomModel.findOne({ roomCode: data.roomCode });
+        if (!room || !room.gameState) {
+          callback?.({ success: false, error: 'Room or game not found' });
+          return;
+        }
+
+        const gameState = room.gameState as unknown as GameState;
+
+        // Validate and process check call (F-059, F-061)
+        const result = callCheck(gameState, data.playerId);
+        if (!result.success) {
+          callback?.({ success: false, error: result.error });
+          return;
+        }
+
+        // Save state with check marked
+        room.gameState = gameState;
+        room.markModified('gameState');
+        await room.save();
+
+        callback?.({ success: true });
+
+        // F-062: Broadcast check notification to all players
+        const checker = gameState.players.find((p) => p.playerId === data.playerId);
+        for (const player of gameState.players) {
+          const sid = getSocketByPlayer(player.playerId);
+          if (sid) {
+            io.to(sid).emit('checkCalled', {
+              playerId: data.playerId,
+              username: checker?.username ?? 'Unknown',
+            });
+          }
+        }
+
+        // Broadcast updated game state (checkCalledBy is now set)
+        await broadcastGameState(io, data.roomCode, gameState);
+
+        // F-060: Checker still takes their normal turn — re-emit yourTurn
+        emitYourTurn(io, gameState);
+
+        console.log(`Room ${data.roomCode}: ${checker?.username} (${data.playerId}) called CHECK`);
+      } catch (error) {
+        console.error('Error in callCheck:', error);
+        callback?.({ success: false, error: 'Failed to process check call' });
+      } finally {
+        release();
       }
     },
   );
@@ -128,6 +321,7 @@ export function registerGameHandlers(io: SocketIOServer, socket: Socket): void {
       data: { roomCode: string; playerId: string; action: { type: ActionType; slot?: string } },
       callback?: (response: { success: boolean; error?: string }) => void,
     ) => {
+      const release = await getRoomMutex(data.roomCode).acquire();
       try {
         const room = await RoomModel.findOne({ roomCode: data.roomCode });
         if (!room || !room.gameState) {
@@ -215,12 +409,19 @@ export function registerGameHandlers(io: SocketIOServer, socket: Socket): void {
           }
 
           // Advance turn after burn (F-048: no special effects from burns)
-          advanceTurn(gameState);
+          const burnRoundEnded = await advanceTurnAndCheckRoundEnd(
+            io,
+            data.roomCode,
+            room,
+            gameState,
+          );
 
-          // Save updated state
-          room.gameState = gameState;
-          room.markModified('gameState');
-          await room.save();
+          if (!burnRoundEnded) {
+            // Save updated state (only if round didn't end — advanceTurnAndCheckRoundEnd handles save on round end)
+            room.gameState = gameState;
+            room.markModified('gameState');
+            await room.save();
+          }
 
           callback?.({ success: true });
 
@@ -240,11 +441,13 @@ export function registerGameHandlers(io: SocketIOServer, socket: Socket): void {
             }
           }
 
-          // Broadcast updated game state
-          await broadcastGameState(io, data.roomCode, gameState);
+          if (!burnRoundEnded) {
+            // Broadcast updated game state
+            await broadcastGameState(io, data.roomCode, gameState);
 
-          // Notify the next player it's their turn
-          emitYourTurn(io, gameState);
+            // Notify the next player it's their turn
+            emitYourTurn(io, gameState);
+          }
 
           console.log(
             `Room ${data.roomCode}: ${data.playerId} burn ${burnResult.burnSuccess ? 'SUCCESS' : 'FAIL'} at slot ${data.action.slot}`,
@@ -259,6 +462,8 @@ export function registerGameHandlers(io: SocketIOServer, socket: Socket): void {
       } catch (error) {
         console.error('Error in playerAction:', error);
         callback?.({ success: false, error: 'Failed to process action' });
+      } finally {
+        release();
       }
     },
   );
@@ -278,6 +483,7 @@ export function registerGameHandlers(io: SocketIOServer, socket: Socket): void {
       },
       callback?: (response: { success: boolean; error?: string }) => void,
     ) => {
+      const release = await getRoomMutex(data.roomCode).acquire();
       try {
         const room = await RoomModel.findOne({ roomCode: data.roomCode });
         if (!room || !room.gameState) {
@@ -362,20 +568,29 @@ export function registerGameHandlers(io: SocketIOServer, socket: Socket): void {
         }
 
         // Advance turn to the next player
-        advanceTurn(gameState);
+        const discardRoundEnded = await advanceTurnAndCheckRoundEnd(
+          io,
+          data.roomCode,
+          room,
+          gameState,
+        );
 
-        // Save updated state
-        room.gameState = gameState;
-        room.markModified('gameState');
-        await room.save();
+        if (!discardRoundEnded) {
+          // Save updated state
+          room.gameState = gameState;
+          room.markModified('gameState');
+          await room.save();
+        }
 
         callback?.({ success: true });
 
-        // Broadcast updated game state to all players
-        await broadcastGameState(io, data.roomCode, gameState);
+        if (!discardRoundEnded) {
+          // Broadcast updated game state to all players
+          await broadcastGameState(io, data.roomCode, gameState);
 
-        // Notify the next player it's their turn
-        emitYourTurn(io, gameState);
+          // Notify the next player it's their turn
+          emitYourTurn(io, gameState);
+        }
 
         console.log(
           `Room ${data.roomCode}: ${data.playerId} completed discard choice (slot: ${data.slot ?? 'drawn'})`,
@@ -383,6 +598,8 @@ export function registerGameHandlers(io: SocketIOServer, socket: Socket): void {
       } catch (error) {
         console.error('Error in discardChoice:', error);
         callback?.({ success: false, error: 'Failed to process discard choice' });
+      } finally {
+        release();
       }
     },
   );
@@ -444,6 +661,7 @@ export function registerGameHandlers(io: SocketIOServer, socket: Socket): void {
       },
       callback?: (response: { success: boolean; error?: string }) => void,
     ) => {
+      const release = await getRoomMutex(data.roomCode).acquire();
       try {
         const room = await RoomModel.findOne({ roomCode: data.roomCode });
         if (!room || !room.gameState) {
@@ -488,11 +706,18 @@ export function registerGameHandlers(io: SocketIOServer, socket: Socket): void {
 
         // Clear pending effect and advance turn
         gameState.pendingEffect = null;
-        advanceTurn(gameState);
+        const jackRoundEnded = await advanceTurnAndCheckRoundEnd(
+          io,
+          data.roomCode,
+          room,
+          gameState,
+        );
 
-        room.gameState = gameState;
-        room.markModified('gameState');
-        await room.save();
+        if (!jackRoundEnded) {
+          room.gameState = gameState;
+          room.markModified('gameState');
+          await room.save();
+        }
 
         callback?.({ success: true });
 
@@ -508,11 +733,13 @@ export function registerGameHandlers(io: SocketIOServer, socket: Socket): void {
           }
         }
 
-        // Broadcast updated game state
-        await broadcastGameState(io, data.roomCode, gameState);
+        if (!jackRoundEnded) {
+          // Broadcast updated game state
+          await broadcastGameState(io, data.roomCode, gameState);
 
-        // Notify the next player it's their turn
-        emitYourTurn(io, gameState);
+          // Notify the next player it's their turn
+          emitYourTurn(io, gameState);
+        }
 
         console.log(
           `Room ${data.roomCode}: ${data.playerId} Red Jack ${data.skip ? 'skipped' : 'swapped'}`,
@@ -520,6 +747,8 @@ export function registerGameHandlers(io: SocketIOServer, socket: Socket): void {
       } catch (error) {
         console.error('Error in redJackSwap:', error);
         callback?.({ success: false, error: 'Failed to process Red Jack swap' });
+      } finally {
+        release();
       }
     },
   );
@@ -533,6 +762,7 @@ export function registerGameHandlers(io: SocketIOServer, socket: Socket): void {
       data: { roomCode: string; playerId: string; slot: string },
       callback?: (response: { success: boolean; card?: Card; error?: string }) => void,
     ) => {
+      const release = await getRoomMutex(data.roomCode).acquire();
       try {
         const room = await RoomModel.findOne({ roomCode: data.roomCode });
         if (!room || !room.gameState) {
@@ -560,11 +790,18 @@ export function registerGameHandlers(io: SocketIOServer, socket: Socket): void {
 
         // Clear pending effect and advance turn
         gameState.pendingEffect = null;
-        advanceTurn(gameState);
+        const queenRoundEnded = await advanceTurnAndCheckRoundEnd(
+          io,
+          data.roomCode,
+          room,
+          gameState,
+        );
 
-        room.gameState = gameState;
-        room.markModified('gameState');
-        await room.save();
+        if (!queenRoundEnded) {
+          room.gameState = gameState;
+          room.markModified('gameState');
+          await room.save();
+        }
 
         // Send the peeked card privately to the player via callback
         callback?.({ success: true, card: peekResult.card });
@@ -580,11 +817,13 @@ export function registerGameHandlers(io: SocketIOServer, socket: Socket): void {
           }
         }
 
-        // Broadcast updated game state
-        await broadcastGameState(io, data.roomCode, gameState);
+        if (!queenRoundEnded) {
+          // Broadcast updated game state
+          await broadcastGameState(io, data.roomCode, gameState);
 
-        // Notify the next player it's their turn
-        emitYourTurn(io, gameState);
+          // Notify the next player it's their turn
+          emitYourTurn(io, gameState);
+        }
 
         console.log(
           `Room ${data.roomCode}: ${data.playerId} Red Queen peeked at slot ${data.slot}`,
@@ -592,6 +831,8 @@ export function registerGameHandlers(io: SocketIOServer, socket: Socket): void {
       } catch (error) {
         console.error('Error in redQueenPeek:', error);
         callback?.({ success: false, error: 'Failed to process Red Queen peek' });
+      } finally {
+        release();
       }
     },
   );
@@ -614,6 +855,7 @@ export function registerGameHandlers(io: SocketIOServer, socket: Socket): void {
       },
       callback?: (response: { success: boolean; error?: string }) => void,
     ) => {
+      const release = await getRoomMutex(data.roomCode).acquire();
       try {
         const room = await RoomModel.findOne({ roomCode: data.roomCode });
         if (!room || !room.gameState) {
@@ -650,11 +892,18 @@ export function registerGameHandlers(io: SocketIOServer, socket: Socket): void {
 
         // Clear pending effect and advance turn
         gameState.pendingEffect = null;
-        advanceTurn(gameState);
+        const kingRoundEnded = await advanceTurnAndCheckRoundEnd(
+          io,
+          data.roomCode,
+          room,
+          gameState,
+        );
 
-        room.gameState = gameState;
-        room.markModified('gameState');
-        await room.save();
+        if (!kingRoundEnded) {
+          room.gameState = gameState;
+          room.markModified('gameState');
+          await room.save();
+        }
 
         callback?.({ success: true });
 
@@ -672,16 +921,20 @@ export function registerGameHandlers(io: SocketIOServer, socket: Socket): void {
           }
         }
 
-        // Broadcast updated game state
-        await broadcastGameState(io, data.roomCode, gameState);
+        if (!kingRoundEnded) {
+          // Broadcast updated game state
+          await broadcastGameState(io, data.roomCode, gameState);
 
-        // Notify the next player it's their turn
-        emitYourTurn(io, gameState);
+          // Notify the next player it's their turn
+          emitYourTurn(io, gameState);
+        }
 
         console.log(`Room ${data.roomCode}: ${data.playerId} Red King choice: ${data.choice.type}`);
       } catch (error) {
         console.error('Error in redKingChoice:', error);
         callback?.({ success: false, error: 'Failed to process Red King choice' });
+      } finally {
+        release();
       }
     },
   );

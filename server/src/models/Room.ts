@@ -16,6 +16,7 @@ const CardSchema = new Schema<Card>(
     },
     value: { type: Number, required: true },
     isRed: { type: Boolean, required: true },
+    isBurned: { type: Boolean, default: undefined },
   },
   { _id: false },
 );

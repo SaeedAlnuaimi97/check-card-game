@@ -7,6 +7,7 @@ import {
   transitionFromPeeking,
   getCurrentTurnPlayerId,
   removePlayerFromGame,
+  callCheck,
 } from '../game/TurnManager';
 import { initializeGameState } from '../game/GameSetup';
 import type { GameState } from '../types/game.types';
@@ -107,6 +108,33 @@ describe('getAvailableActions', () => {
 
     gs.discardPile = [gs.deck.pop()!];
     expect(getAvailableActions(gs)).toContain('drawDeck');
+  });
+
+  it('excludes takeDiscard when top discard card is burned', () => {
+    const gs = createPlayingGameState();
+    // Set up a burned card on top of discard pile
+    const burnedCard = gs.deck.pop()!;
+    burnedCard.isBurned = true;
+    gs.discardPile = [burnedCard];
+
+    const actions = getAvailableActions(gs);
+    expect(actions).toContain('drawDeck');
+    expect(actions).toContain('burn');
+    expect(actions).not.toContain('takeDiscard');
+    expect(actions).toHaveLength(2);
+  });
+
+  it('includes takeDiscard when burned card is NOT on top', () => {
+    const gs = createPlayingGameState();
+    const burnedCard = gs.deck.pop()!;
+    burnedCard.isBurned = true;
+    const normalCard = gs.deck.pop()!;
+    gs.discardPile = [burnedCard, normalCard]; // normalCard is on top
+
+    const actions = getAvailableActions(gs);
+    expect(actions).toContain('takeDiscard');
+    expect(actions).toContain('burn');
+    expect(actions).toContain('drawDeck');
   });
 });
 
@@ -413,5 +441,121 @@ describe('removePlayerFromGame', () => {
     const result = removePlayerFromGame(gs, gs.players[1].playerId);
 
     expect(result.username).toBe(username);
+  });
+});
+
+// ============================================================
+// callCheck (F-059 to F-064)
+// ============================================================
+
+describe('callCheck', () => {
+  it("succeeds when it is the player's turn and no one has called check", () => {
+    const gs = createPlayingGameState();
+    const currentPlayerId = gs.players[gs.currentTurnIndex].playerId;
+
+    const result = callCheck(gs, currentPlayerId);
+
+    expect(result.success).toBe(true);
+    expect(result.error).toBeUndefined();
+    expect(gs.checkCalledBy).toBe(currentPlayerId);
+    expect(gs.checkCalledAtIndex).toBe(gs.currentTurnIndex);
+  });
+
+  it('fails when game is not in playing phase', () => {
+    const gs = createPlayingGameState();
+    gs.phase = 'peeking';
+    const currentPlayerId = gs.players[gs.currentTurnIndex].playerId;
+
+    const result = callCheck(gs, currentPlayerId);
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBe('Game is not in playing phase');
+    expect(gs.checkCalledBy).toBeNull();
+  });
+
+  it("fails when it is not the player's turn", () => {
+    const gs = createPlayingGameState();
+    const otherIndex = (gs.currentTurnIndex + 1) % gs.players.length;
+    const otherPlayerId = gs.players[otherIndex].playerId;
+
+    const result = callCheck(gs, otherPlayerId);
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBe('It is not your turn');
+    expect(gs.checkCalledBy).toBeNull();
+  });
+
+  it('fails when check has already been called', () => {
+    const gs = createPlayingGameState();
+    const currentPlayerId = gs.players[gs.currentTurnIndex].playerId;
+    gs.checkCalledBy = 'someone-else';
+
+    const result = callCheck(gs, currentPlayerId);
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBe('Check has already been called');
+  });
+
+  it('fails when player has a pending drawn card', () => {
+    const gs = createPlayingGameState();
+    const currentPlayerId = gs.players[gs.currentTurnIndex].playerId;
+    gs.drawnCard = { id: 'test', suit: '♥', rank: '5', value: 5, isRed: true };
+
+    const result = callCheck(gs, currentPlayerId);
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBe('Cannot call check after drawing a card');
+    expect(gs.checkCalledBy).toBeNull();
+  });
+
+  it('sets checkCalledAtIndex to the current turn index', () => {
+    const gs = createPlayingGameState(4);
+    gs.currentTurnIndex = 2;
+    const currentPlayerId = gs.players[2].playerId;
+
+    callCheck(gs, currentPlayerId);
+
+    expect(gs.checkCalledAtIndex).toBe(2);
+  });
+
+  it('does not advance the turn (checker still acts)', () => {
+    const gs = createPlayingGameState();
+    const originalIndex = gs.currentTurnIndex;
+    const currentPlayerId = gs.players[originalIndex].playerId;
+
+    callCheck(gs, currentPlayerId);
+
+    expect(gs.currentTurnIndex).toBe(originalIndex);
+  });
+
+  it('fails for roundEnd phase', () => {
+    const gs = createPlayingGameState();
+    gs.phase = 'roundEnd';
+    const currentPlayerId = gs.players[gs.currentTurnIndex].playerId;
+
+    const result = callCheck(gs, currentPlayerId);
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBe('Game is not in playing phase');
+  });
+
+  it('fails for gameEnd phase', () => {
+    const gs = createPlayingGameState();
+    gs.phase = 'gameEnd';
+    const currentPlayerId = gs.players[gs.currentTurnIndex].playerId;
+
+    const result = callCheck(gs, currentPlayerId);
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBe('Game is not in playing phase');
+  });
+
+  it('fails for nonexistent player ID', () => {
+    const gs = createPlayingGameState();
+
+    const result = callCheck(gs, 'nonexistent-player');
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBe('It is not your turn');
   });
 });

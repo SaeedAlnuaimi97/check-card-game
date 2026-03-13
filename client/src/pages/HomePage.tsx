@@ -1,6 +1,6 @@
 import { useState, FC } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Box, Button, Heading, HStack, Input, Text, useToast, VStack } from '@chakra-ui/react';
+import { Box, Button, HStack, Image, Input, Text, useToast, VStack } from '@chakra-ui/react';
 import { useSocket } from '../context/SocketContext';
 
 export const HomePage: FC = () => {
@@ -75,15 +75,14 @@ export const HomePage: FC = () => {
       p={4}
     >
       <VStack spacing={8} w={{ base: '100%', sm: '400px' }}>
-        {/* Branding */}
-        <VStack spacing={2}>
-          <Heading size="2xl" textAlign="center">
-            Check Card Game
-          </Heading>
-          <Text fontSize="md" color="gray.400" textAlign="center">
-            A multiplayer card game
-          </Text>
-        </VStack>
+        {/* Logo */}
+        <Image
+          src="/logo.png"
+          alt="Check Card Game Logo"
+          w={{ base: '220px', sm: '280px', md: '320px' }}
+          objectFit="contain"
+          filter="drop-shadow(0 0 24px rgba(99, 179, 237, 0.3))"
+        />
 
         {/* Connection status */}
         <HStack spacing={2}>

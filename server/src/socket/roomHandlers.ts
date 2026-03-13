@@ -10,6 +10,7 @@ import {
   validateRoomCode,
   validateUsername,
 } from '../utils/helpers';
+import { getRoomMutex, deleteRoomMutex } from '../utils/roomLock';
 import { registerPlayer, unregisterPlayer, getSocketByPlayer } from './playerMapping';
 import type { GameState } from '../types/game.types';
 
@@ -68,24 +69,25 @@ export function registerRoomHandlers(io: SocketIOServer, socket: Socket): void {
         error?: string;
       }) => void,
     ) => {
+      // Generate room code first (outside lock since it's a new room)
+      let roomCode: string;
+      let attempts = 0;
+      do {
+        roomCode = generateRoomCode();
+        attempts++;
+        if (attempts > 10) {
+          callback?.({ success: false, error: 'Failed to generate room code' });
+          return;
+        }
+      } while (await RoomModel.exists({ roomCode }));
+
+      const release = await getRoomMutex(roomCode).acquire();
       try {
         const username = validateUsername(data?.username);
         if (!username) {
           callback?.({ success: false, error: 'Username must be 1-20 characters' });
           return;
         }
-
-        // Generate unique room code (retry on collision)
-        let roomCode: string;
-        let attempts = 0;
-        do {
-          roomCode = generateRoomCode();
-          attempts++;
-          if (attempts > 10) {
-            callback?.({ success: false, error: 'Failed to generate room code' });
-            return;
-          }
-        } while (await RoomModel.exists({ roomCode }));
 
         const playerId = generatePlayerId();
 
@@ -122,6 +124,8 @@ export function registerRoomHandlers(io: SocketIOServer, socket: Socket): void {
       } catch (error) {
         console.error('Error creating room:', error);
         callback?.({ success: false, error: 'Failed to create room' });
+      } finally {
+        release();
       }
     },
   );
@@ -145,19 +149,20 @@ export function registerRoomHandlers(io: SocketIOServer, socket: Socket): void {
         error?: string;
       }) => void,
     ) => {
+      const username = validateUsername(data?.username);
+      if (!username) {
+        callback?.({ success: false, error: 'Username must be 1-20 characters' });
+        return;
+      }
+
+      const roomCode = validateRoomCode(data?.roomCode);
+      if (!roomCode) {
+        callback?.({ success: false, error: 'Invalid room code' });
+        return;
+      }
+
+      const release = await getRoomMutex(roomCode).acquire();
       try {
-        const username = validateUsername(data?.username);
-        if (!username) {
-          callback?.({ success: false, error: 'Username must be 1-20 characters' });
-          return;
-        }
-
-        const roomCode = validateRoomCode(data?.roomCode);
-        if (!roomCode) {
-          callback?.({ success: false, error: 'Invalid room code' });
-          return;
-        }
-
         const room = await RoomModel.findOne({ roomCode });
         if (!room) {
           callback?.({ success: false, error: 'Room not found' });
@@ -199,6 +204,8 @@ export function registerRoomHandlers(io: SocketIOServer, socket: Socket): void {
       } catch (error) {
         console.error('Error joining room:', error);
         callback?.({ success: false, error: 'Failed to join room' });
+      } finally {
+        release();
       }
     },
   );
@@ -212,18 +219,21 @@ export function registerRoomHandlers(io: SocketIOServer, socket: Socket): void {
       data: { roomCode: string; playerId: string },
       callback?: (response: { success: boolean; error?: string }) => void,
     ) => {
-      try {
-        const roomCode = validateRoomCode(data?.roomCode);
-        if (!roomCode) {
-          callback?.({ success: false, error: 'Invalid room code' });
-          return;
-        }
+      const roomCode = validateRoomCode(data?.roomCode);
+      if (!roomCode) {
+        callback?.({ success: false, error: 'Invalid room code' });
+        return;
+      }
 
+      const release = await getRoomMutex(roomCode).acquire();
+      try {
         await handlePlayerLeave(io, socket, roomCode, data.playerId);
         callback?.({ success: true });
       } catch (error) {
         console.error('Error leaving room:', error);
         callback?.({ success: false, error: 'Failed to leave room' });
+      } finally {
+        release();
       }
     },
   );
@@ -237,13 +247,14 @@ export function registerRoomHandlers(io: SocketIOServer, socket: Socket): void {
       data: { roomCode: string; playerId: string },
       callback?: (response: { success: boolean; error?: string }) => void,
     ) => {
-      try {
-        const roomCode = validateRoomCode(data?.roomCode);
-        if (!roomCode) {
-          callback?.({ success: false, error: 'Invalid room code' });
-          return;
-        }
+      const roomCode = validateRoomCode(data?.roomCode);
+      if (!roomCode) {
+        callback?.({ success: false, error: 'Invalid room code' });
+        return;
+      }
 
+      const release = await getRoomMutex(roomCode).acquire();
+      try {
         const room = await RoomModel.findOne({ roomCode });
         if (!room) {
           callback?.({ success: false, error: 'Room not found' });
@@ -302,6 +313,8 @@ export function registerRoomHandlers(io: SocketIOServer, socket: Socket): void {
       } catch (error) {
         console.error('Error starting game:', error);
         callback?.({ success: false, error: 'Failed to start game' });
+      } finally {
+        release();
       }
     },
   );
@@ -314,7 +327,15 @@ export function registerRoomHandlers(io: SocketIOServer, socket: Socket): void {
     if (!mapping) return;
 
     console.log(`Player ${mapping.username} (${mapping.playerId}) disconnected`);
-    await handlePlayerLeave(io, socket, mapping.roomCode, mapping.playerId);
+
+    const release = await getRoomMutex(mapping.roomCode).acquire();
+    try {
+      await handlePlayerLeave(io, socket, mapping.roomCode, mapping.playerId);
+    } catch (error) {
+      console.error('Error in disconnect handler:', error);
+    } finally {
+      release();
+    }
   });
 }
 
@@ -343,6 +364,7 @@ async function handlePlayerLeave(
   // If room is empty, delete it
   if (room.players.length === 0) {
     await RoomModel.deleteOne({ roomCode });
+    deleteRoomMutex(roomCode);
     console.log(`Room ${roomCode} deleted (empty)`);
     return;
   }
