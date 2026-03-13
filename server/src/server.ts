@@ -32,6 +32,10 @@ const io = new SocketIOServer(server, {
     credentials: true,
   },
   transports: ['websocket', 'polling'],
+  // Increase ping timeout so mobile browsers that go to background
+  // don't get disconnected during the default 20s window.
+  pingInterval: 25000,
+  pingTimeout: 60000,
 });
 
 // Register socket event handlers

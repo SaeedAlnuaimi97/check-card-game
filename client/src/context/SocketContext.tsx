@@ -147,6 +147,13 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
   const playerIdRef = useRef(playerId);
   playerIdRef.current = playerId;
 
+  // Refs for room data so reconnection logic can access latest values
+  const roomDataRef = useRef(roomData);
+  roomDataRef.current = roomData;
+
+  const usernameRef = useRef(username);
+  usernameRef.current = username;
+
   // Connect socket on mount
   useEffect(() => {
     socket.connect();
@@ -154,6 +161,45 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
     socket.on('connect', () => {
       console.log('Socket connected:', socket.id);
       setIsConnected(true);
+
+      // Attempt to rejoin room if we have stored session credentials
+      const storedPlayerId = sessionStorage.getItem('playerId');
+      const storedRoomCode = sessionStorage.getItem('roomCode');
+      if (storedPlayerId && storedRoomCode) {
+        console.log(
+          `[reconnect] Attempting rejoin: player=${storedPlayerId} room=${storedRoomCode}`,
+        );
+        socket.emit(
+          'rejoinRoom',
+          { playerId: storedPlayerId, roomCode: storedRoomCode },
+          (response: {
+            success: boolean;
+            room?: RoomData;
+            gameState?: ClientGameState;
+            error?: string;
+          }) => {
+            if (response.success) {
+              console.log('[reconnect] Rejoin successful');
+              setPlayerId(storedPlayerId);
+              setUsername(sessionStorage.getItem('username') || 'Player');
+              if (response.room) {
+                setRoomData(response.room);
+              }
+              if (response.gameState) {
+                setGameState(response.gameState);
+                // Navigate to game if we're in a playing state
+                navigateRef.current('/game');
+              }
+            } else {
+              console.log('[reconnect] Rejoin failed:', response.error);
+              // Clear stale session data
+              sessionStorage.removeItem('playerId');
+              sessionStorage.removeItem('roomCode');
+              sessionStorage.removeItem('username');
+            }
+          },
+        );
+      }
     });
 
     socket.on('disconnect', () => {
@@ -266,6 +312,16 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
       }
     });
 
+    // Player temporarily disconnected (grace period active)
+    socket.on('playerDisconnected', (data: { playerId: string; username: string }) => {
+      console.log(`Player ${data.username} disconnected (grace period active)`);
+    });
+
+    // Player reconnected after grace period
+    socket.on('playerReconnected', (data: { playerId: string; username: string }) => {
+      console.log(`Player ${data.username} reconnected`);
+    });
+
     // F-062: Someone called check
     socket.on('checkCalled', (data: CheckCalledPayload) => {
       console.log(`${data.username} called CHECK!`);
@@ -311,6 +367,8 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
       socket.off('specialEffectResolved');
       socket.off('playerUsingSpecialEffect');
       socket.off('playerLeftGame');
+      socket.off('playerDisconnected');
+      socket.off('playerReconnected');
       socket.off('checkCalled');
       socket.off('roundEnded');
       socket.off('gameEnded');
@@ -337,6 +395,10 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
           if (response.success && response.playerId && response.roomCode) {
             setPlayerId(response.playerId);
             setUsername(name);
+            // Persist for reconnection
+            sessionStorage.setItem('playerId', response.playerId);
+            sessionStorage.setItem('roomCode', response.roomCode);
+            sessionStorage.setItem('username', name);
             if (response.room) {
               setRoomData(response.room);
             }
@@ -360,6 +422,10 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
             if (response.success && response.playerId) {
               setPlayerId(response.playerId);
               setUsername(name);
+              // Persist for reconnection
+              sessionStorage.setItem('playerId', response.playerId);
+              sessionStorage.setItem('roomCode', roomCode);
+              sessionStorage.setItem('username', name);
               if (response.room) {
                 setRoomData(response.room);
               }
@@ -379,6 +445,10 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
     if (roomData && playerId) {
       socket.emit('leaveRoom', { roomCode: roomData.roomCode, playerId });
     }
+    // Clear session storage
+    sessionStorage.removeItem('playerId');
+    sessionStorage.removeItem('roomCode');
+    sessionStorage.removeItem('username');
     setRoomData(null);
     setPlayerId(null);
     setUsername(null);

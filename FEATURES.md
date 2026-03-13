@@ -256,8 +256,8 @@ Derived from PLAN.md. Features are grouped by domain and ordered by implementati
 
 ### Stability
 
-- [ ] **F-200**: Reconnection logic — save state to DB, rejoin after disconnect, resume from current state
-- [ ] **F-201**: Disconnection timeout — auto-kick after timeout
+- [x] **F-200**: Reconnection logic — save state to DB, rejoin after disconnect, resume from current state
+- [x] **F-201**: Disconnection timeout — auto-kick after timeout (45s grace period)
 - [ ] **F-202**: Room expiration (24 hours)
 - [ ] **F-203**: Host can kick players
 - [ ] **F-204**: Spectator mode

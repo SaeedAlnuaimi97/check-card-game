@@ -9,7 +9,15 @@ import {
   validateUsername,
 } from '../utils/helpers';
 import { getRoomMutex, deleteRoomMutex } from '../utils/roomLock';
-import { registerPlayer, unregisterPlayer, getSocketByPlayer } from './playerMapping';
+import {
+  registerPlayer,
+  unregisterPlayer,
+  getSocketByPlayer,
+  startGracePeriod,
+  cancelGracePeriod,
+  hasPendingDisconnect,
+  reconnectPlayer,
+} from './playerMapping';
 import { emitYourTurn } from './gameHandlers';
 import type { GameState } from '../types/game.types';
 
@@ -319,7 +327,7 @@ export function registerRoomHandlers(io: SocketIOServer, socket: Socket): void {
   );
 
   // ----------------------------------------------------------
-  // Disconnect handler — auto-leave room
+  // Disconnect handler — grace period for in-game players
   // ----------------------------------------------------------
   socket.on('disconnect', async () => {
     const mapping = unregisterPlayer(socket.id);
@@ -327,15 +335,168 @@ export function registerRoomHandlers(io: SocketIOServer, socket: Socket): void {
 
     console.log(`Player ${mapping.username} (${mapping.playerId}) disconnected`);
 
+    // Check if the player is in a game — if so, use a grace period
+    // instead of immediately removing them.
     const release = await getRoomMutex(mapping.roomCode).acquire();
     try {
-      await handlePlayerLeave(io, socket, mapping.roomCode, mapping.playerId);
+      const room = await RoomModel.findOne({ roomCode: mapping.roomCode });
+      if (!room) return;
+
+      const isInGame = room.status === 'playing' && room.gameState;
+
+      if (isInGame) {
+        // Start grace period — player has time to reconnect
+        console.log(
+          `Starting grace period for ${mapping.username} (${mapping.playerId}) in room ${mapping.roomCode}`,
+        );
+
+        // Notify other players that this player disconnected (but hasn't left yet)
+        io.to(mapping.roomCode).emit('playerDisconnected', {
+          playerId: mapping.playerId,
+          username: mapping.username,
+        });
+
+        startGracePeriod(mapping, async () => {
+          // Grace period expired — remove the player for real
+          console.log(
+            `Grace period expired for ${mapping.username} (${mapping.playerId}) in room ${mapping.roomCode}`,
+          );
+          const expireRelease = await getRoomMutex(mapping.roomCode).acquire();
+          try {
+            await handlePlayerLeave(io, socket, mapping.roomCode, mapping.playerId);
+          } catch (error) {
+            console.error('Error in grace period expiry handler:', error);
+          } finally {
+            expireRelease();
+          }
+        });
+      } else {
+        // Not in a game (lobby) — remove immediately
+        await handlePlayerLeave(io, socket, mapping.roomCode, mapping.playerId);
+      }
     } catch (error) {
       console.error('Error in disconnect handler:', error);
     } finally {
       release();
     }
   });
+
+  // ----------------------------------------------------------
+  // Rejoin Room — reconnect after disconnect grace period
+  // ----------------------------------------------------------
+  socket.on(
+    'rejoinRoom',
+    async (
+      data: { playerId: string; roomCode: string },
+      callback?: (response: {
+        success: boolean;
+        room?: {
+          roomCode: string;
+          host: string;
+          players: { id: string; username: string }[];
+          status: string;
+        };
+        gameState?: ReturnType<typeof sanitizeGameState>;
+        peekedCards?: ReturnType<typeof getPeekedCards>;
+        error?: string;
+      }) => void,
+    ) => {
+      const roomCode = validateRoomCode(data?.roomCode);
+      if (!roomCode) {
+        callback?.({ success: false, error: 'Invalid room code' });
+        return;
+      }
+
+      if (!data?.playerId) {
+        callback?.({ success: false, error: 'Missing player ID' });
+        return;
+      }
+
+      const release = await getRoomMutex(roomCode).acquire();
+      try {
+        // Check if the player has a pending disconnect (grace period active)
+        if (!hasPendingDisconnect(data.playerId)) {
+          callback?.({ success: false, error: 'No pending reconnection for this player' });
+          return;
+        }
+
+        const room = await RoomModel.findOne({ roomCode });
+        if (!room) {
+          cancelGracePeriod(data.playerId);
+          callback?.({ success: false, error: 'Room no longer exists' });
+          return;
+        }
+
+        // Verify this player is still in the room
+        const playerInRoom = room.players.find((p) => p.id === data.playerId);
+        if (!playerInRoom) {
+          cancelGracePeriod(data.playerId);
+          callback?.({ success: false, error: 'Player no longer in room' });
+          return;
+        }
+
+        // Reconnect: cancel grace period, re-register mapping, rejoin socket.io room
+        const pending = reconnectPlayer(socket.id, data.playerId);
+        if (!pending) {
+          callback?.({ success: false, error: 'Reconnection failed' });
+          return;
+        }
+
+        await socket.join(roomCode);
+
+        console.log(
+          `Player ${pending.mapping.username} (${data.playerId}) rejoined room ${roomCode}`,
+        );
+
+        // Notify others that the player reconnected
+        io.to(roomCode).emit('playerReconnected', {
+          playerId: data.playerId,
+          username: pending.mapping.username,
+        });
+
+        // Send current state back to the reconnected player
+        if (room.status === 'playing' && room.gameState) {
+          const gameState = room.gameState as unknown as GameState;
+          const clientState = sanitizeGameState(gameState, data.playerId);
+
+          callback?.({
+            success: true,
+            room: {
+              roomCode: room.roomCode,
+              host: room.host,
+              players: room.players.map((p) => ({ id: p.id, username: p.username })),
+              status: room.status,
+            },
+            gameState: clientState,
+          });
+
+          // If it's this player's turn, re-emit yourTurn
+          const currentTurnPlayer = gameState.players[gameState.currentTurnIndex];
+          if (currentTurnPlayer?.playerId === data.playerId && gameState.phase === 'playing') {
+            emitYourTurn(io, roomCode, gameState);
+            room.gameState = gameState;
+            room.markModified('gameState');
+            await room.save();
+          }
+        } else {
+          callback?.({
+            success: true,
+            room: {
+              roomCode: room.roomCode,
+              host: room.host,
+              players: room.players.map((p) => ({ id: p.id, username: p.username })),
+              status: room.status,
+            },
+          });
+        }
+      } catch (error) {
+        console.error('Error in rejoinRoom handler:', error);
+        callback?.({ success: false, error: 'Failed to rejoin room' });
+      } finally {
+        release();
+      }
+    },
+  );
 }
 
 // ============================================================

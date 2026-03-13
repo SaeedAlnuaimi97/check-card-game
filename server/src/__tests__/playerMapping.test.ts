@@ -1,10 +1,15 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import {
   registerPlayer,
   unregisterPlayer,
   getPlayerBySocket,
   getSocketByPlayer,
   isPlayerConnected,
+  startGracePeriod,
+  cancelGracePeriod,
+  hasPendingDisconnect,
+  getPendingDisconnect,
+  reconnectPlayer,
 } from '../socket/playerMapping';
 
 // The module uses module-level Maps, so we need to clean up between tests.
@@ -13,13 +18,25 @@ import {
 describe('playerMapping', () => {
   // Track registered socket IDs so we can clean up
   const registeredSockets: string[] = [];
+  // Track players with pending disconnects so we can clean up
+  const pendingPlayers: string[] = [];
 
   beforeEach(() => {
+    vi.useFakeTimers();
     // Clean up any previously registered mappings
     for (const socketId of registeredSockets) {
       unregisterPlayer(socketId);
     }
     registeredSockets.length = 0;
+    // Clean up any pending disconnects
+    for (const playerId of pendingPlayers) {
+      cancelGracePeriod(playerId);
+    }
+    pendingPlayers.length = 0;
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   function register(socketId: string, playerId: string, roomCode: string, username: string) {
@@ -100,6 +117,148 @@ describe('playerMapping', () => {
       register('socket-1', 'player-1', 'ROOM01', 'Alice');
       unregisterPlayer('socket-1');
       expect(isPlayerConnected('player-1')).toBe(false);
+    });
+  });
+
+  // ============================================================
+  // Grace period tests
+  // ============================================================
+
+  describe('startGracePeriod', () => {
+    it('marks player as having a pending disconnect', () => {
+      const mapping = { playerId: 'player-1', roomCode: 'ROOM01', username: 'Alice' };
+      const onExpire = vi.fn();
+
+      startGracePeriod(mapping, onExpire, 30000);
+      pendingPlayers.push('player-1');
+
+      expect(hasPendingDisconnect('player-1')).toBe(true);
+    });
+
+    it('calls onExpire after grace period elapses', () => {
+      const mapping = { playerId: 'player-1', roomCode: 'ROOM01', username: 'Alice' };
+      const onExpire = vi.fn();
+
+      startGracePeriod(mapping, onExpire, 30000);
+      pendingPlayers.push('player-1');
+
+      expect(onExpire).not.toHaveBeenCalled();
+
+      vi.advanceTimersByTime(30000);
+
+      expect(onExpire).toHaveBeenCalledTimes(1);
+      expect(hasPendingDisconnect('player-1')).toBe(false);
+    });
+
+    it('does not call onExpire before grace period elapses', () => {
+      const mapping = { playerId: 'player-1', roomCode: 'ROOM01', username: 'Alice' };
+      const onExpire = vi.fn();
+
+      startGracePeriod(mapping, onExpire, 30000);
+      pendingPlayers.push('player-1');
+
+      vi.advanceTimersByTime(29999);
+
+      expect(onExpire).not.toHaveBeenCalled();
+      expect(hasPendingDisconnect('player-1')).toBe(true);
+    });
+
+    it('replaces existing grace period for same player', () => {
+      const mapping = { playerId: 'player-1', roomCode: 'ROOM01', username: 'Alice' };
+      const onExpire1 = vi.fn();
+      const onExpire2 = vi.fn();
+
+      startGracePeriod(mapping, onExpire1, 30000);
+      pendingPlayers.push('player-1');
+
+      // Start a new grace period before the first expires
+      vi.advanceTimersByTime(15000);
+      startGracePeriod(mapping, onExpire2, 30000);
+
+      // First timer should have been cancelled
+      vi.advanceTimersByTime(15000);
+      expect(onExpire1).not.toHaveBeenCalled();
+
+      // Second timer should fire after its full duration
+      vi.advanceTimersByTime(15000);
+      expect(onExpire2).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('cancelGracePeriod', () => {
+    it('cancels the grace period timer and returns pending info', () => {
+      const mapping = { playerId: 'player-1', roomCode: 'ROOM01', username: 'Alice' };
+      const onExpire = vi.fn();
+
+      startGracePeriod(mapping, onExpire, 30000);
+      pendingPlayers.push('player-1');
+
+      const pending = cancelGracePeriod('player-1');
+
+      expect(pending).toBeDefined();
+      expect(pending!.mapping).toEqual(mapping);
+      expect(hasPendingDisconnect('player-1')).toBe(false);
+
+      // Timer should not fire after cancellation
+      vi.advanceTimersByTime(30000);
+      expect(onExpire).not.toHaveBeenCalled();
+    });
+
+    it('returns undefined if no grace period exists', () => {
+      expect(cancelGracePeriod('unknown-player')).toBeUndefined();
+    });
+  });
+
+  describe('getPendingDisconnect', () => {
+    it('returns pending disconnect info', () => {
+      const mapping = { playerId: 'player-1', roomCode: 'ROOM01', username: 'Alice' };
+      const onExpire = vi.fn();
+
+      startGracePeriod(mapping, onExpire, 30000);
+      pendingPlayers.push('player-1');
+
+      const pending = getPendingDisconnect('player-1');
+      expect(pending).toBeDefined();
+      expect(pending!.mapping).toEqual(mapping);
+      expect(pending!.disconnectedAt).toBeGreaterThan(0);
+    });
+
+    it('returns undefined for player without pending disconnect', () => {
+      expect(getPendingDisconnect('unknown')).toBeUndefined();
+    });
+  });
+
+  describe('reconnectPlayer', () => {
+    it('cancels grace period and re-registers player with new socket', () => {
+      const mapping = { playerId: 'player-1', roomCode: 'ROOM01', username: 'Alice' };
+      const onExpire = vi.fn();
+
+      startGracePeriod(mapping, onExpire, 30000);
+      pendingPlayers.push('player-1');
+
+      const pending = reconnectPlayer('new-socket-1', 'player-1');
+      registeredSockets.push('new-socket-1');
+
+      expect(pending).toBeDefined();
+      expect(pending!.mapping).toEqual(mapping);
+
+      // Player should be re-registered with new socket
+      expect(getSocketByPlayer('player-1')).toBe('new-socket-1');
+      expect(getPlayerBySocket('new-socket-1')).toEqual(mapping);
+      expect(isPlayerConnected('player-1')).toBe(true);
+
+      // Grace period should be cancelled
+      expect(hasPendingDisconnect('player-1')).toBe(false);
+      vi.advanceTimersByTime(30000);
+      expect(onExpire).not.toHaveBeenCalled();
+    });
+
+    it('returns undefined if player has no pending disconnect', () => {
+      const result = reconnectPlayer('new-socket', 'unknown-player');
+      expect(result).toBeUndefined();
+
+      // Should NOT register anything
+      expect(getPlayerBySocket('new-socket')).toBeUndefined();
     });
   });
 });
