@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   handleDrawFromDeck,
+  handleTakeDiscard,
   validateDiscardChoice,
   processDiscardChoice,
   isRedFaceCard,
@@ -45,6 +46,7 @@ function createTestGameState(overrides: Partial<GameState> = {}): GameState {
     phase: 'playing',
     drawnCard: null,
     drawnByPlayerId: null,
+    drawnSource: null,
     ...overrides,
   };
 }
@@ -103,6 +105,7 @@ describe('handleDrawFromDeck', () => {
     expect(result).toEqual(topCard);
     expect(gs.drawnCard).toEqual(topCard);
     expect(gs.drawnByPlayerId).toBe('player1');
+    expect(gs.drawnSource).toBe('deck');
     expect(gs.deck).toHaveLength(1);
   });
 
@@ -154,16 +157,74 @@ describe('handleDrawFromDeck', () => {
 });
 
 // ============================================================
-// validateDiscardChoice (F-038)
+// handleTakeDiscard (F-041)
+// ============================================================
+
+describe('handleTakeDiscard', () => {
+  it('takes the top card from the discard pile and sets pending state', () => {
+    const topDiscard = makeCard('top-discard', 'Q', '♥');
+    const gs = createTestGameState({
+      discardPile: [makeCard('bottom'), topDiscard],
+    });
+
+    const result = handleTakeDiscard(gs, 'player1');
+
+    expect(result).toEqual(topDiscard);
+    expect(gs.drawnCard).toEqual(topDiscard);
+    expect(gs.drawnByPlayerId).toBe('player1');
+    expect(gs.drawnSource).toBe('discard');
+    expect(gs.discardPile).toHaveLength(1);
+  });
+
+  it('returns null if a card is already drawn (pending)', () => {
+    const pending = makeCard('pending');
+    const gs = createTestGameState({
+      discardPile: [makeCard('top')],
+      drawnCard: pending,
+      drawnByPlayerId: 'player1',
+    });
+
+    const result = handleTakeDiscard(gs, 'player1');
+
+    expect(result).toBeNull();
+    expect(gs.drawnCard).toEqual(pending);
+    expect(gs.discardPile).toHaveLength(1);
+  });
+
+  it('returns null if the discard pile is empty', () => {
+    const gs = createTestGameState({ discardPile: [] });
+
+    const result = handleTakeDiscard(gs, 'player1');
+
+    expect(result).toBeNull();
+    expect(gs.drawnCard).toBeNull();
+    expect(gs.drawnByPlayerId).toBeNull();
+    expect(gs.drawnSource).toBeNull();
+  });
+
+  it('sets drawnSource to discard', () => {
+    const gs = createTestGameState({
+      discardPile: [makeCard('card', '5', '♠')],
+    });
+
+    handleTakeDiscard(gs, 'player1');
+
+    expect(gs.drawnSource).toBe('discard');
+  });
+});
+
+// ============================================================
+// validateDiscardChoice (F-038, F-042)
 // ============================================================
 
 describe('validateDiscardChoice', () => {
-  it('returns null (valid) when discarding the drawn card (slot=null)', () => {
+  it('returns null (valid) when discarding the drawn card (slot=null) from deck', () => {
     const player = makePlayer('p1', [{ slot: 'A', card: makeCard('a') }]);
     const gs = createTestGameState({
       players: [player],
       drawnCard: makeCard('drawn'),
       drawnByPlayerId: 'p1',
+      drawnSource: 'deck',
     });
 
     const error = validateDiscardChoice(gs, 'p1', null);
@@ -230,6 +291,37 @@ describe('validateDiscardChoice', () => {
 
     const error = validateDiscardChoice(gs, 'p1', 'Z');
     expect(error).toBe('Invalid slot: Z');
+  });
+
+  // --- F-042: takeDiscard must swap ---
+
+  it('returns error when slot is null and drawnSource is discard (must swap)', () => {
+    const player = makePlayer('p1', [{ slot: 'A', card: makeCard('a') }]);
+    const gs = createTestGameState({
+      players: [player],
+      drawnCard: makeCard('drawn'),
+      drawnByPlayerId: 'p1',
+      drawnSource: 'discard',
+    });
+
+    const error = validateDiscardChoice(gs, 'p1', null);
+    expect(error).toBe('Must swap with a hand card when taking from discard');
+  });
+
+  it('allows swap with hand slot when drawnSource is discard', () => {
+    const player = makePlayer('p1', [
+      { slot: 'A', card: makeCard('a') },
+      { slot: 'B', card: makeCard('b') },
+    ]);
+    const gs = createTestGameState({
+      players: [player],
+      drawnCard: makeCard('drawn'),
+      drawnByPlayerId: 'p1',
+      drawnSource: 'discard',
+    });
+
+    const error = validateDiscardChoice(gs, 'p1', 'A');
+    expect(error).toBeNull();
   });
 });
 
@@ -301,13 +393,14 @@ describe('processDiscardChoice', () => {
     expect(gs.drawnByPlayerId).toBeNull();
   });
 
-  it('triggers special effect when discarding a red face card (drawn card)', () => {
+  it('triggers special effect when discarding a red face card drawn from deck', () => {
     const drawnCard = makeCard('red-king', 'K', '♥');
     const player = makePlayer('p1', [{ slot: 'A', card: makeCard('a') }]);
     const gs = createTestGameState({
       players: [player],
       drawnCard,
       drawnByPlayerId: 'p1',
+      drawnSource: 'deck',
       discardPile: [],
     });
 
@@ -406,6 +499,7 @@ describe('processDiscardChoice', () => {
       players: [player],
       drawnCard,
       drawnByPlayerId: 'p1',
+      drawnSource: 'deck',
       discardPile: [],
     });
 
@@ -421,11 +515,49 @@ describe('processDiscardChoice', () => {
       players: [player],
       drawnCard,
       drawnByPlayerId: 'p1',
+      drawnSource: 'deck',
       discardPile: [],
     });
 
     const result = processDiscardChoice(gs, 'p1', null);
 
     expect(result.triggersSpecialEffect).toBe(true);
+  });
+
+  // --- F-043: No special effects from discard ---
+
+  it('does NOT trigger special effect when discarding a red face card taken from discard', () => {
+    const drawnCard = makeCard('red-king', 'K', '♥');
+    const player = makePlayer('p1', [{ slot: 'A', card: makeCard('a') }]);
+    const gs = createTestGameState({
+      players: [player],
+      drawnCard,
+      drawnByPlayerId: 'p1',
+      drawnSource: 'discard',
+      discardPile: [],
+    });
+
+    // When taken from discard, must swap (slot !== null)
+    const result = processDiscardChoice(gs, 'p1', 'A');
+
+    expect(result.success).toBe(true);
+    // The discarded card is the hand card, not the drawn card, so no special effect anyway
+    expect(result.triggersSpecialEffect).toBe(false);
+  });
+
+  it('clears drawnSource after processing', () => {
+    const drawnCard = makeCard('drawn', '5', '♠');
+    const player = makePlayer('p1', [{ slot: 'A', card: makeCard('a') }]);
+    const gs = createTestGameState({
+      players: [player],
+      drawnCard,
+      drawnByPlayerId: 'p1',
+      drawnSource: 'deck',
+      discardPile: [],
+    });
+
+    processDiscardChoice(gs, 'p1', null);
+
+    expect(gs.drawnSource).toBeNull();
   });
 });

@@ -54,10 +54,12 @@ export interface GameState {
   roundNumber: number;
   scores: Record<string, number>;
   phase: GamePhase;
-  /** Card drawn from deck, pending discard choice (F-037) */
+  /** Card drawn/taken, pending discard/swap choice (F-037, F-041) */
   drawnCard: Card | null;
-  /** Player who drew the card (F-037) */
+  /** Player who drew/took the card (F-037, F-041) */
   drawnByPlayerId: string | null;
+  /** Where the pending card came from — determines swap rules and special effects (F-041) */
+  drawnSource: 'deck' | 'discard' | null;
 }
 
 // ============================================================

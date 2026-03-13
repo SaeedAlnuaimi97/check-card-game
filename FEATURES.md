@@ -69,9 +69,9 @@ Derived from PLAN.md. Features are grouped by domain and ordered by implementati
 
 ### 8. Action: Take from Discard
 
-- [ ] **F-041**: Player takes top discard pile card (visible)
-- [ ] **F-042**: Player must discard one card from hand to replace
-- [ ] **F-043**: No special effects trigger from discard take
+- [x] **F-041**: Player takes top discard pile card (visible)
+- [x] **F-042**: Player must discard one card from hand to replace
+- [x] **F-043**: No special effects trigger from discard take
 
 ### 9. Action: Burn a Card
 

@@ -8,7 +8,7 @@ import {
   transitionFromPeeking,
   getCurrentTurnPlayerId,
 } from '../game/TurnManager';
-import { handleDrawFromDeck, processDiscardChoice } from '../game/ActionHandler';
+import { handleDrawFromDeck, handleTakeDiscard, processDiscardChoice } from '../game/ActionHandler';
 import { getSocketByPlayer } from './playerMapping';
 import type { GameState, ActionType, SlotLabel } from '../types/game.types';
 
@@ -166,9 +166,33 @@ export function registerGameHandlers(io: SocketIOServer, socket: Socket): void {
           return;
         }
 
-        // ---- Action: takeDiscard (F-041+) ----
+        // ---- Action: takeDiscard (F-041) ----
+        if (data.action.type === 'takeDiscard') {
+          const takenCard = handleTakeDiscard(gameState, data.playerId);
+          if (!takenCard) {
+            callback?.({ success: false, error: 'Could not take from discard' });
+            return;
+          }
+
+          // Save state with pending taken card
+          room.gameState = gameState;
+          room.markModified('gameState');
+          await room.save();
+
+          callback?.({ success: true });
+
+          // Send the taken card privately (player already saw it, but confirms the action)
+          const playerSocketId = getSocketByPlayer(data.playerId);
+          if (playerSocketId) {
+            io.to(playerSocketId).emit('cardDrawn', { card: takenCard, fromDiscard: true });
+          }
+
+          console.log(`Room ${data.roomCode}: ${data.playerId} took a card from discard`);
+          return;
+        }
+
         // ---- Action: burn (F-044+) ----
-        // Will be implemented in Features 8 and 9
+        // Will be implemented in Feature 9
         callback?.({
           success: false,
           error: 'Action processing not yet implemented',
@@ -242,6 +266,47 @@ export function registerGameHandlers(io: SocketIOServer, socket: Socket): void {
       } catch (error) {
         console.error('Error in discardChoice:', error);
         callback?.({ success: false, error: 'Failed to process discard choice' });
+      }
+    },
+  );
+
+  // ----------------------------------------------------------
+  // debugPeek — reveal a specific card (debug only)
+  // ----------------------------------------------------------
+  socket.on(
+    'debugPeek',
+    async (
+      data: { roomCode: string; targetPlayerId: string; slot: string },
+      callback?: (response: {
+        success: boolean;
+        card?: import('../types/game.types').Card;
+        error?: string;
+      }) => void,
+    ) => {
+      try {
+        const room = await RoomModel.findOne({ roomCode: data.roomCode });
+        if (!room || !room.gameState) {
+          callback?.({ success: false, error: 'Room or game not found' });
+          return;
+        }
+
+        const gameState = room.gameState as unknown as GameState;
+        const player = gameState.players.find((p) => p.playerId === data.targetPlayerId);
+        if (!player) {
+          callback?.({ success: false, error: 'Player not found' });
+          return;
+        }
+
+        const handSlot = player.hand.find((h) => h.slot === data.slot);
+        if (!handSlot) {
+          callback?.({ success: false, error: 'Slot not found' });
+          return;
+        }
+
+        callback?.({ success: true, card: handSlot.card });
+      } catch (error) {
+        console.error('Error in debugPeek:', error);
+        callback?.({ success: false, error: 'Failed to peek' });
       }
     },
   );

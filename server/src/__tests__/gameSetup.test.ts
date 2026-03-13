@@ -36,6 +36,7 @@ function createTestGameState(overrides: Partial<GameState> = {}): GameState {
     phase: 'playing',
     drawnCard: null,
     drawnByPlayerId: null,
+    drawnSource: null,
     ...overrides,
   };
 }

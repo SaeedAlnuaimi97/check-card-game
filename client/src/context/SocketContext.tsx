@@ -15,6 +15,12 @@ import type { ClientGameState, PeekedCard, RoomData, ActionType } from '../types
 import type { SlotLabel } from '../types/player.types';
 
 // ============================================================
+// Debug Mode
+// ============================================================
+
+export const DEBUG_MODE = true;
+
+// ============================================================
 // Types
 // ============================================================
 
@@ -33,8 +39,10 @@ interface SocketContextValue {
   peekedCards: PeekedCard[] | null;
   isMyTurn: boolean;
   turnData: YourTurnData | null;
-  /** Card drawn from deck, pending discard choice (F-037) */
+  /** Card drawn from deck or taken from discard, pending discard choice (F-037, F-041) */
   drawnCard: Card | null;
+  /** True when the drawn card was taken from the discard pile (must swap, can't discard) */
+  drawnFromDiscard: boolean;
   createRoom: (username: string) => Promise<{ success: boolean; error?: string }>;
   joinRoom: (roomCode: string, username: string) => Promise<{ success: boolean; error?: string }>;
   leaveRoom: () => void;
@@ -44,8 +52,13 @@ interface SocketContextValue {
     actionType: ActionType,
     slot?: string,
   ) => Promise<{ success: boolean; error?: string }>;
-  /** After drawing from deck, choose to swap with a hand slot or discard the drawn card (F-038) */
+  /** After drawing from deck or taking from discard, choose to swap with a hand slot or discard the drawn card (F-038, F-042) */
   discardChoice: (slot: SlotLabel | null) => Promise<{ success: boolean; error?: string }>;
+  /** Debug: peek at any player's card at a given slot */
+  debugPeek: (
+    targetPlayerId: string,
+    slot: string,
+  ) => Promise<{ success: boolean; card?: Card; error?: string }>;
 }
 
 const SocketContext = createContext<SocketContextValue | null>(null);
@@ -69,6 +82,7 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
   const [isMyTurn, setIsMyTurn] = useState(false);
   const [turnData, setTurnData] = useState<YourTurnData | null>(null);
   const [drawnCard, setDrawnCard] = useState<Card | null>(null);
+  const [drawnFromDiscard, setDrawnFromDiscard] = useState(false);
 
   // Use a ref for navigate to avoid re-registering socket listeners
   const navigateRef = useRef(navigate);
@@ -110,6 +124,7 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
       setGameState(data);
       // Clear drawn card — turn has ended or state changed
       setDrawnCard(null);
+      setDrawnFromDiscard(false);
       // Reset turn state — will be re-set by 'yourTurn' if it's still our turn
       setIsMyTurn(false);
       setTurnData(null);
@@ -121,9 +136,10 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
       setTurnData(data);
     });
 
-    socket.on('cardDrawn', (data: { card: Card }) => {
-      console.log('Card drawn from deck:', data.card);
+    socket.on('cardDrawn', (data: { card: Card; fromDiscard?: boolean }) => {
+      console.log('Card drawn:', data.card, data.fromDiscard ? '(from discard)' : '(from deck)');
       setDrawnCard(data.card);
+      setDrawnFromDiscard(data.fromDiscard === true);
     });
 
     return () => {
@@ -205,6 +221,7 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
     setGameState(null);
     setPeekedCards(null);
     setDrawnCard(null);
+    setDrawnFromDiscard(false);
   }, [roomData, playerId]);
 
   // ----------------------------------------------------------
@@ -287,12 +304,38 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
           { roomCode: roomData.roomCode, playerId, slot },
           (response: { success: boolean; error?: string }) => {
             setDrawnCard(null);
+            setDrawnFromDiscard(false);
             resolve(response);
           },
         );
       });
     },
     [roomData, playerId],
+  );
+
+  // ----------------------------------------------------------
+  // Debug Peek — reveal any card (debug only)
+  // ----------------------------------------------------------
+  const debugPeek = useCallback(
+    (
+      targetPlayerId: string,
+      slot: string,
+    ): Promise<{ success: boolean; card?: Card; error?: string }> => {
+      return new Promise((resolve) => {
+        if (!roomData) {
+          resolve({ success: false, error: 'Not in a room' });
+          return;
+        }
+        socket.emit(
+          'debugPeek',
+          { roomCode: roomData.roomCode, targetPlayerId, slot },
+          (response: { success: boolean; card?: Card; error?: string }) => {
+            resolve(response);
+          },
+        );
+      });
+    },
+    [roomData],
   );
 
   const value: SocketContextValue = {
@@ -305,6 +348,7 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
     isMyTurn,
     turnData,
     drawnCard,
+    drawnFromDiscard,
     createRoom,
     joinRoom,
     leaveRoom,
@@ -312,6 +356,7 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
     endPeek,
     performAction,
     discardChoice,
+    debugPeek,
   };
 
   return <SocketContext.Provider value={value}>{children}</SocketContext.Provider>;

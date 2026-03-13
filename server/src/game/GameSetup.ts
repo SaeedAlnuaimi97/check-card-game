@@ -131,6 +131,7 @@ export function initializeGameState(
     phase: 'dealing',
     drawnCard: null,
     drawnByPlayerId: null,
+    drawnSource: null,
   };
 
   // Deal 4 cards to each player (F-028)

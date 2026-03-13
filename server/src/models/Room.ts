@@ -57,6 +57,7 @@ const GameStateSchema = new Schema<GameState>(
     },
     drawnCard: { type: CardSchema, default: null },
     drawnByPlayerId: { type: String, default: null },
+    drawnSource: { type: String, enum: ['deck', 'discard', null], default: null },
   },
   { _id: false },
 );

@@ -14,6 +14,7 @@ import {
 } from '@chakra-ui/react';
 import { useNavigate } from 'react-router-dom';
 import { useSocket } from '../context/SocketContext';
+import { DEBUG_MODE } from '../context/SocketContext';
 import { Card } from '../components/cards/Card';
 import { CardBack } from '../components/cards/CardBack';
 import type { Card as CardType } from '../types/card.types';
@@ -34,9 +35,10 @@ const PEEK_TICK_MS = 100;
 interface OpponentProps {
   player: ClientPlayerState;
   isCurrentTurn: boolean;
+  debugRevealed?: Record<string, CardType>;
 }
 
-const OpponentRow: FC<OpponentProps> = ({ player, isCurrentTurn }) => {
+const OpponentRow: FC<OpponentProps> = ({ player, isCurrentTurn, debugRevealed }) => {
   return (
     <VStack
       spacing={1}
@@ -58,18 +60,50 @@ const OpponentRow: FC<OpponentProps> = ({ player, isCurrentTurn }) => {
         )}
       </HStack>
       <HStack spacing={1}>
-        {player.hand.map((h: ClientHandSlot) => (
-          <Box
-            key={h.slot}
-            w={{ base: '20px', md: '28px' }}
-            h={{ base: '28px', md: '39px' }}
-            borderRadius="sm"
-            bg="card.back"
-            border="1px solid"
-            borderColor="gray.600"
-            opacity={h.card === undefined ? 0.3 : 1}
-          />
-        ))}
+        {player.hand.map((h: ClientHandSlot) => {
+          const key = `${player.playerId}:${h.slot}`;
+          const revealedCard = debugRevealed?.[key];
+          return (
+            <Box key={h.slot}>
+              {revealedCard ? (
+                <Box
+                  w={{ base: '40px', md: '52px' }}
+                  h={{ base: '56px', md: '74px' }}
+                  borderRadius="sm"
+                  border="1px solid"
+                  borderColor="purple.400"
+                  bg="white"
+                  display="flex"
+                  flexDirection="column"
+                  alignItems="center"
+                  justifyContent="center"
+                  fontSize={{ base: '2xs', md: 'xs' }}
+                >
+                  <Text
+                    color={revealedCard.isRed ? 'red.500' : 'gray.800'}
+                    fontWeight="bold"
+                    lineHeight={1}
+                  >
+                    {revealedCard.rank}
+                  </Text>
+                  <Text color={revealedCard.isRed ? 'red.500' : 'gray.800'} lineHeight={1}>
+                    {revealedCard.suit}
+                  </Text>
+                </Box>
+              ) : (
+                <Box
+                  w={{ base: '20px', md: '28px' }}
+                  h={{ base: '28px', md: '39px' }}
+                  borderRadius="sm"
+                  bg="card.back"
+                  border="1px solid"
+                  borderColor="gray.600"
+                  opacity={h.card === undefined ? 0.3 : 1}
+                />
+              )}
+            </Box>
+          );
+        })}
       </HStack>
       <Text fontSize="2xs" color="gray.400">
         Score: {player.totalScore}
@@ -92,15 +126,50 @@ export const GameBoard: FC = () => {
     isMyTurn,
     turnData,
     drawnCard,
+    drawnFromDiscard,
     endPeek,
     performAction,
     discardChoice,
+    debugPeek,
   } = useSocket();
   const toast = useToast();
 
   // Peek animation state
   const [isPeeking, setIsPeeking] = useState(true);
   const [peekProgress, setPeekProgress] = useState(100);
+
+  // Debug: track revealed cards by key `${playerId}:${slot}`
+  const [debugRevealed, setDebugRevealed] = useState<Record<string, CardType>>({});
+
+  const [debugRevealAll, setDebugRevealAll] = useState(false);
+
+  const toggleDebugRevealAll = useCallback(async () => {
+    if (!DEBUG_MODE || !gameState) return;
+    if (debugRevealAll) {
+      // Toggle OFF — clear all revealed cards
+      setDebugRevealed({});
+      setDebugRevealAll(false);
+      return;
+    }
+    // Toggle ON — peek at every card for every player
+    const results: Record<string, CardType> = {};
+    const promises: Promise<void>[] = [];
+    for (const player of gameState.players) {
+      for (const h of player.hand) {
+        const key = `${player.playerId}:${h.slot}`;
+        promises.push(
+          debugPeek(player.playerId, h.slot).then((res) => {
+            if (res.success && res.card) {
+              results[key] = res.card;
+            }
+          }),
+        );
+      }
+    }
+    await Promise.all(promises);
+    setDebugRevealed(results);
+    setDebugRevealAll(true);
+  }, [gameState, debugRevealAll, debugPeek]);
 
   // Redirect if no game state
   useEffect(() => {
@@ -194,6 +263,13 @@ export const GameBoard: FC = () => {
       const result = await discardChoice(slot);
       if (!result.success && result.error) {
         toast({ title: result.error, status: 'error', duration: 2000, position: 'top' });
+      } else if (result.success) {
+        toast({
+          title: slot !== null ? `Swapped card into slot ${slot}` : 'Drawn card discarded',
+          status: 'info',
+          duration: 1500,
+          position: 'top',
+        });
       }
     },
     [canAct, hasDrawnCard, discardChoice, toast],
@@ -271,6 +347,26 @@ export const GameBoard: FC = () => {
         flexShrink={0}
       >
         <HStack spacing={3}>
+          {DEBUG_MODE && (
+            <Box
+              as="button"
+              w="28px"
+              h="28px"
+              borderRadius="md"
+              bg={debugRevealAll ? 'purple.500' : 'gray.600'}
+              display="flex"
+              alignItems="center"
+              justifyContent="center"
+              cursor="pointer"
+              onClick={toggleDebugRevealAll}
+              _hover={{ bg: debugRevealAll ? 'purple.400' : 'gray.500' }}
+              title={debugRevealAll ? 'Hide all cards' : 'Reveal all cards (debug)'}
+            >
+              <Text fontSize="14px" lineHeight={1}>
+                {'\u{1F441}'}
+              </Text>
+            </Box>
+          )}
           <Text fontSize="sm" color="gray.400">
             Room:{' '}
             <Text as="span" color="gray.100" fontWeight="bold">
@@ -311,6 +407,7 @@ export const GameBoard: FC = () => {
               isCurrentTurn={
                 gameState.players[gameState.currentTurnIndex]?.playerId === opp.playerId
               }
+              debugRevealed={debugRevealed}
             />
           ))}
         </Flex>
@@ -348,7 +445,13 @@ export const GameBoard: FC = () => {
 
           {/* Drawn Card (floating between deck and discard) */}
           {hasDrawnCard && drawnCard && (
-            <Tooltip label="Click a hand card to swap, or click discard to keep hand">
+            <Tooltip
+              label={
+                drawnFromDiscard
+                  ? 'Click a hand card to swap (must swap)'
+                  : 'Click a hand card to swap, or click discard to keep hand'
+              }
+            >
               <VStack spacing={2}>
                 <Box
                   borderRadius="md"
@@ -360,7 +463,7 @@ export const GameBoard: FC = () => {
                   <Card card={drawnCard} size="md" />
                 </Box>
                 <Text fontSize="xs" color="yellow.300" fontWeight="bold">
-                  Drawn
+                  {drawnFromDiscard ? 'From Discard' : 'Drawn'}
                 </Text>
               </VStack>
             </Tooltip>
@@ -369,13 +472,15 @@ export const GameBoard: FC = () => {
           {/* Discard Pile */}
           <Tooltip
             label={
-              hasDrawnCard
-                ? 'Discard drawn card'
-                : canAct && turnData?.availableActions.includes('takeDiscard')
-                  ? 'Take from discard'
-                  : !canAct
-                    ? 'Not your turn'
-                    : ''
+              hasDrawnCard && drawnFromDiscard
+                ? 'Must swap with a hand card'
+                : hasDrawnCard
+                  ? 'Discard drawn card'
+                  : canAct && turnData?.availableActions.includes('takeDiscard')
+                    ? 'Take from discard'
+                    : !canAct
+                      ? 'Not your turn'
+                      : ''
             }
             isDisabled={!canAct && gameState.phase !== 'playing'}
           >
@@ -385,10 +490,16 @@ export const GameBoard: FC = () => {
                   card={topDiscard}
                   isClickable={
                     hasDrawnCard
-                      ? true
+                      ? !drawnFromDiscard
                       : canAct && (turnData?.availableActions.includes('takeDiscard') ?? false)
                   }
-                  onClick={hasDrawnCard ? () => handleDiscardChoice(null) : handleTakeDiscard}
+                  onClick={
+                    hasDrawnCard && !drawnFromDiscard
+                      ? () => handleDiscardChoice(null)
+                      : !hasDrawnCard
+                        ? handleTakeDiscard
+                        : undefined
+                  }
                 />
               ) : (
                 <Box
@@ -396,16 +507,25 @@ export const GameBoard: FC = () => {
                   h="112px"
                   borderRadius="md"
                   border="2px dashed"
-                  borderColor={hasDrawnCard ? 'yellow.400' : 'gray.600'}
+                  borderColor={hasDrawnCard && !drawnFromDiscard ? 'yellow.400' : 'gray.600'}
                   display="flex"
                   alignItems="center"
                   justifyContent="center"
-                  cursor={hasDrawnCard ? 'pointer' : 'default'}
-                  onClick={hasDrawnCard ? () => handleDiscardChoice(null) : undefined}
-                  _hover={hasDrawnCard ? { borderColor: 'yellow.300', shadow: 'lg' } : {}}
+                  cursor={hasDrawnCard && !drawnFromDiscard ? 'pointer' : 'default'}
+                  onClick={
+                    hasDrawnCard && !drawnFromDiscard ? () => handleDiscardChoice(null) : undefined
+                  }
+                  _hover={
+                    hasDrawnCard && !drawnFromDiscard
+                      ? { borderColor: 'yellow.300', shadow: 'lg' }
+                      : {}
+                  }
                 >
-                  <Text fontSize="xs" color={hasDrawnCard ? 'yellow.300' : 'gray.500'}>
-                    {hasDrawnCard ? 'Discard here' : 'Empty'}
+                  <Text
+                    fontSize="xs"
+                    color={hasDrawnCard && !drawnFromDiscard ? 'yellow.300' : 'gray.500'}
+                  >
+                    {hasDrawnCard && !drawnFromDiscard ? 'Discard here' : 'Empty'}
                   </Text>
                 </Box>
               )}
@@ -422,6 +542,10 @@ export const GameBoard: FC = () => {
           {gameState.phase === 'peeking' ? (
             <Text fontSize="sm" color="yellow.300" fontWeight="bold">
               Memorizing...
+            </Text>
+          ) : hasDrawnCard && drawnFromDiscard ? (
+            <Text fontSize="sm" color="yellow.300" fontWeight="bold">
+              Click a hand card to swap (must swap)
             </Text>
           ) : hasDrawnCard ? (
             <Text fontSize="sm" color="yellow.300" fontWeight="bold">
@@ -442,7 +566,9 @@ export const GameBoard: FC = () => {
             {myPlayer.hand.map((h: ClientHandSlot) => {
               const peekedCard = getPeekedCardForSlot(h.slot);
               const showFaceUp = isPeekedSlot(h.slot) && peekedCard !== null;
-              const visibleCard = showFaceUp ? peekedCard : h.card;
+              const debugKey = `${playerId}:${h.slot}`;
+              const debugCard = debugRevealed[debugKey];
+              const visibleCard = showFaceUp ? peekedCard : (debugCard ?? h.card);
               const burnAvailable =
                 canAct && !hasDrawnCard && (turnData?.availableActions.includes('burn') ?? false);
               /** When a drawn card is pending, clicking a hand card swaps it */
@@ -465,7 +591,7 @@ export const GameBoard: FC = () => {
 
               return (
                 <Tooltip key={h.slot} label={tooltipLabel} isDisabled={!isClickable}>
-                  <VStack spacing={1}>
+                  <VStack spacing={1} position="relative">
                     {visibleCard ? (
                       <Card
                         card={visibleCard}
