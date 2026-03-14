@@ -279,27 +279,25 @@ export const HomePage: FC = () => {
           </ModalHeader>
           <ModalCloseButton />
           <ModalBody pb={6} fontSize="sm">
-            <VStack align="stretch" spacing={5}>
-              {/* Goal */}
+            <VStack align="stretch" spacing={4}>
+              {/* Goal + Setup */}
               <Box>
                 <Text fontWeight="bold" color="brand.300" mb={1}>
                   Goal
                 </Text>
                 <Text color="gray.300">
-                  Have the lowest total card value in your hand when a round ends. Avoid reaching
-                  100 points across rounds — the first player to hit 100+ loses.
+                  Lowest hand total wins each round. First player to reach 100+ points loses the
+                  game.
                 </Text>
               </Box>
 
-              {/* Setup */}
               <Box>
                 <Text fontWeight="bold" color="brand.300" mb={1}>
                   Setup
                 </Text>
                 <Text color="gray.300">
-                  4–6 players. Each player is dealt 4 face-down cards (slots A, B, C, D). At the
-                  start you briefly see 2 of your 4 cards — memorize them! All cards then flip
-                  face-down and you must remember what you have.
+                  Each player gets 4 face-down cards (A–D). You briefly peek at 2 of them — memorize
+                  them!
                 </Text>
               </Box>
 
@@ -321,11 +319,11 @@ export const HomePage: FC = () => {
                   </Thead>
                   <Tbody>
                     {[
-                      ['Red 10 (♥ ♦)', '0 — best card!'],
+                      ['Red 10 (♥ ♦)', '0'],
                       ['Ace', '1'],
                       ['2 – 9', 'Face value'],
-                      ['Black 10 (♠ ♣)', '10'],
-                      ['Jack, Queen, King', '10'],
+                      ['10, J, Q, K (black)', '10'],
+                      ['J, Q, K (red)', '10 + special effect'],
                     ].map(([card, pts]) => (
                       <Tr key={card}>
                         <Td color="gray.300" borderColor="gray.700">
@@ -340,96 +338,75 @@ export const HomePage: FC = () => {
                 </Table>
               </Box>
 
-              {/* Turn Actions */}
+              {/* Your Turn */}
               <Box>
                 <Text fontWeight="bold" color="brand.300" mb={2}>
-                  On Your Turn
+                  On Your Turn — pick one:
                 </Text>
-                <VStack align="stretch" spacing={2}>
-                  <Box bg="gray.700" p={3} borderRadius="md">
-                    <Text fontWeight="semibold" color="white" mb={1}>
-                      1. Draw from Deck
-                    </Text>
-                    <Text color="gray.300">
-                      Draw a face-down card privately. Then either discard it (keep your hand) or
-                      swap it with one of your hand cards. If you discard a red J/Q/K you just drew,
-                      its special effect activates.
-                    </Text>
-                  </Box>
-                  <Box bg="gray.700" p={3} borderRadius="md">
-                    <Text fontWeight="semibold" color="white" mb={1}>
-                      2. Take from Discard
-                    </Text>
-                    <Text color="gray.300">
-                      Hold the discard pile card for 2 seconds to take it. You must then swap it
-                      with one of your hand cards. No special effects.
-                    </Text>
-                  </Box>
-                  <Box bg="gray.700" p={3} borderRadius="md">
-                    <Text fontWeight="semibold" color="white" mb={1}>
-                      3. Burn a Card
-                    </Text>
-                    <Text color="gray.300">
-                      Select a hand card whose rank matches the top discard card. On success, the
-                      card is removed from your hand. On failure, you keep your card and draw a
-                      penalty card face-down.
-                    </Text>
-                  </Box>
-                </VStack>
-              </Box>
-
-              {/* Special Effects */}
-              <Box>
-                <Text fontWeight="bold" color="brand.300" mb={2}>
-                  Special Effects (Red Face Cards)
-                </Text>
-                <Text color="gray.400" fontSize="xs" mb={2}>
-                  Only triggers when you DRAW and then DISCARD a red J/Q/K from the deck.
-                </Text>
-                <VStack align="stretch" spacing={2}>
+                <VStack align="stretch" spacing={1}>
                   {[
                     [
-                      'Red Jack ♥♦',
-                      'Blind-swap one of your cards with any opponent card. Optional — you can skip.',
+                      'Draw from deck',
+                      'Swap it with a hand card, or discard it. Discarding a red J/Q/K triggers its special effect.',
                     ],
-                    ['Red Queen ♥♦', 'Peek at one of your own face-down cards privately.'],
+                    ['Take from discard', 'Hold 2 sec to take — must swap with a hand card.'],
                     [
-                      'Red King ♥♦',
-                      'Draw 2 extra cards privately. Choose to return both, keep 1, or keep 2 (replace hand cards).',
+                      'Burn a card',
+                      'Play a hand card matching the top discard. Match = card removed. Miss = penalty card added.',
                     ],
                   ].map(([title, desc]) => (
-                    <Box key={title} bg="gray.700" p={3} borderRadius="md">
-                      <Text fontWeight="semibold" color="red.300" mb={1}>
-                        {title}
+                    <Box key={title} bg="gray.700" px={3} py={2} borderRadius="md">
+                      <Text fontWeight="semibold" color="white" display="inline">
+                        {title} —{' '}
                       </Text>
-                      <Text color="gray.300">{desc}</Text>
+                      <Text color="gray.300" display="inline">
+                        {desc}
+                      </Text>
                     </Box>
                   ))}
                 </VStack>
               </Box>
 
-              {/* Check */}
+              {/* Special Effects */}
+              <Box>
+                <Text fontWeight="bold" color="brand.300" mb={1}>
+                  Red Face Card Effects
+                </Text>
+                <VStack align="stretch" spacing={1}>
+                  {[
+                    ['Red J ♥♦', "Blind-swap one of your cards with any opponent's."],
+                    ['Red Q ♥♦', 'Peek at one of your own face-down cards.'],
+                    ['Red K ♥♦', 'Draw 2 extra cards; keep 0, 1, or 2 (swap into hand).'],
+                  ].map(([title, desc]) => (
+                    <Box key={title} bg="gray.700" px={3} py={2} borderRadius="md">
+                      <Text fontWeight="semibold" color="red.300" display="inline">
+                        {title} —{' '}
+                      </Text>
+                      <Text color="gray.300" display="inline">
+                        {desc}
+                      </Text>
+                    </Box>
+                  ))}
+                </VStack>
+              </Box>
+
+              {/* Check + Scoring */}
               <Box>
                 <Text fontWeight="bold" color="brand.300" mb={1}>
                   Calling CHECK
                 </Text>
                 <Text color="gray.300">
-                  At the start of your turn (before acting), you can call CHECK if you think you
-                  have the lowest hand. You still take your normal turn. Every other player gets one
-                  final turn, then the round ends. If you called CHECK but don&apos;t have the
-                  lowest hand, your score is doubled for that round!
+                  Before your turn, call CHECK if you think you have the lowest hand. Everyone else
+                  gets one final turn. If you're wrong, your score doubles that round.
                 </Text>
               </Box>
 
-              {/* Scoring */}
               <Box>
                 <Text fontWeight="bold" color="brand.300" mb={1}>
                   Scoring
                 </Text>
                 <Text color="gray.300">
-                  Round winner (lowest sum) scores 0. All others add their hand sum to their total.
-                  The game ends when any player hits 100+ — that player loses, and the one with the
-                  lowest total wins.
+                  Round winner scores 0. Others add their hand total. Hit 100+ and you lose.
                 </Text>
               </Box>
             </VStack>

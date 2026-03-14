@@ -891,16 +891,13 @@ describe('gameHandlers — pauseGame', () => {
     expect((hostEvent!.data as { pausedBy: string }).pausedBy).toBe(hostId);
   });
 
-  it('rejects non-host player', async () => {
+  it('allows any player in the room to pause the game', async () => {
     createPlayingRoom('PAUS');
     const callback = vi.fn();
 
     await emitEvent('pauseGame', { roomCode: 'PAUS', playerId: player2Id }, callback);
 
-    expect(callback).toHaveBeenCalledWith({
-      success: false,
-      error: 'Only the host can pause the game',
-    });
+    expect(callback).toHaveBeenCalledWith({ success: true });
   });
 
   it('rejects if room not found', async () => {
@@ -1092,16 +1089,13 @@ describe('gameHandlers — resumeGame', () => {
     expect((hostEvent!.data as { turnStartedAt: number }).turnStartedAt).toBeTypeOf('number');
   });
 
-  it('rejects non-host player', async () => {
+  it('allows any player in the room to resume the game', async () => {
     createPausedRoom('RESM');
     const callback = vi.fn();
 
     await emitEvent('resumeGame', { roomCode: 'RESM', playerId: player2Id }, callback);
 
-    expect(callback).toHaveBeenCalledWith({
-      success: false,
-      error: 'Only the host can resume the game',
-    });
+    expect(callback).toHaveBeenCalledWith({ success: true });
   });
 
   it('rejects if room not found', async () => {

@@ -1419,9 +1419,9 @@ export function registerGameHandlers(io: SocketIOServer, socket: Socket): void {
           return;
         }
 
-        // Only the host can pause the game
-        if (room.host !== data.playerId) {
-          callback?.({ success: false, error: 'Only the host can pause the game' });
+        // Any player in the room can pause the game
+        if (!room.players.find((p) => p.id === data.playerId)) {
+          callback?.({ success: false, error: 'Player not in room' });
           return;
         }
 
@@ -1516,9 +1516,9 @@ export function registerGameHandlers(io: SocketIOServer, socket: Socket): void {
           return;
         }
 
-        // Only the host can resume the game
-        if (room.host !== data.playerId) {
-          callback?.({ success: false, error: 'Only the host can resume the game' });
+        // Any player in the room can resume the game
+        if (!room.players.find((p) => p.id === data.playerId)) {
+          callback?.({ success: false, error: 'Player not in room' });
           return;
         }
 

@@ -9,6 +9,7 @@ import {
   IconButton,
   Modal,
   ModalBody,
+  ModalCloseButton,
   ModalContent,
   ModalFooter,
   ModalHeader,
@@ -26,6 +27,7 @@ import {
   Heading,
   Progress,
   Tooltip,
+  useDisclosure,
   useToast,
 } from '@chakra-ui/react';
 import { useNavigate } from 'react-router-dom';
@@ -194,6 +196,9 @@ export const GameBoard: FC = () => {
 
   // Leaderboard modal state
   const [showLeaderboard, setShowLeaderboard] = useState(false);
+
+  // Game menu modal
+  const { isOpen: isMenuOpen, onOpen: onMenuOpen, onClose: onMenuClose } = useDisclosure();
 
   // Turn timer countdown state (seconds remaining)
   const [turnTimeLeft, setTurnTimeLeft] = useState<number | null>(null);
@@ -964,24 +969,49 @@ export const GameBoard: FC = () => {
               CHECK ({checkCalledData.playerId === playerId ? 'You' : checkCalledData.username})
             </Badge>
           )}
-          {/* Pause/Resume button — host only (F-277) */}
-          {roomData?.host === playerId && (
-            <Tooltip label={gameState.paused ? 'Resume game' : 'Pause game'} placement="bottom">
-              <IconButton
-                aria-label={gameState.paused ? 'Resume game' : 'Pause game'}
-                size="xs"
+          {/* Menu button */}
+          <IconButton
+            aria-label="Game menu"
+            size="xs"
+            variant="ghost"
+            color="gray.400"
+            _hover={{ color: 'white', bg: 'whiteAlpha.100' }}
+            onClick={onMenuOpen}
+            icon={
+              <Text fontSize="lg" lineHeight={1} fontWeight="bold">
+                ☰
+              </Text>
+            }
+          />
+        </HStack>
+      </Flex>
+
+      {/* Game Menu Modal */}
+      <Modal isOpen={isMenuOpen} onClose={onMenuClose} isCentered size="xs">
+        <ModalOverlay bg="blackAlpha.700" />
+        <ModalContent bg="gray.800" color="white">
+          <ModalHeader fontSize="md" borderBottom="1px solid" borderColor="gray.700" pb={3}>
+            Menu
+          </ModalHeader>
+          <ModalCloseButton />
+          <ModalBody py={4}>
+            <VStack spacing={3} align="stretch">
+              {/* Pause / Resume */}
+              <Button
                 variant="ghost"
-                color={gameState.paused ? 'green.300' : 'gray.400'}
-                _hover={{
-                  color: gameState.paused ? 'green.200' : 'yellow.300',
-                  bg: 'whiteAlpha.100',
-                }}
+                justifyContent="flex-start"
+                leftIcon={
+                  <Text fontSize="md" lineHeight={1}>
+                    {gameState.paused ? '▶' : '⏸'}
+                  </Text>
+                }
                 isDisabled={
                   gameState.phase === 'roundEnd' ||
                   gameState.phase === 'gameEnd' ||
                   gameState.phase === 'dealing'
                 }
                 onClick={async () => {
+                  onMenuClose();
                   const result = gameState.paused ? await resumeGame() : await pauseGame();
                   if (!result.success && result.error) {
                     toast({
@@ -992,42 +1022,52 @@ export const GameBoard: FC = () => {
                     });
                   }
                 }}
-                icon={
+              >
+                {gameState.paused ? 'Resume Game' : 'Pause Game'}
+              </Button>
+
+              <Divider borderColor="gray.700" />
+
+              {/* Scoreboard */}
+              <Button
+                variant="ghost"
+                justifyContent="flex-start"
+                leftIcon={
                   <Text fontSize="md" lineHeight={1}>
-                    {gameState.paused ? '\u25B6' : '\u23F8'}
+                    🏆
                   </Text>
                 }
-              />
-            </Tooltip>
-          )}
-          <IconButton
-            aria-label="Leaderboard"
-            size="xs"
-            variant="ghost"
-            color="gray.400"
-            _hover={{ color: 'yellow.300', bg: 'whiteAlpha.100' }}
-            onClick={() => setShowLeaderboard(true)}
-            icon={
-              <Text fontSize="md" lineHeight={1}>
-                {'\u{1F3C6}'}
-              </Text>
-            }
-          />
-          <IconButton
-            aria-label="Exit game"
-            size="xs"
-            variant="ghost"
-            color="gray.400"
-            _hover={{ color: 'red.300', bg: 'whiteAlpha.100' }}
-            onClick={handleExitGame}
-            icon={
-              <Text fontSize="md" lineHeight={1}>
-                {'\u{1F6AA}'}
-              </Text>
-            }
-          />
-        </HStack>
-      </Flex>
+                onClick={() => {
+                  onMenuClose();
+                  setShowLeaderboard(true);
+                }}
+              >
+                Scoreboard
+              </Button>
+
+              <Divider borderColor="gray.700" />
+
+              {/* Exit */}
+              <Button
+                variant="ghost"
+                colorScheme="red"
+                justifyContent="flex-start"
+                leftIcon={
+                  <Text fontSize="md" lineHeight={1}>
+                    🚪
+                  </Text>
+                }
+                onClick={() => {
+                  onMenuClose();
+                  handleExitGame();
+                }}
+              >
+                Exit Game
+              </Button>
+            </VStack>
+          </ModalBody>
+        </ModalContent>
+      </Modal>
 
       {/* Final Round banner (UI-005) */}
       {checkCalledData && (

@@ -12,6 +12,14 @@ once MongoDB is running.
 
 ### macOS (Homebrew)
 
+If you don't have Homebrew installed, install it first:
+
+```bash
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+```
+
+Then install MongoDB:
+
 ```bash
 brew tap mongodb/brew
 brew install mongodb-community
