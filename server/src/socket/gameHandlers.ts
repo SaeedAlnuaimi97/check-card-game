@@ -14,6 +14,7 @@ import {
 import {
   handleDrawFromDeck,
   handleTakeDiscard,
+  undoTakeDiscard,
   processDiscardChoice,
   handleBurnAttempt,
   getSpecialEffectType,
@@ -809,6 +810,61 @@ export function registerGameHandlers(io: SocketIOServer, socket: Socket): void {
   );
 
   // ----------------------------------------------------------
+  // undoTakeDiscard — cancel a pending take-from-discard action
+  // Returns the card to the top of the discard pile.
+  // Only valid before the player has selected a hand slot to swap.
+  // ----------------------------------------------------------
+  socket.on(
+    'undoTakeDiscard',
+    async (
+      data: { roomCode: string; playerId: string },
+      callback?: (response: { success: boolean; error?: string }) => void,
+    ) => {
+      const release = await getRoomMutex(data.roomCode).acquire();
+      try {
+        const room = await RoomModel.findOne({ roomCode: data.roomCode });
+        if (!room || !room.gameState) {
+          callback?.({ success: false, error: 'Room or game not found' });
+          return;
+        }
+
+        const gameState = room.gameState as unknown as GameState;
+
+        // Block while paused
+        if (gameState.paused) {
+          callback?.({ success: false, error: 'Game is paused' });
+          return;
+        }
+
+        const result = undoTakeDiscard(gameState, data.playerId);
+        if (!result.success) {
+          callback?.({ success: false, error: result.error });
+          return;
+        }
+
+        // Save state with discard card returned
+        room.gameState = gameState;
+        room.markModified('gameState');
+        await room.save();
+
+        callback?.({ success: true });
+
+        // Broadcast updated state so everyone sees the card back on the discard pile
+        await broadcastGameState(io, data.roomCode, gameState);
+
+        console.log(
+          `Room ${data.roomCode}: ${getUsername(gameState, data.playerId)} undid take-from-discard (${result.returnedCard ? fmtCard(result.returnedCard) : 'unknown'})`,
+        );
+      } catch (error) {
+        console.error('Error in undoTakeDiscard:', error);
+        callback?.({ success: false, error: 'Failed to undo take from discard' });
+      } finally {
+        release();
+      }
+    },
+  );
+
+  // ----------------------------------------------------------
   // debugPeek — reveal a specific card (debug only)
   // ----------------------------------------------------------
   socket.on(
@@ -1363,9 +1419,9 @@ export function registerGameHandlers(io: SocketIOServer, socket: Socket): void {
           return;
         }
 
-        // Only the host can pause the game
-        if (room.host !== data.playerId) {
-          callback?.({ success: false, error: 'Only the host can pause the game' });
+        // Any player in the room can pause the game
+        if (!room.players.find((p) => p.id === data.playerId)) {
+          callback?.({ success: false, error: 'Player not in room' });
           return;
         }
 
@@ -1460,9 +1516,9 @@ export function registerGameHandlers(io: SocketIOServer, socket: Socket): void {
           return;
         }
 
-        // Only the host can resume the game
-        if (room.host !== data.playerId) {
-          callback?.({ success: false, error: 'Only the host can resume the game' });
+        // Any player in the room can resume the game
+        if (!room.players.find((p) => p.id === data.playerId)) {
+          callback?.({ success: false, error: 'Player not in room' });
           return;
         }
 

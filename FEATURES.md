@@ -311,6 +311,15 @@ Derived from PLAN.md. Features are grouped by domain and ordered by implementati
 - [x] **F-281**: Sanitize pause fields in client game state
 - [x] **F-282**: Add pause fields to GameState Mongoose schema
 
+### UX Improvements
+
+- [x] **F-320**: Lobby reconnection fix — `rejoinRoom` supports fresh-tab / lobby-refresh path (no grace period required)
+- [x] **F-321**: Client rejoin navigation — navigate to `/room` when rejoining a lobby, `/game` when rejoining a game
+- [x] **F-322**: Undo take-from-discard — `undoTakeDiscard` server action and socket handler; undo button on GameBoard when `drawnFromDiscard`
+- [x] **F-323**: Long-press discard take — 2-second hold required to take from discard pile; visual progress overlay
+- [x] **F-324**: How to Play modal — accessible from home page; covers goal, setup, card values, turn actions, special effects, scoring
+- [x] **F-325**: MongoDB local setup guide — `MONGODB_SETUP.md` with install instructions for macOS, Ubuntu, Windows, and Docker
+
 ### Future Enhancements
 
 - [ ] **F-300**: Bot players — basic AI strategy, fill empty slots
@@ -332,5 +341,6 @@ Derived from PLAN.md. Features are grouped by domain and ordered by implementati
 
 **Total MVP Features:** 112  
 **Total Phase 2 Features:** 54  
-**Document Version:** 1.2  
-**Last Updated:** 2026-03-13
+**UX Improvements:** 6  
+**Document Version:** 1.3  
+**Last Updated:** 2026-03-14

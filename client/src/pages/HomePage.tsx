@@ -1,6 +1,28 @@
 import { useState, useEffect, FC } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Box, Button, HStack, Image, Input, Text, useToast, VStack } from '@chakra-ui/react';
+import {
+  Box,
+  Button,
+  HStack,
+  Image,
+  Input,
+  Modal,
+  ModalBody,
+  ModalCloseButton,
+  ModalContent,
+  ModalHeader,
+  ModalOverlay,
+  Table,
+  Tbody,
+  Td,
+  Text,
+  Th,
+  Thead,
+  Tr,
+  useDisclosure,
+  useToast,
+  VStack,
+} from '@chakra-ui/react';
 import { useSocket } from '../context/SocketContext';
 
 export const HomePage: FC = () => {
@@ -13,6 +35,11 @@ export const HomePage: FC = () => {
   const { isConnected, createRoom, joinRoom, storedUsername } = useSocket();
   const navigate = useNavigate();
   const toast = useToast();
+  const {
+    isOpen: isHowToPlayOpen,
+    onOpen: onHowToPlayOpen,
+    onClose: onHowToPlayClose,
+  } = useDisclosure();
 
   // When the socket returns a stored username for a returning guest, pre-fill and skip to step 2
   useEffect(() => {
@@ -224,7 +251,168 @@ export const HomePage: FC = () => {
         >
           View Leaderboard
         </Button>
+
+        {/* How to Play button */}
+        <Button
+          variant="ghost"
+          color="gray.500"
+          size="sm"
+          onClick={onHowToPlayOpen}
+          _hover={{ color: 'gray.200' }}
+        >
+          How to Play
+        </Button>
       </VStack>
+
+      {/* How to Play Modal */}
+      <Modal
+        isOpen={isHowToPlayOpen}
+        onClose={onHowToPlayClose}
+        size="xl"
+        scrollBehavior="inside"
+        motionPreset="slideInBottom"
+      >
+        <ModalOverlay bg="blackAlpha.800" />
+        <ModalContent bg="gray.800" color="white" mx={4}>
+          <ModalHeader borderBottom="1px solid" borderColor="gray.700" fontSize="lg">
+            How to Play — Check Card Game
+          </ModalHeader>
+          <ModalCloseButton />
+          <ModalBody pb={6} fontSize="sm">
+            <VStack align="stretch" spacing={4}>
+              {/* Goal + Setup */}
+              <Box>
+                <Text fontWeight="bold" color="brand.300" mb={1}>
+                  Goal
+                </Text>
+                <Text color="gray.300">
+                  Lowest hand total wins each round. First player to reach 100+ points loses the
+                  game.
+                </Text>
+              </Box>
+
+              <Box>
+                <Text fontWeight="bold" color="brand.300" mb={1}>
+                  Setup
+                </Text>
+                <Text color="gray.300">
+                  Each player gets 4 face-down cards (A–D). You briefly peek at 2 of them — memorize
+                  them!
+                </Text>
+              </Box>
+
+              {/* Card Values */}
+              <Box>
+                <Text fontWeight="bold" color="brand.300" mb={2}>
+                  Card Values
+                </Text>
+                <Table size="sm" variant="simple">
+                  <Thead>
+                    <Tr>
+                      <Th color="gray.400" borderColor="gray.600">
+                        Card
+                      </Th>
+                      <Th color="gray.400" borderColor="gray.600" isNumeric>
+                        Points
+                      </Th>
+                    </Tr>
+                  </Thead>
+                  <Tbody>
+                    {[
+                      ['Red 10 (♥ ♦)', '0'],
+                      ['Ace', '1'],
+                      ['2 – 9', 'Face value'],
+                      ['10, J, Q, K (black)', '10'],
+                      ['J, Q, K (red)', '10 + special effect'],
+                    ].map(([card, pts]) => (
+                      <Tr key={card}>
+                        <Td color="gray.300" borderColor="gray.700">
+                          {card}
+                        </Td>
+                        <Td color="yellow.300" borderColor="gray.700" isNumeric>
+                          {pts}
+                        </Td>
+                      </Tr>
+                    ))}
+                  </Tbody>
+                </Table>
+              </Box>
+
+              {/* Your Turn */}
+              <Box>
+                <Text fontWeight="bold" color="brand.300" mb={2}>
+                  On Your Turn — pick one:
+                </Text>
+                <VStack align="stretch" spacing={1}>
+                  {[
+                    [
+                      'Draw from deck',
+                      'Swap it with a hand card, or discard it. Discarding a red J/Q/K triggers its special effect.',
+                    ],
+                    ['Take from discard', 'Hold 2 sec to take — must swap with a hand card.'],
+                    [
+                      'Burn a card',
+                      'Play a hand card matching the top discard. Match = card removed. Miss = penalty card added.',
+                    ],
+                  ].map(([title, desc]) => (
+                    <Box key={title} bg="gray.700" px={3} py={2} borderRadius="md">
+                      <Text fontWeight="semibold" color="white" display="inline">
+                        {title} —{' '}
+                      </Text>
+                      <Text color="gray.300" display="inline">
+                        {desc}
+                      </Text>
+                    </Box>
+                  ))}
+                </VStack>
+              </Box>
+
+              {/* Special Effects */}
+              <Box>
+                <Text fontWeight="bold" color="brand.300" mb={1}>
+                  Red Face Card Effects
+                </Text>
+                <VStack align="stretch" spacing={1}>
+                  {[
+                    ['Red J ♥♦', "Blind-swap one of your cards with any opponent's."],
+                    ['Red Q ♥♦', 'Peek at one of your own face-down cards.'],
+                    ['Red K ♥♦', 'Draw 2 extra cards; keep 0, 1, or 2 (swap into hand).'],
+                  ].map(([title, desc]) => (
+                    <Box key={title} bg="gray.700" px={3} py={2} borderRadius="md">
+                      <Text fontWeight="semibold" color="red.300" display="inline">
+                        {title} —{' '}
+                      </Text>
+                      <Text color="gray.300" display="inline">
+                        {desc}
+                      </Text>
+                    </Box>
+                  ))}
+                </VStack>
+              </Box>
+
+              {/* Check + Scoring */}
+              <Box>
+                <Text fontWeight="bold" color="brand.300" mb={1}>
+                  Calling CHECK
+                </Text>
+                <Text color="gray.300">
+                  Before your turn, call CHECK if you think you have the lowest hand. Everyone else
+                  gets one final turn. If you're wrong, your score doubles that round.
+                </Text>
+              </Box>
+
+              <Box>
+                <Text fontWeight="bold" color="brand.300" mb={1}>
+                  Scoring
+                </Text>
+                <Text color="gray.300">
+                  Round winner scores 0. Others add their hand total. Hit 100+ and you lose.
+                </Text>
+              </Box>
+            </VStack>
+          </ModalBody>
+        </ModalContent>
+      </Modal>
     </Box>
   );
 };

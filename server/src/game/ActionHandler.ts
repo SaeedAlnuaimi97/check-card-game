@@ -56,6 +56,45 @@ export function handleTakeDiscard(gameState: GameState, playerId: string): Card 
 }
 
 // ============================================================
+// Undo Take from Discard (UX improvement)
+// ============================================================
+
+export interface UndoTakeDiscardResult {
+  success: boolean;
+  error?: string;
+  /** The card that was returned to the discard pile */
+  returnedCard?: Card;
+}
+
+/**
+ * Undoes a pending takeDiscard action by putting the card back on top of
+ * the discard pile and clearing drawnCard/drawnByPlayerId/drawnSource.
+ *
+ * Only valid when drawnSource === 'discard' and no swap has occurred yet.
+ */
+export function undoTakeDiscard(gameState: GameState, playerId: string): UndoTakeDiscardResult {
+  if (!gameState.drawnCard || gameState.drawnByPlayerId !== playerId) {
+    return { success: false, error: 'No pending taken card to undo' };
+  }
+
+  if (gameState.drawnSource !== 'discard') {
+    return { success: false, error: 'Can only undo a take from discard' };
+  }
+
+  const card = gameState.drawnCard;
+
+  // Put the card back on top of the discard pile
+  gameState.discardPile.push(card);
+
+  // Clear pending draw state
+  gameState.drawnCard = null;
+  gameState.drawnByPlayerId = null;
+  gameState.drawnSource = null;
+
+  return { success: true, returnedCard: card };
+}
+
+// ============================================================
 // Discard Choice — Phase 2 (F-038, F-039, F-042)
 // ============================================================
 

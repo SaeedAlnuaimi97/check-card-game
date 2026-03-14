@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, FC } from 'react';
+import { useEffect, useState, useCallback, useRef, FC } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   Box,
@@ -9,6 +9,7 @@ import {
   IconButton,
   Modal,
   ModalBody,
+  ModalCloseButton,
   ModalContent,
   ModalFooter,
   ModalHeader,
@@ -26,6 +27,7 @@ import {
   Heading,
   Progress,
   Tooltip,
+  useDisclosure,
   useToast,
 } from '@chakra-ui/react';
 import { useNavigate } from 'react-router-dom';
@@ -168,6 +170,7 @@ export const GameBoard: FC = () => {
     resumeGame,
     clearRoundEndData,
     clearGameEndData,
+    undoTakeDiscard,
   } = useSocket();
   const toast = useToast();
 
@@ -194,12 +197,21 @@ export const GameBoard: FC = () => {
   // Leaderboard modal state
   const [showLeaderboard, setShowLeaderboard] = useState(false);
 
+  // Game menu modal
+  const { isOpen: isMenuOpen, onOpen: onMenuOpen, onClose: onMenuClose } = useDisclosure();
+
   // Turn timer countdown state (seconds remaining)
   const [turnTimeLeft, setTurnTimeLeft] = useState<number | null>(null);
   const TURN_TIMEOUT_SECS = 30;
 
   // Red card flash state (UI-006)
   const [showRedFlash, setShowRedFlash] = useState(false);
+
+  // Long-press state for discard pile take (2 second hold required)
+  const [discardLongPressProgress, setDiscardLongPressProgress] = useState(0);
+  const discardLongPressTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const discardLongPressStartRef = useRef<number | null>(null);
+  const DISCARD_LONG_PRESS_MS = 2000;
 
   // Trigger red flash when a red face card special effect activates
   useEffect(() => {
@@ -535,6 +547,43 @@ export const GameBoard: FC = () => {
       vibrateTap();
     }
   }, [canAct, hasDrawnCard, turnData, performAction, toast]);
+
+  const handleUndoTakeDiscard = useCallback(async () => {
+    const result = await undoTakeDiscard();
+    if (!result.success && result.error) {
+      toast({ title: result.error, status: 'error', duration: 2000, position: 'top' });
+    }
+  }, [undoTakeDiscard, toast]);
+
+  // Long-press handlers for discard pile take
+  const handleDiscardLongPressStart = useCallback(() => {
+    if (!canAct || hasDrawnCard || !turnData?.availableActions.includes('takeDiscard')) return;
+    discardLongPressStartRef.current = Date.now();
+    discardLongPressTimerRef.current = setInterval(() => {
+      const elapsed = Date.now() - (discardLongPressStartRef.current ?? Date.now());
+      const progress = Math.min((elapsed / DISCARD_LONG_PRESS_MS) * 100, 100);
+      setDiscardLongPressProgress(progress);
+      if (progress >= 100) {
+        // Fire the action
+        if (discardLongPressTimerRef.current) {
+          clearInterval(discardLongPressTimerRef.current);
+          discardLongPressTimerRef.current = null;
+        }
+        discardLongPressStartRef.current = null;
+        setDiscardLongPressProgress(0);
+        handleTakeDiscard();
+      }
+    }, 30);
+  }, [canAct, hasDrawnCard, turnData, handleTakeDiscard]);
+
+  const handleDiscardLongPressEnd = useCallback(() => {
+    if (discardLongPressTimerRef.current) {
+      clearInterval(discardLongPressTimerRef.current);
+      discardLongPressTimerRef.current = null;
+    }
+    discardLongPressStartRef.current = null;
+    setDiscardLongPressProgress(0);
+  }, []);
 
   const handleBurnCard = useCallback(
     async (slot: string) => {
@@ -920,24 +969,49 @@ export const GameBoard: FC = () => {
               CHECK ({checkCalledData.playerId === playerId ? 'You' : checkCalledData.username})
             </Badge>
           )}
-          {/* Pause/Resume button — host only (F-277) */}
-          {roomData?.host === playerId && (
-            <Tooltip label={gameState.paused ? 'Resume game' : 'Pause game'} placement="bottom">
-              <IconButton
-                aria-label={gameState.paused ? 'Resume game' : 'Pause game'}
-                size="xs"
+          {/* Menu button */}
+          <IconButton
+            aria-label="Game menu"
+            size="xs"
+            variant="ghost"
+            color="gray.400"
+            _hover={{ color: 'white', bg: 'whiteAlpha.100' }}
+            onClick={onMenuOpen}
+            icon={
+              <Text fontSize="lg" lineHeight={1} fontWeight="bold">
+                ☰
+              </Text>
+            }
+          />
+        </HStack>
+      </Flex>
+
+      {/* Game Menu Modal */}
+      <Modal isOpen={isMenuOpen} onClose={onMenuClose} isCentered size="xs">
+        <ModalOverlay bg="blackAlpha.700" />
+        <ModalContent bg="gray.800" color="white">
+          <ModalHeader fontSize="md" borderBottom="1px solid" borderColor="gray.700" pb={3}>
+            Menu
+          </ModalHeader>
+          <ModalCloseButton />
+          <ModalBody py={4}>
+            <VStack spacing={3} align="stretch">
+              {/* Pause / Resume */}
+              <Button
                 variant="ghost"
-                color={gameState.paused ? 'green.300' : 'gray.400'}
-                _hover={{
-                  color: gameState.paused ? 'green.200' : 'yellow.300',
-                  bg: 'whiteAlpha.100',
-                }}
+                justifyContent="flex-start"
+                leftIcon={
+                  <Text fontSize="md" lineHeight={1}>
+                    {gameState.paused ? '▶' : '⏸'}
+                  </Text>
+                }
                 isDisabled={
                   gameState.phase === 'roundEnd' ||
                   gameState.phase === 'gameEnd' ||
                   gameState.phase === 'dealing'
                 }
                 onClick={async () => {
+                  onMenuClose();
                   const result = gameState.paused ? await resumeGame() : await pauseGame();
                   if (!result.success && result.error) {
                     toast({
@@ -948,42 +1022,52 @@ export const GameBoard: FC = () => {
                     });
                   }
                 }}
-                icon={
+              >
+                {gameState.paused ? 'Resume Game' : 'Pause Game'}
+              </Button>
+
+              <Divider borderColor="gray.700" />
+
+              {/* Scoreboard */}
+              <Button
+                variant="ghost"
+                justifyContent="flex-start"
+                leftIcon={
                   <Text fontSize="md" lineHeight={1}>
-                    {gameState.paused ? '\u25B6' : '\u23F8'}
+                    🏆
                   </Text>
                 }
-              />
-            </Tooltip>
-          )}
-          <IconButton
-            aria-label="Leaderboard"
-            size="xs"
-            variant="ghost"
-            color="gray.400"
-            _hover={{ color: 'yellow.300', bg: 'whiteAlpha.100' }}
-            onClick={() => setShowLeaderboard(true)}
-            icon={
-              <Text fontSize="md" lineHeight={1}>
-                {'\u{1F3C6}'}
-              </Text>
-            }
-          />
-          <IconButton
-            aria-label="Exit game"
-            size="xs"
-            variant="ghost"
-            color="gray.400"
-            _hover={{ color: 'red.300', bg: 'whiteAlpha.100' }}
-            onClick={handleExitGame}
-            icon={
-              <Text fontSize="md" lineHeight={1}>
-                {'\u{1F6AA}'}
-              </Text>
-            }
-          />
-        </HStack>
-      </Flex>
+                onClick={() => {
+                  onMenuClose();
+                  setShowLeaderboard(true);
+                }}
+              >
+                Scoreboard
+              </Button>
+
+              <Divider borderColor="gray.700" />
+
+              {/* Exit */}
+              <Button
+                variant="ghost"
+                colorScheme="red"
+                justifyContent="flex-start"
+                leftIcon={
+                  <Text fontSize="md" lineHeight={1}>
+                    🚪
+                  </Text>
+                }
+                onClick={() => {
+                  onMenuClose();
+                  handleExitGame();
+                }}
+              >
+                Exit Game
+              </Button>
+            </VStack>
+          </ModalBody>
+        </ModalContent>
+      </Modal>
 
       {/* Final Round banner (UI-005) */}
       {checkCalledData && (
@@ -1100,7 +1184,7 @@ export const GameBoard: FC = () => {
                   : topDiscard?.isBurned
                     ? 'Burned card — cannot pick up'
                     : canAct && turnData?.availableActions.includes('takeDiscard')
-                      ? 'Take from discard'
+                      ? 'Hold 2 seconds to take from discard'
                       : !canAct
                         ? 'Not your turn'
                         : ''
@@ -1110,24 +1194,93 @@ export const GameBoard: FC = () => {
             <VStack spacing={2}>
               {topDiscard ? (
                 <Box position="relative">
-                  <Card
-                    card={topDiscard}
-                    size="lg"
-                    isClickable={
-                      hasDrawnCard
-                        ? !drawnFromDiscard
-                        : canAct &&
-                          !topDiscard.isBurned &&
-                          (turnData?.availableActions.includes('takeDiscard') ?? false)
+                  <Box
+                    position="relative"
+                    onMouseDown={
+                      !hasDrawnCard && !topDiscard.isBurned
+                        ? handleDiscardLongPressStart
+                        : undefined
                     }
-                    onClick={
-                      hasDrawnCard && !drawnFromDiscard
-                        ? () => handleDiscardChoice(null)
-                        : !hasDrawnCard && !topDiscard.isBurned
-                          ? handleTakeDiscard
+                    onMouseUp={
+                      !hasDrawnCard && !topDiscard.isBurned ? handleDiscardLongPressEnd : undefined
+                    }
+                    onMouseLeave={
+                      !hasDrawnCard && !topDiscard.isBurned ? handleDiscardLongPressEnd : undefined
+                    }
+                    onTouchStart={
+                      !hasDrawnCard && !topDiscard.isBurned
+                        ? (e) => {
+                            e.preventDefault();
+                            handleDiscardLongPressStart();
+                          }
+                        : undefined
+                    }
+                    onTouchEnd={
+                      !hasDrawnCard && !topDiscard.isBurned ? handleDiscardLongPressEnd : undefined
+                    }
+                    onTouchCancel={
+                      !hasDrawnCard && !topDiscard.isBurned ? handleDiscardLongPressEnd : undefined
+                    }
+                    userSelect="none"
+                    style={{ WebkitUserSelect: 'none', touchAction: 'none' }}
+                  >
+                    <Card
+                      card={topDiscard}
+                      size="lg"
+                      isClickable={
+                        hasDrawnCard
+                          ? !drawnFromDiscard
+                          : canAct &&
+                            !topDiscard.isBurned &&
+                            (turnData?.availableActions.includes('takeDiscard') ?? false)
+                      }
+                      onClick={
+                        hasDrawnCard && !drawnFromDiscard
+                          ? () => handleDiscardChoice(null)
                           : undefined
-                    }
-                  />
+                      }
+                    />
+                    {/* Long-press progress ring overlay */}
+                    {!hasDrawnCard &&
+                      !topDiscard.isBurned &&
+                      canAct &&
+                      (turnData?.availableActions.includes('takeDiscard') ?? false) && (
+                        <Box
+                          position="absolute"
+                          inset={0}
+                          borderRadius="md"
+                          pointerEvents="none"
+                          display="flex"
+                          alignItems="center"
+                          justifyContent="center"
+                        >
+                          {discardLongPressProgress > 0 && (
+                            <Box
+                              position="absolute"
+                              inset={0}
+                              borderRadius="md"
+                              border="3px solid"
+                              borderColor="yellow.300"
+                              opacity={discardLongPressProgress / 100}
+                              bg="blackAlpha.400"
+                            />
+                          )}
+                          {discardLongPressProgress === 0 && (
+                            <Text
+                              fontSize="2xs"
+                              color="yellow.300"
+                              fontWeight="bold"
+                              bg="blackAlpha.600"
+                              px={1}
+                              borderRadius="sm"
+                              textAlign="center"
+                            >
+                              Hold
+                            </Text>
+                          )}
+                        </Box>
+                      )}
+                  </Box>
                   {topDiscard.isBurned && (
                     <Box
                       position="absolute"
@@ -1197,9 +1350,19 @@ export const GameBoard: FC = () => {
               Round Over
             </Text>
           ) : hasDrawnCard && drawnFromDiscard ? (
-            <Text fontSize="sm" color="yellow.300" fontWeight="bold">
-              Click a hand card to swap (must swap)
-            </Text>
+            <HStack spacing={3}>
+              <Text fontSize="sm" color="yellow.300" fontWeight="bold">
+                Click a hand card to swap (must swap)
+              </Text>
+              <Button
+                size="xs"
+                colorScheme="orange"
+                variant="outline"
+                onClick={handleUndoTakeDiscard}
+              >
+                Undo
+              </Button>
+            </HStack>
           ) : hasDrawnCard ? (
             <Text fontSize="sm" color="yellow.300" fontWeight="bold">
               Click a hand card to swap, or click discard to keep hand

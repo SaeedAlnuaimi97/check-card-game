@@ -585,14 +585,19 @@ describe('roomHandlers', () => {
       );
     });
 
-    it('rejects rejoin when no pending disconnect exists', async () => {
+    it('successfully rejoins lobby when no pending disconnect exists (refresh scenario)', async () => {
+      // Player is still in the DB room (from createRoom) but has no in-memory
+      // mapping — this is the lobby-refresh / fresh-tab scenario.
       const callback = vi.fn();
       await emitEvent('rejoinRoom', { playerId: hostId, roomCode }, callback);
 
       expect(callback).toHaveBeenCalledWith(
         expect.objectContaining({
-          success: false,
-          error: 'No pending reconnection for this player',
+          success: true,
+          room: expect.objectContaining({
+            roomCode,
+            status: 'lobby',
+          }),
         }),
       );
     });
