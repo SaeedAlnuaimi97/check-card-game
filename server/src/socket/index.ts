@@ -66,6 +66,35 @@ export function registerSocketHandlers(io: SocketIOServer): void {
     );
 
     // ============================================================
+    // deleteGuestProfile — wipe guest profile + scoreboard data
+    // Called when a user chooses to "log out" / change identity
+    // ============================================================
+    socket.on(
+      'deleteGuestProfile',
+      async (
+        data: { guestId?: string },
+        callback?: (response: { success: boolean; error?: string }) => void,
+      ) => {
+        const guestId =
+          typeof data?.guestId === 'string' && data.guestId.length > 0 ? data.guestId : null;
+
+        if (!guestId) {
+          callback?.({ success: false, error: 'Invalid guestId' });
+          return;
+        }
+
+        try {
+          await GuestProfileModel.deleteOne({ guestId });
+          console.log(`[${socket.id}] deleteGuestProfile: removed profile for ${guestId}`);
+          callback?.({ success: true });
+        } catch (err) {
+          console.error(`[${socket.id}] deleteGuestProfile error:`, err);
+          callback?.({ success: false, error: 'Failed to delete profile' });
+        }
+      },
+    );
+
+    // ============================================================
     // getStats — socket alternative to GET /api/stats/:guestId
     // ============================================================
     socket.on(

@@ -640,6 +640,13 @@ export function registerGameHandlers(io: SocketIOServer, socket: Socket): void {
             // Notify the next player it's their turn
             emitYourTurn(io, data.roomCode, gameState);
 
+            // Emit slot modification glow for penalty slot on burn failure
+            if (!burnResult.burnSuccess && burnResult.penaltySlot) {
+              io.to(data.roomCode).emit('slotsModified', {
+                changes: [{ playerId: data.playerId, slot: burnResult.penaltySlot }],
+              });
+            }
+
             // Broadcast updated game state
             await broadcastGameState(io, data.roomCode, gameState);
           }
@@ -792,6 +799,13 @@ export function registerGameHandlers(io: SocketIOServer, socket: Socket): void {
         if (!discardRoundEnded) {
           // Notify the next player it's their turn
           emitYourTurn(io, data.roomCode, gameState);
+
+          // Emit slot modification glow for the swapped slot
+          if (data.slot !== null) {
+            io.to(data.roomCode).emit('slotsModified', {
+              changes: [{ playerId: data.playerId, slot: data.slot }],
+            });
+          }
 
           // Broadcast updated game state to all players
           await broadcastGameState(io, data.roomCode, gameState);
@@ -1019,6 +1033,16 @@ export function registerGameHandlers(io: SocketIOServer, socket: Socket): void {
           // Notify the next player it's their turn
           emitYourTurn(io, data.roomCode, gameState);
 
+          // Emit slot modification glow for swapped slots (when not skipped)
+          if (!data.skip && data.mySlot && data.targetPlayerId && data.targetSlot) {
+            io.to(data.roomCode).emit('slotsModified', {
+              changes: [
+                { playerId: data.playerId, slot: data.mySlot },
+                { playerId: data.targetPlayerId, slot: data.targetSlot },
+              ],
+            });
+          }
+
           // Broadcast updated game state
           await broadcastGameState(io, data.roomCode, gameState);
         }
@@ -1216,6 +1240,19 @@ export function registerGameHandlers(io: SocketIOServer, socket: Socket): void {
         }
 
         if (!kingRoundEnded) {
+          // Emit slot modification glow for replaced slots
+          const replacedSlots: string[] = [];
+          if (data.choice.type === 'keepOne' && data.choice.replaceSlot) {
+            replacedSlots.push(data.choice.replaceSlot);
+          } else if (data.choice.type === 'keepBoth' && data.choice.replaceSlots) {
+            replacedSlots.push(...data.choice.replaceSlots);
+          }
+          if (replacedSlots.length > 0) {
+            io.to(data.roomCode).emit('slotsModified', {
+              changes: replacedSlots.map((slot) => ({ playerId: data.playerId, slot })),
+            });
+          }
+
           // Emit yourTurn first so turnStartedAt is set before broadcast
           emitYourTurn(io, data.roomCode, gameState);
 

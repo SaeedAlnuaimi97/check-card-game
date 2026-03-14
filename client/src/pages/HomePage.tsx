@@ -1,6 +1,12 @@
-import { useState, useEffect, FC } from 'react';
+import { useState, useEffect, useRef, FC } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
+  AlertDialog,
+  AlertDialogBody,
+  AlertDialogContent,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogOverlay,
   Box,
   Button,
   HStack,
@@ -24,6 +30,25 @@ import {
   VStack,
 } from '@chakra-ui/react';
 import { useSocket } from '../context/SocketContext';
+import { Card } from '../components/cards/Card';
+import type { Card as CardType } from '../types/card.types';
+
+// ============================================================
+// How to Play — face card data
+// ============================================================
+
+const FACE_CARDS: Array<{ rank: 'J' | 'Q' | 'K'; effect: string }> = [
+  { rank: 'J', effect: "Blind-swap one of your cards with any opponent's." },
+  { rank: 'Q', effect: 'Peek at one of your own face-down cards.' },
+  { rank: 'K', effect: 'Draw 2 extra cards; keep 0, 1, or 2 (swap into hand).' },
+];
+
+const SUITS: Array<{ suit: CardType['suit']; isRed: boolean }> = [
+  { suit: '♥', isRed: true },
+  { suit: '♦', isRed: true },
+  { suit: '♠', isRed: false },
+  { suit: '♣', isRed: false },
+];
 
 export const HomePage: FC = () => {
   const [username, setUsername] = useState('');
@@ -31,8 +56,11 @@ export const HomePage: FC = () => {
   const [roomCode, setRoomCode] = useState('');
   const [isCreating, setIsCreating] = useState(false);
   const [isJoining, setIsJoining] = useState(false);
+  const [showLogoutDialog, setShowLogoutDialog] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const cancelRef = useRef<HTMLButtonElement>(null);
 
-  const { isConnected, createRoom, joinRoom, storedUsername } = useSocket();
+  const { isConnected, createRoom, joinRoom, storedUsername, deleteGuestProfile } = useSocket();
   const navigate = useNavigate();
   const toast = useToast();
   const {
@@ -55,6 +83,25 @@ export const HomePage: FC = () => {
       return;
     }
     setUsernameConfirmed(true);
+  };
+
+  const handleChangeClick = () => {
+    if (storedUsername) {
+      // Returning user — warn about data loss before changing
+      setShowLogoutDialog(true);
+    } else {
+      // New user — just go back to name entry
+      setUsernameConfirmed(false);
+    }
+  };
+
+  const handleConfirmLogout = async () => {
+    setIsDeleting(true);
+    await deleteGuestProfile();
+    setIsDeleting(false);
+    setShowLogoutDialog(false);
+    setUsername('');
+    setUsernameConfirmed(false);
   };
 
   const handleCreateRoom = async () => {
@@ -174,7 +221,7 @@ export const HomePage: FC = () => {
                 variant="link"
                 size="sm"
                 color="gray.500"
-                onClick={() => setUsernameConfirmed(false)}
+                onClick={handleChangeClick}
                 _hover={{ color: 'gray.300' }}
               >
                 (change)
@@ -369,22 +416,31 @@ export const HomePage: FC = () => {
 
               {/* Special Effects */}
               <Box>
-                <Text fontWeight="bold" color="brand.300" mb={1}>
+                <Text fontWeight="bold" color="brand.300" mb={2}>
                   Red Face Card Effects
                 </Text>
-                <VStack align="stretch" spacing={1}>
-                  {[
-                    ['Red J ♥♦', "Blind-swap one of your cards with any opponent's."],
-                    ['Red Q ♥♦', 'Peek at one of your own face-down cards.'],
-                    ['Red K ♥♦', 'Draw 2 extra cards; keep 0, 1, or 2 (swap into hand).'],
-                  ].map(([title, desc]) => (
-                    <Box key={title} bg="gray.700" px={3} py={2} borderRadius="md">
-                      <Text fontWeight="semibold" color="red.300" display="inline">
-                        {title} —{' '}
-                      </Text>
-                      <Text color="gray.300" display="inline">
-                        {desc}
-                      </Text>
+                <VStack align="stretch" spacing={2}>
+                  {FACE_CARDS.map(({ rank, effect }) => (
+                    <Box key={rank} bg="gray.700" px={3} py={2} borderRadius="md">
+                      <HStack spacing={2} align="center" flexWrap="wrap">
+                        {SUITS.map(({ suit, isRed }) => {
+                          const cardObj: CardType = {
+                            id: `how-to-play-${rank}-${suit}`,
+                            suit,
+                            rank,
+                            value: 10,
+                            isRed,
+                          };
+                          return (
+                            <Box key={suit} opacity={isRed ? 1 : 0.35} flexShrink={0}>
+                              <Card card={cardObj} size="sm" />
+                            </Box>
+                          );
+                        })}
+                        <Text color="gray.300" fontSize="xs" flex={1} minW="100px">
+                          {effect}
+                        </Text>
+                      </HStack>
                     </Box>
                   ))}
                 </VStack>
@@ -413,6 +469,37 @@ export const HomePage: FC = () => {
           </ModalBody>
         </ModalContent>
       </Modal>
+
+      {/* Logout / change identity confirmation */}
+      <AlertDialog
+        isOpen={showLogoutDialog}
+        leastDestructiveRef={cancelRef}
+        onClose={() => setShowLogoutDialog(false)}
+        isCentered
+      >
+        <AlertDialogOverlay>
+          <AlertDialogContent bg="gray.800" color="white">
+            <AlertDialogHeader fontSize="lg" fontWeight="bold">
+              Change username
+            </AlertDialogHeader>
+            <AlertDialogBody>
+              Logging out will delete all your scoreboard data for{' '}
+              <Text as="span" fontWeight="bold" color="brand.300">
+                {storedUsername}
+              </Text>
+              .
+            </AlertDialogBody>
+            <AlertDialogFooter gap={3}>
+              <Button ref={cancelRef} variant="ghost" onClick={() => setShowLogoutDialog(false)}>
+                Cancel
+              </Button>
+              <Button colorScheme="red" onClick={handleConfirmLogout} isLoading={isDeleting}>
+                Confirm
+              </Button>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialogOverlay>
+      </AlertDialog>
     </Box>
   );
 };

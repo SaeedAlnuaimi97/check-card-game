@@ -58,3 +58,16 @@ export function getOrCreateGuestId(): string {
 
   return guestId;
 }
+
+/**
+ * Removes the stored guest ID from localStorage, effectively
+ * de-identifying this device. The next call to getOrCreateGuestId()
+ * will generate a fresh ID.
+ */
+export function clearGuestId(): void {
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    // localStorage not available — nothing to clear
+  }
+}

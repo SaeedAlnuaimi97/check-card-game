@@ -6,11 +6,13 @@ import {
   Button,
   Heading,
   HStack,
+  IconButton,
   Text,
   useClipboard,
   useToast,
   VStack,
 } from '@chakra-ui/react';
+import { CopyOutlined, ShareAltOutlined } from '@ant-design/icons';
 import { useSocket } from '../context/SocketContext';
 
 const MIN_PLAYERS = 2;
@@ -64,6 +66,29 @@ export const RoomLobby: FC = () => {
     });
   };
 
+  const handleShare = () => {
+    const shareUrl = `${window.location.origin}/lobby/${roomData.roomCode}`;
+    navigator.clipboard
+      .writeText(shareUrl)
+      .then(() => {
+        toast({
+          title: 'Invite link copied!',
+          description: shareUrl,
+          status: 'success',
+          duration: 2500,
+          position: 'top',
+        });
+      })
+      .catch(() => {
+        toast({
+          title: 'Could not copy link',
+          status: 'error',
+          duration: 2000,
+          position: 'top',
+        });
+      });
+  };
+
   return (
     <Box
       minH="100vh"
@@ -92,9 +117,22 @@ export const RoomLobby: FC = () => {
             <Heading size="2xl" letterSpacing="0.3em" fontFamily="mono" color="brand.300">
               {roomData.roomCode}
             </Heading>
-            <Button size="sm" variant="outline" colorScheme="gray" onClick={handleCopy}>
-              {hasCopied ? 'Copied' : 'Copy'}
-            </Button>
+            <IconButton
+              aria-label={hasCopied ? 'Copied' : 'Copy room code'}
+              size="sm"
+              variant="outline"
+              colorScheme="gray"
+              icon={<CopyOutlined />}
+              onClick={handleCopy}
+            />
+            <IconButton
+              aria-label="Copy invite link"
+              size="sm"
+              variant="outline"
+              colorScheme="blue"
+              icon={<ShareAltOutlined />}
+              onClick={handleShare}
+            />
           </HStack>
         </VStack>
 
