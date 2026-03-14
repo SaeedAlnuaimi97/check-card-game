@@ -75,6 +75,8 @@ export interface GameState {
   pendingEffect: PendingEffect | null;
   /** Timestamp (ms) when the current turn started — used for turn timer */
   turnStartedAt: number | null;
+  /** ISO timestamp when the game (first round) started — used for GameResult */
+  gameStartedAt: string | null;
 }
 
 // ============================================================
@@ -86,6 +88,7 @@ export type RoomStatus = 'lobby' | 'playing' | 'finished';
 export interface RoomPlayer {
   id: string;
   username: string;
+  guestId?: string;
 }
 
 export interface Room {

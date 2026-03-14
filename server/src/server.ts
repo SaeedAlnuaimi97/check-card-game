@@ -7,6 +7,8 @@ import cors from 'cors';
 import { Server as SocketIOServer } from 'socket.io';
 import { connectDB } from './utils/database';
 import healthRouter from './routes/health';
+import leaderboardRouter from './routes/leaderboard';
+import guestRouter from './routes/guest';
 import { registerSocketHandlers } from './socket';
 
 const PORT = process.env.PORT || 3001;
@@ -23,6 +25,8 @@ app.use(express.json());
 
 // REST routes
 app.use('/api', healthRouter);
+app.use('/api', leaderboardRouter);
+app.use('/api', guestRouter);
 
 // Socket.io setup
 const io = new SocketIOServer(server, {

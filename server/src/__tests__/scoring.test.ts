@@ -205,7 +205,7 @@ describe('computeRoundResult', () => {
     expect(gs.players[1].totalScore).toBe(18); // 10 + 8
   });
 
-  it('sets phase to roundEnd when no one reaches 100', () => {
+  it('sets phase to roundEnd when no one reaches 70', () => {
     const gs = createPlayingGameState(2);
     gs.checkCalledBy = gs.players[0].playerId;
     gs.scores = {
@@ -222,23 +222,23 @@ describe('computeRoundResult', () => {
     expect(gs.phase).toBe('roundEnd');
   });
 
-  it('sets phase to gameEnd when a player reaches 100+', () => {
+  it('sets phase to gameEnd when a player reaches 70+', () => {
     const gs = createPlayingGameState(2);
     gs.checkCalledBy = gs.players[0].playerId;
     gs.scores = {
       [gs.players[0].playerId]: 0,
-      [gs.players[1].playerId]: 90,
+      [gs.players[1].playerId]: 60,
     };
 
     setPlayerHand(gs, 0, [makeCard('A', '♥', 1)]);
-    // Player 1 will add 10 → total 100
+    // Player 1 will add 10 → total 70
     setPlayerHand(gs, 1, [makeCard('10', '♠', 10)]);
 
     const result = computeRoundResult(gs);
 
     expect(result.gameEnded).toBe(true);
     expect(gs.phase).toBe('gameEnd');
-    expect(result.updatedScores[gs.players[1].playerId]).toBe(100);
+    expect(result.updatedScores[gs.players[1].playerId]).toBe(70);
   });
 
   it('includes correct round number and checkCalledBy', () => {
@@ -417,11 +417,11 @@ describe('computeRoundResult', () => {
     expect(result.updatedScores[gs.players[1].playerId]).toBe(0);
   });
 
-  it('checker NOT lowest — doubling can cause game end (100+)', () => {
+  it('checker NOT lowest — doubling can cause game end (70+)', () => {
     const gs = createPlayingGameState(2);
     gs.checkCalledBy = gs.players[0].playerId;
     gs.scores = {
-      [gs.players[0].playerId]: 80,
+      [gs.players[0].playerId]: 50,
       [gs.players[1].playerId]: 40,
     };
 
@@ -433,8 +433,8 @@ describe('computeRoundResult', () => {
     const result = computeRoundResult(gs);
 
     expect(result.checkerDoubled).toBe(true);
-    // Checker's sum (15) doubled → 80 + 30 = 110 → game ends!
-    expect(result.updatedScores[gs.players[0].playerId]).toBe(110);
+    // Checker's sum (15) doubled → 50 + 30 = 80 → game ends!
+    expect(result.updatedScores[gs.players[0].playerId]).toBe(80);
     expect(result.gameEnded).toBe(true);
     expect(gs.phase).toBe('gameEnd');
   });
@@ -583,7 +583,7 @@ describe('computeGameEndResult', () => {
     expect(result.allHands).toHaveLength(2);
   });
 
-  it('handles multiple players above 100 — highest loses (F-073)', () => {
+  it('handles multiple players above 70 — highest loses (F-073)', () => {
     const gs = createPlayingGameState(3);
     gs.scores = {
       [gs.players[0].playerId]: 50,

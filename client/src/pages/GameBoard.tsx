@@ -163,6 +163,7 @@ export const GameBoard: FC = () => {
     leaveRoom,
     debugPeek,
     startNextRound,
+    endGame,
     clearRoundEndData,
     clearGameEndData,
   } = useSocket();
@@ -1799,7 +1800,7 @@ export const GameBoard: FC = () => {
                             isNumeric
                             fontWeight="bold"
                             color={
-                              (roundEndData?.updatedScores[p.playerId] ?? 0) >= 100
+                              (roundEndData?.updatedScores[p.playerId] ?? 0) >= 70
                                 ? 'red.400'
                                 : 'gray.100'
                             }
@@ -1816,9 +1817,14 @@ export const GameBoard: FC = () => {
           <ModalFooter justifyContent="center">
             {roundEndData?.nextRoundStarting ? (
               roomData?.host === playerId ? (
-                <Button colorScheme="green" onClick={() => startNextRound()}>
-                  Next Round
-                </Button>
+                <HStack spacing={3}>
+                  <Button colorScheme="green" onClick={() => startNextRound()}>
+                    Next Round
+                  </Button>
+                  <Button colorScheme="red" variant="outline" onClick={() => endGame()}>
+                    End Game
+                  </Button>
+                </HStack>
               ) : (
                 <Text fontSize="xs" color="gray.500">
                   Waiting for host to start next round...
@@ -1965,10 +1971,26 @@ export const GameBoard: FC = () => {
               )}
             </VStack>
           </ModalBody>
-          <ModalFooter justifyContent="center">
-            <Button colorScheme="blue" size="md" onClick={handleReturnToLobby}>
-              Return to Home
-            </Button>
+          <ModalFooter justifyContent="center" flexDirection="column" gap={3}>
+            <Text fontSize="xs" color="green.400">
+              Game saved to leaderboard!
+            </Text>
+            <HStack spacing={3}>
+              <Button colorScheme="blue" size="md" onClick={handleReturnToLobby}>
+                Return to Home
+              </Button>
+              <Button
+                variant="outline"
+                colorScheme="yellow"
+                size="md"
+                onClick={() => {
+                  clearGameEndData();
+                  navigate('/leaderboard');
+                }}
+              >
+                View Leaderboard
+              </Button>
+            </HStack>
           </ModalFooter>
         </ModalContent>
       </Modal>

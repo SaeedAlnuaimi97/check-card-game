@@ -1,4 +1,4 @@
-import { useState, FC } from 'react';
+import { useState, useEffect, FC } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Box, Button, HStack, Image, Input, Text, useToast, VStack } from '@chakra-ui/react';
 import { useSocket } from '../context/SocketContext';
@@ -10,9 +10,17 @@ export const HomePage: FC = () => {
   const [isCreating, setIsCreating] = useState(false);
   const [isJoining, setIsJoining] = useState(false);
 
-  const { isConnected, createRoom, joinRoom } = useSocket();
+  const { isConnected, createRoom, joinRoom, storedUsername } = useSocket();
   const navigate = useNavigate();
   const toast = useToast();
+
+  // When the socket returns a stored username for a returning guest, pre-fill and skip to step 2
+  useEffect(() => {
+    if (storedUsername && !usernameConfirmed) {
+      setUsername(storedUsername);
+      setUsernameConfirmed(true);
+    }
+  }, [storedUsername, usernameConfirmed]);
 
   const handleConfirmUsername = () => {
     if (!username.trim()) {
@@ -205,6 +213,17 @@ export const HomePage: FC = () => {
             </VStack>
           </VStack>
         )}
+
+        {/* Leaderboard link (F-240) */}
+        <Button
+          variant="ghost"
+          color="gray.400"
+          size="sm"
+          onClick={() => navigate('/leaderboard')}
+          _hover={{ color: 'gray.200' }}
+        >
+          View Leaderboard
+        </Button>
       </VStack>
     </Box>
   );

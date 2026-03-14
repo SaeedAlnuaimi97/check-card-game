@@ -10,6 +10,7 @@ import {
 } from 'react';
 import { useNavigate } from 'react-router-dom';
 import socket from '../services/socket';
+import { getOrCreateGuestId } from '../utils/fingerprint';
 import type { Card } from '../types/card.types';
 import type {
   ClientGameState,
@@ -74,6 +75,8 @@ interface SocketContextValue {
   startGame: () => Promise<{ success: boolean; error?: string }>;
   /** Host starts the next round after round-end modal */
   startNextRound: () => Promise<{ success: boolean; error?: string }>;
+  /** Host ends the game early during round-end phase */
+  endGame: () => Promise<{ success: boolean; error?: string }>;
   endPeek: () => Promise<{ success: boolean; error?: string }>;
   /** Call check at the start of your turn (F-059) */
   callCheck: () => Promise<{ success: boolean; error?: string }>;
@@ -108,6 +111,8 @@ interface SocketContextValue {
   clearRoundEndData: () => void;
   /** Clear game end data (used by UI after showing modal) */
   clearGameEndData: () => void;
+  /** Username retrieved from the server for a returning guest (via identifyGuest socket event) */
+  storedUsername: string | null;
 }
 
 const SocketContext = createContext<SocketContextValue | null>(null);
@@ -138,6 +143,7 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
   const [checkCalledData, setCheckCalledData] = useState<CheckCalledPayload | null>(null);
   const [roundEndData, setRoundEndData] = useState<RoundEndedPayload | null>(null);
   const [gameEndData, setGameEndData] = useState<GameEndedPayload | null>(null);
+  const [storedUsername, setStoredUsername] = useState<string | null>(null);
 
   // Use a ref for navigate to avoid re-registering socket listeners
   const navigateRef = useRef(navigate);
@@ -161,6 +167,18 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
     socket.on('connect', () => {
       console.log('Socket connected:', socket.id);
       setIsConnected(true);
+
+      // Identify this client's guestId to the server and retrieve stored username
+      socket.emit(
+        'identifyGuest',
+        { guestId: getOrCreateGuestId() },
+        (response: { username?: string }) => {
+          if (response?.username) {
+            console.log('[identifyGuest] Returning user recognized:', response.username);
+            setStoredUsername(response.username);
+          }
+        },
+      );
 
       // Attempt to rejoin room if we have stored session credentials
       const storedPlayerId = sessionStorage.getItem('playerId');
@@ -384,7 +402,7 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
     return new Promise((resolve) => {
       socket.emit(
         'createRoom',
-        { username: name },
+        { username: name, guestId: getOrCreateGuestId() },
         (response: {
           success: boolean;
           roomCode?: string;
@@ -417,7 +435,7 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
       return new Promise((resolve) => {
         socket.emit(
           'joinRoom',
-          { roomCode, username: name },
+          { roomCode, username: name, guestId: getOrCreateGuestId() },
           (response: { success: boolean; playerId?: string; room?: RoomData; error?: string }) => {
             if (response.success && response.playerId) {
               setPlayerId(response.playerId);
@@ -495,6 +513,25 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
       }
       socket.emit(
         'startNextRound',
+        { roomCode: roomData.roomCode, playerId },
+        (response: { success: boolean; error?: string }) => {
+          resolve(response);
+        },
+      );
+    });
+  }, [roomData, playerId]);
+
+  // ----------------------------------------------------------
+  // End Game — host manually ends the game during roundEnd phase
+  // ----------------------------------------------------------
+  const endGame = useCallback((): Promise<{ success: boolean; error?: string }> => {
+    return new Promise((resolve) => {
+      if (!roomData || !playerId) {
+        resolve({ success: false, error: 'Not in a room' });
+        return;
+      }
+      socket.emit(
+        'endGame',
         { roomCode: roomData.roomCode, playerId },
         (response: { success: boolean; error?: string }) => {
           resolve(response);
@@ -742,6 +779,7 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
     leaveRoom,
     startGame,
     startNextRound,
+    endGame,
     endPeek,
     callCheck,
     performAction,
@@ -752,6 +790,7 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
     debugPeek,
     clearRoundEndData,
     clearGameEndData,
+    storedUsername,
   };
 
   return <SocketContext.Provider value={value}>{children}</SocketContext.Provider>;

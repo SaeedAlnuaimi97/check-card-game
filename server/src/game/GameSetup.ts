@@ -134,6 +134,7 @@ export function initializeGameState(
     drawnSource: null,
     pendingEffect: null,
     turnStartedAt: null,
+    gameStartedAt: roundNumber === 1 ? new Date().toISOString() : null,
   };
 
   // Deal 4 cards to each player (F-028)

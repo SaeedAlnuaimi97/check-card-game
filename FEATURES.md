@@ -117,12 +117,13 @@ Derived from PLAN.md. Features are grouped by domain and ordered by implementati
 
 ### 14. Game End
 
-- [x] **F-071**: Game ends when any player reaches 100+ total points
-- [x] **F-072**: Player with 100+ loses
-- [x] **F-073**: Multiple players at 100+ — highest score loses; if tied, all tied players lose
+- [x] **F-071**: Game ends when any player reaches 70+ total points
+- [x] **F-072**: Player with 70+ loses
+- [x] **F-073**: Multiple players at 70+ — highest score loses; if tied, all tied players lose
 - [x] **F-074**: Winner is player with lowest total score
 - [x] **F-075**: `gameEnded` event with final scores, winner, loser
 - [x] **F-076**: Multi-round play — new round starts automatically until game end condition
+- [x] **F-077**: Host can manually end the game during round-end phase via "End Game" button
 
 ### 15. State Sanitization & Anti-Cheat
 
@@ -262,48 +263,74 @@ Derived from PLAN.md. Features are grouped by domain and ordered by implementati
 - [ ] **F-203**: Host can kick players
 - [ ] **F-204**: Spectator mode
 
-### Enhancements
+### Game History & Leaderboard
 
-- [ ] **F-210**: Bot players — basic AI strategy, fill empty slots
-- [ ] **F-211**: Bot difficulty levels
-- [ ] **F-212**: User accounts — email/password registration
-- [ ] **F-213**: Guest-to-registered account migration
-- [ ] **F-214**: Player profiles and avatar selection
-- [ ] **F-215**: Global leaderboard and rankings
-- [ ] **F-216**: Personal stats — wins, losses, win rate, recent games
+- [x] **F-230**: Client-side stable guest ID generation and persistence
+- [x] **F-231**: Server-side guestId validation and storage on room join
+- [x] **F-232**: GameResult Mongoose model with indexes
+- [x] **F-233**: Save game result on game end
+- [x] **F-234**: Add gameStartedAt timestamp to GameState
+- [x] **F-235**: GET /api/leaderboard endpoint with aggregation
+- [x] **F-236**: GET /api/stats/:guestId endpoint with recent games
+- [x] **F-237**: Leaderboard page with top 50 table
+- [x] **F-238**: Personal stats view with recent games
+- [x] **F-239**: Game end modal — leaderboard link and save confirmation
+- [x] **F-240**: Home page — leaderboard navigation link
 
-### Polish
+### Cloud Deployment
 
-- [ ] **F-220**: Card draw/discard/flip animations
-- [ ] **F-221**: Victory animations
-- [ ] **F-222**: Sound effects — card sounds, turn notifications, special effects, mute option
-- [ ] **F-223**: Game history and replay viewer
-- [ ] **F-224**: Custom target scores (configurable game end threshold)
-- [ ] **F-225**: Tournament mode
-- [ ] **F-226**: Friend system and direct invites
+- [ ] **F-250**: Cosmos DB compatible database connection
+- [ ] **F-251**: Verify aggregation pipelines for Cosmos DB
+- [ ] **F-252**: Server production build configuration
+- [ ] **F-253**: CORS hardening for production
+- [ ] **F-254**: Azure App Service deployment configuration
+- [ ] **F-255**: Client production build with configurable server URL
+- [ ] **F-256**: Static Web App configuration (SPA fallback)
+- [ ] **F-257**: Azure Static Web Apps deployment
+- [ ] **F-258**: GitHub Actions CI pipeline
+- [ ] **F-259**: GitHub Actions CD — server deploy
+- [ ] **F-260**: GitHub Actions CD — client deploy
+- [ ] **F-261**: Rate limiting on REST endpoints
+- [ ] **F-262**: Security headers and compression
+- [ ] **F-263**: Structured logging
+- [ ] **F-264**: Global error handling middleware
 
-### Performance & Infrastructure
+### Pause Game
 
-- [ ] **F-230**: Code splitting and lazy loading
-- [ ] **F-231**: WebSocket optimization
-- [ ] **F-232**: Database indexing (roomCode, playerId)
-- [ ] **F-233**: Unit tests (game logic)
-- [ ] **F-234**: Integration tests (API/socket events)
-- [ ] **F-235**: E2E tests (Playwright/Cypress)
-- [ ] **F-236**: Load testing
+- [ ] **F-270**: Add paused, pausedBy, pausedAt, turnTimeRemainingMs to server GameState
+- [ ] **F-271**: Add paused, pausedBy to ClientGameState
+- [ ] **F-272**: pauseGame socket event handler (host-only)
+- [ ] **F-273**: resumeGame socket event handler (host-only, restore timer)
+- [ ] **F-274**: gamePaused / gameResumed broadcast events
+- [ ] **F-275**: Block all game actions while paused
+- [ ] **F-276**: startTurnTimerWithDuration for resume with remaining time
+- [ ] **F-277**: Pause/Resume button (host-only, top-right)
+- [ ] **F-278**: Pause overlay with "Game Paused" message
+- [ ] **F-279**: Freeze turn timer display while paused
+- [ ] **F-280**: Toast notifications for pause/resume
+- [ ] **F-281**: Sanitize pause fields in client game state
+- [ ] **F-282**: Add pause fields to GameState Mongoose schema
 
-### Deployment
+### Future Enhancements
 
-- [ ] **F-240**: Frontend deployment (Vercel/Netlify)
-- [ ] **F-241**: Backend deployment (Railway/Render)
-- [ ] **F-242**: MongoDB Atlas production database
-- [ ] **F-243**: CI/CD pipeline
-- [ ] **F-244**: Input validation and rate limiting
-- [ ] **F-245**: HTTPS/WSS enforcement
+- [ ] **F-300**: Bot players — basic AI strategy, fill empty slots
+- [ ] **F-301**: Bot difficulty levels
+- [ ] **F-302**: User accounts — email/password registration
+- [ ] **F-303**: Guest-to-registered account migration
+- [ ] **F-304**: Player profiles and avatar selection
+- [ ] **F-305**: Room expiration (24 hours)
+- [ ] **F-306**: Host can kick players
+- [ ] **F-307**: Spectator mode
+- [ ] **F-308**: Card draw/discard/flip animations
+- [ ] **F-309**: Victory animations
+- [ ] **F-310**: Custom target scores (configurable game end threshold)
+- [ ] **F-311**: Tournament mode
+- [ ] **F-312**: Friend system and direct invites
+- [ ] **F-313**: Game replay viewer
 
 ---
 
 **Total MVP Features:** 112  
-**Total Phase 2 Features:** 26  
-**Document Version:** 1.0  
+**Total Phase 2 Features:** 54  
+**Document Version:** 1.2  
 **Last Updated:** 2026-03-13

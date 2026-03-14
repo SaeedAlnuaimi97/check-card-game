@@ -70,6 +70,7 @@ const GameStateSchema = new Schema<GameState>(
     drawnByPlayerId: { type: String, default: null },
     drawnSource: { type: String, enum: ['deck', 'discard', null], default: null },
     pendingEffect: { type: PendingEffectSchema, default: null },
+    gameStartedAt: { type: String, default: null },
   },
   { _id: false },
 );
@@ -82,6 +83,7 @@ const RoomPlayerSchema = new Schema(
   {
     id: { type: String, required: true },
     username: { type: String, required: true },
+    guestId: { type: String, default: undefined },
   },
   { _id: false },
 );
@@ -89,7 +91,7 @@ const RoomPlayerSchema = new Schema(
 export interface RoomDocument extends Document {
   roomCode: string;
   host: string;
-  players: { id: string; username: string }[];
+  players: { id: string; username: string; guestId?: string }[];
   gameState: GameState | null;
   status: RoomStatus;
   createdAt: Date;

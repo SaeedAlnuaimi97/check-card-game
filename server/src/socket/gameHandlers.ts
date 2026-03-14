@@ -1,5 +1,6 @@
 import { Server as SocketIOServer, Socket } from 'socket.io';
 import { RoomModel } from '../models/Room';
+import { GameResultModel } from '../models/GameResult';
 import { sanitizeGameState, initializeGameState } from '../game/GameSetup';
 import {
   validatePlayerTurn,
@@ -27,6 +28,67 @@ import { getRoomMutex } from '../utils/roomLock';
 import { getPeekedCards } from '../game/GameSetup';
 import { startTurnTimer, clearTurnTimer } from '../game/TurnTimer';
 import type { GameState, ActionType, SlotLabel, Card } from '../types/game.types';
+import type { RoomDocument } from '../models/Room';
+
+// ============================================================
+// Helper: Save game result to database (F-233)
+// ============================================================
+
+async function saveGameResult(
+  room: RoomDocument,
+  gameState: GameState,
+  gameEndResult: {
+    winner: { playerId: string; username: string; score: number };
+    loser: { playerId: string; username: string; score: number };
+  },
+): Promise<void> {
+  try {
+    // Build a map from playerId -> guestId using room.players
+    const guestIdMap = new Map<string, string>();
+    for (const rp of room.players) {
+      if (rp.guestId) {
+        guestIdMap.set(rp.id, rp.guestId);
+      }
+    }
+
+    // Only save if we have guestIds for winner and loser
+    const winnerGuestId = guestIdMap.get(gameEndResult.winner.playerId);
+    const loserGuestId = guestIdMap.get(gameEndResult.loser.playerId);
+    if (!winnerGuestId || !loserGuestId) {
+      console.warn(
+        `Room ${room.roomCode}: Cannot save GameResult — missing guestId for winner or loser`,
+      );
+      return;
+    }
+
+    const gameResult = new GameResultModel({
+      roomCode: room.roomCode,
+      startedAt: gameState.gameStartedAt ? new Date(gameState.gameStartedAt) : room.createdAt,
+      endedAt: new Date(),
+      totalRounds: gameState.roundNumber,
+      players: gameState.players.map((p) => ({
+        playerId: p.playerId,
+        guestId: guestIdMap.get(p.playerId) ?? 'unknown',
+        username: p.username,
+        finalScore: p.totalScore,
+        isWinner: p.playerId === gameEndResult.winner.playerId,
+        isLoser: p.playerId === gameEndResult.loser.playerId,
+      })),
+      winnerId: winnerGuestId,
+      loserId: loserGuestId,
+      winnerUsername: gameEndResult.winner.username,
+      loserUsername: gameEndResult.loser.username,
+    });
+
+    await gameResult.save();
+    console.log(
+      `Room ${room.roomCode}: GameResult saved — winner=${gameEndResult.winner.username}, loser=${gameEndResult.loser.username}`,
+    );
+  } catch (error) {
+    // Non-fatal — log but don't crash the game
+    console.error(`Room ${room.roomCode}: Failed to save GameResult:`, error);
+  }
+}
 
 // ============================================================
 // Helper: Format card for logging (e.g. "J♥" or "10♠")
@@ -218,6 +280,9 @@ async function advanceTurnAndCheckRoundEnd(
         io.to(sid).emit('gameEnded', gameEndResult);
       }
     }
+
+    // F-233: Save game result to database
+    await saveGameResult(room, gameState, gameEndResult);
 
     console.log(
       `Room ${roomCode}: GAME ENDED — Winner: ${gameEndResult.winner.username} (${gameEndResult.winner.score}), Loser: ${gameEndResult.loser.username} (${gameEndResult.loser.score})`,
@@ -503,6 +568,9 @@ export function registerGameHandlers(io: SocketIOServer, socket: Socket): void {
                   io.to(sid).emit('gameEnded', gameEndResult);
                 }
               }
+
+              // F-233: Save game result to database
+              await saveGameResult(room, gameState, gameEndResult);
 
               console.log(
                 `Room ${data.roomCode}: GAME ENDED — Winner: ${gameEndResult.winner.username} (${gameEndResult.winner.score}), Loser: ${gameEndResult.loser.username} (${gameEndResult.loser.score})`,
@@ -1112,6 +1180,11 @@ export function registerGameHandlers(io: SocketIOServer, socket: Socket): void {
           oldGameState.roundNumber + 1,
         );
 
+        // Preserve gameStartedAt from the first round (F-234)
+        if (oldGameState.gameStartedAt) {
+          newGameState.gameStartedAt = oldGameState.gameStartedAt;
+        }
+
         // Save new game state
         room.gameState = newGameState;
         room.markModified('gameState');
@@ -1139,6 +1212,87 @@ export function registerGameHandlers(io: SocketIOServer, socket: Socket): void {
       } catch (error) {
         console.error('Error in startNextRound:', error);
         callback?.({ success: false, error: 'Failed to start next round' });
+      } finally {
+        release();
+      }
+    },
+  );
+
+  // ----------------------------------------------------------
+  // endGame — host manually ends the game during roundEnd phase
+  // ----------------------------------------------------------
+  socket.on(
+    'endGame',
+    async (
+      data: { roomCode: string; playerId: string },
+      callback?: (response: { success: boolean; error?: string }) => void,
+    ) => {
+      const release = await getRoomMutex(data.roomCode).acquire();
+      try {
+        const room = await RoomModel.findOne({ roomCode: data.roomCode });
+        if (!room || !room.gameState) {
+          callback?.({ success: false, error: 'Room or game not found' });
+          return;
+        }
+
+        // Only the host can end the game
+        if (room.host !== data.playerId) {
+          callback?.({ success: false, error: 'Only the host can end the game' });
+          return;
+        }
+
+        // Room must be in 'playing' status
+        if (room.status !== 'playing') {
+          callback?.({ success: false, error: 'Game is not in progress' });
+          return;
+        }
+
+        const gameState = room.gameState as unknown as GameState;
+
+        // Must be in roundEnd phase
+        if (gameState.phase !== 'roundEnd') {
+          callback?.({ success: false, error: 'Can only end game between rounds' });
+          return;
+        }
+
+        // Compute game end result using current scores
+        const allHands = gameState.players.map((player) => ({
+          playerId: player.playerId,
+          username: player.username,
+          cards: player.hand.map((h) => h.card),
+          slots: player.hand.map((h) => h.slot),
+          handSum: player.hand.reduce((sum, h) => sum + h.card.value, 0),
+        }));
+
+        const gameEndResult = computeGameEndResult(gameState, allHands);
+
+        // Update room status
+        gameState.phase = 'gameEnd';
+        room.status = 'finished';
+        room.gameState = gameState;
+        room.markModified('gameState');
+        room.markModified('status');
+        await room.save();
+
+        callback?.({ success: true });
+
+        // Broadcast game end to all players
+        for (const player of gameState.players) {
+          const sid = getSocketByPlayer(player.playerId);
+          if (sid) {
+            io.to(sid).emit('gameEnded', gameEndResult);
+          }
+        }
+
+        // Save game result to database
+        await saveGameResult(room, gameState, gameEndResult);
+
+        console.log(
+          `Room ${data.roomCode}: Host manually ended game — Winner: ${gameEndResult.winner.username} (${gameEndResult.winner.score}), Loser: ${gameEndResult.loser.username} (${gameEndResult.loser.score})`,
+        );
+      } catch (error) {
+        console.error('Error in endGame:', error);
+        callback?.({ success: false, error: 'Failed to end game' });
       } finally {
         release();
       }

@@ -1,5 +1,6 @@
 import { Server as SocketIOServer, Socket } from 'socket.io';
 import { RoomModel } from '../models/Room';
+import { GuestProfileModel } from '../models/GuestProfile';
 import { initializeGameState, sanitizeGameState, getPeekedCards } from '../game/GameSetup';
 import { removePlayerFromGame } from '../game/TurnManager';
 import {
@@ -60,7 +61,7 @@ export function registerRoomHandlers(io: SocketIOServer, socket: Socket): void {
   socket.on(
     'createRoom',
     async (
-      data: { username: string },
+      data: { username: string; guestId?: string },
       callback?: (response: {
         success: boolean;
         roomCode?: string;
@@ -96,13 +97,16 @@ export function registerRoomHandlers(io: SocketIOServer, socket: Socket): void {
           return;
         }
 
+        const guestId =
+          typeof data?.guestId === 'string' && data.guestId.length > 0 ? data.guestId : undefined;
+
         const playerId = generatePlayerId();
 
         // Create room in DB (F-021: status starts as 'lobby')
         const room = new RoomModel({
           roomCode,
           host: playerId,
-          players: [{ id: playerId, username }],
+          players: [{ id: playerId, username, guestId }],
           gameState: null,
           status: 'lobby',
         });
@@ -113,6 +117,15 @@ export function registerRoomHandlers(io: SocketIOServer, socket: Socket): void {
         registerPlayer(socket.id, playerId, roomCode, username);
 
         console.log(`Room ${roomCode} created by ${username} (${playerId})`);
+
+        // Upsert guest profile so returning users are recognized
+        if (guestId) {
+          GuestProfileModel.findOneAndUpdate(
+            { guestId },
+            { username, lastSeenAt: new Date() },
+            { upsert: true },
+          ).catch((err) => console.error('Failed to upsert guest profile:', err));
+        }
 
         callback?.({
           success: true,
@@ -143,7 +156,7 @@ export function registerRoomHandlers(io: SocketIOServer, socket: Socket): void {
   socket.on(
     'joinRoom',
     async (
-      data: { roomCode: string; username: string },
+      data: { roomCode: string; username: string; guestId?: string },
       callback?: (response: {
         success: boolean;
         playerId?: string;
@@ -188,7 +201,10 @@ export function registerRoomHandlers(io: SocketIOServer, socket: Socket): void {
 
         const playerId = generatePlayerId();
 
-        room.players.push({ id: playerId, username });
+        const guestId =
+          typeof data?.guestId === 'string' && data.guestId.length > 0 ? data.guestId : undefined;
+
+        room.players.push({ id: playerId, username, guestId });
         await room.save();
 
         // Join socket.io room and register mapping
@@ -196,6 +212,15 @@ export function registerRoomHandlers(io: SocketIOServer, socket: Socket): void {
         registerPlayer(socket.id, playerId, roomCode, username);
 
         console.log(`${username} (${playerId}) joined room ${roomCode}`);
+
+        // Upsert guest profile so returning users are recognized
+        if (guestId) {
+          GuestProfileModel.findOneAndUpdate(
+            { guestId },
+            { username, lastSeenAt: new Date() },
+            { upsert: true },
+          ).catch((err) => console.error('Failed to upsert guest profile:', err));
+        }
 
         callback?.({
           success: true,
