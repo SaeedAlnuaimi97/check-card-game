@@ -10,7 +10,7 @@ import {
 } from 'react';
 import { useNavigate } from 'react-router-dom';
 import socket from '../services/socket';
-import { getOrCreateGuestId } from '../utils/fingerprint';
+import { getOrCreateGuestId, clearGuestId } from '../utils/fingerprint';
 import type { Card } from '../types/card.types';
 import type {
   ClientGameState,
@@ -69,6 +69,8 @@ interface SocketContextValue {
   gameEndData: GameEndedPayload | null;
   /** Last Red Jack swap result — both players get notified which slots were swapped */
   lastSwapResult: SpecialEffectResolvedPayload | null;
+  /** Slots that were recently modified (swap, burn penalty, red king placement) — cleared after 2.5s */
+  modifiedSlots: { playerId: string; slot: string }[];
   createRoom: (username: string) => Promise<{ success: boolean; error?: string }>;
   joinRoom: (roomCode: string, username: string) => Promise<{ success: boolean; error?: string }>;
   leaveRoom: () => void;
@@ -119,6 +121,13 @@ interface SocketContextValue {
   clearGameEndData: () => void;
   /** Username retrieved from the server for a returning guest (via identifyGuest socket event) */
   storedUsername: string | null;
+  /**
+   * Delete this guest's profile + scoreboard data from the server, clear the
+   * local guestId, and reset storedUsername so the user is treated as new.
+   */
+  deleteGuestProfile: () => Promise<{ success: boolean; error?: string }>;
+  /** Manually clear the cached storedUsername (e.g. after deletion) */
+  clearStoredUsername: () => void;
 }
 
 const SocketContext = createContext<SocketContextValue | null>(null);
@@ -146,6 +155,7 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
   const [pendingEffect, setPendingEffect] = useState<WaitingForSpecialEffectPayload | null>(null);
   const [lastBurnResult, setLastBurnResult] = useState<BurnResultPayload | null>(null);
   const [lastSwapResult, setLastSwapResult] = useState<SpecialEffectResolvedPayload | null>(null);
+  const [modifiedSlots, setModifiedSlots] = useState<{ playerId: string; slot: string }[]>([]);
   const [checkCalledData, setCheckCalledData] = useState<CheckCalledPayload | null>(null);
   const [roundEndData, setRoundEndData] = useState<RoundEndedPayload | null>(null);
   const [gameEndData, setGameEndData] = useState<GameEndedPayload | null>(null);
@@ -390,6 +400,11 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
       console.log('Game resumed, turnStartedAt:', data.turnStartedAt);
     });
 
+    socket.on('slotsModified', (data: { changes: { playerId: string; slot: string }[] }) => {
+      setModifiedSlots(data.changes);
+      setTimeout(() => setModifiedSlots([]), 2500);
+    });
+
     return () => {
       socket.off('connect');
       socket.off('disconnect');
@@ -412,6 +427,7 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
       socket.off('turnTimedOut');
       socket.off('gamePaused');
       socket.off('gameResumed');
+      socket.off('slotsModified');
       socket.disconnect();
     };
   }, []);
@@ -839,6 +855,33 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
     setGameEndData(null);
   }, []);
 
+  // ----------------------------------------------------------
+  // clearStoredUsername — reset cached identity in context
+  // ----------------------------------------------------------
+  const clearStoredUsername = useCallback(() => {
+    setStoredUsername(null);
+  }, []);
+
+  // ----------------------------------------------------------
+  // deleteGuestProfile — wipe server profile + local guestId
+  // ----------------------------------------------------------
+  const deleteGuestProfile = useCallback((): Promise<{ success: boolean; error?: string }> => {
+    const guestId = getOrCreateGuestId();
+    return new Promise((resolve) => {
+      socket.emit(
+        'deleteGuestProfile',
+        { guestId },
+        (response: { success: boolean; error?: string }) => {
+          if (response.success) {
+            clearGuestId();
+            setStoredUsername(null);
+          }
+          resolve(response);
+        },
+      );
+    });
+  }, []);
+
   const value: SocketContextValue = {
     isConnected,
     playerId,
@@ -853,6 +896,7 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
     pendingEffect,
     lastBurnResult,
     lastSwapResult,
+    modifiedSlots,
     checkCalledData,
     roundEndData,
     gameEndData,
@@ -876,6 +920,8 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
     clearRoundEndData,
     clearGameEndData,
     storedUsername,
+    deleteGuestProfile,
+    clearStoredUsername,
   };
 
   return <SocketContext.Provider value={value}>{children}</SocketContext.Provider>;

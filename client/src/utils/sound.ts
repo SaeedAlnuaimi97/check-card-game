@@ -15,6 +15,9 @@ swapAudio.preload = 'auto';
 const winAudio = new Audio('/winning-player.mp3');
 winAudio.preload = 'auto';
 
+const turnAudio = new Audio('/player-turn.mp3');
+turnAudio.preload = 'auto';
+
 /**
  * Play a cloned audio node at given volume.
  * Non-blocking — errors are silently ignored (e.g. browser autoplay policy).
@@ -53,4 +56,11 @@ export function playSwapSound(): void {
  */
 export function playWinSound(): void {
   playClone(winAudio, 0.7);
+}
+
+/**
+ * Play the player turn notification sound effect.
+ */
+export function playTurnSound(): void {
+  playClone(turnAudio, 0.6);
 }

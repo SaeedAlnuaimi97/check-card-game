@@ -30,6 +30,16 @@ import {
   useDisclosure,
   useToast,
 } from '@chakra-ui/react';
+import {
+  MenuOutlined,
+  PauseCircleOutlined,
+  PlayCircleOutlined,
+  TrophyOutlined,
+  LogoutOutlined,
+  EyeOutlined,
+  FireOutlined,
+  CheckCircleOutlined,
+} from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { useSocket } from '../context/SocketContext';
 import { DEBUG_MODE } from '../context/SocketContext';
@@ -37,7 +47,13 @@ import socket from '../services/socket';
 import { Card } from '../components/cards/Card';
 import { CardBack } from '../components/cards/CardBack';
 import { FlippableCard } from '../components/cards/FlippableCard';
-import { playPickSound, playBurnSound, playSwapSound, playWinSound } from '../utils/sound';
+import {
+  playPickSound,
+  playBurnSound,
+  playSwapSound,
+  playWinSound,
+  playTurnSound,
+} from '../utils/sound';
 import { vibrateTap, vibrateSuccess, vibrateWarning } from '../utils/haptics';
 import type { Card as CardType } from '../types/card.types';
 import type { ClientHandSlot, ClientPlayerState } from '../types/player.types';
@@ -58,9 +74,15 @@ interface OpponentProps {
   player: ClientPlayerState;
   isCurrentTurn: boolean;
   debugRevealed?: Record<string, CardType>;
+  modifiedSlots?: { playerId: string; slot: string }[];
 }
 
-const OpponentRow: FC<OpponentProps> = ({ player, isCurrentTurn, debugRevealed }) => {
+const OpponentRow: FC<OpponentProps> = ({
+  player,
+  isCurrentTurn,
+  debugRevealed,
+  modifiedSlots,
+}) => {
   return (
     <VStack
       spacing={1}
@@ -85,8 +107,16 @@ const OpponentRow: FC<OpponentProps> = ({ player, isCurrentTurn, debugRevealed }
         {player.hand.map((h: ClientHandSlot) => {
           const key = `${player.playerId}:${h.slot}`;
           const revealedCard = debugRevealed?.[key];
+          const isModified =
+            modifiedSlots?.some((m) => m.playerId === player.playerId && m.slot === h.slot) ??
+            false;
           return (
-            <Box key={h.slot}>
+            <Box
+              key={h.slot}
+              boxShadow={isModified ? '0 0 14px 4px rgba(72, 187, 120, 0.85)' : 'none'}
+              transition="box-shadow 0.4s ease"
+              borderRadius="sm"
+            >
               {revealedCard ? (
                 <Box
                   w={{ base: '40px', md: '52px' }}
@@ -155,6 +185,7 @@ export const GameBoard: FC = () => {
     checkCalledData,
     roundEndData,
     gameEndData,
+    modifiedSlots,
     endPeek,
     callCheck,
     performAction,
@@ -225,6 +256,13 @@ export const GameBoard: FC = () => {
       return () => clearTimeout(timer);
     }
   }, [pendingEffect]);
+
+  // Play turn sound when it becomes this player's turn during active play
+  useEffect(() => {
+    if (isMyTurn && gameState?.phase === 'playing') {
+      playTurnSound();
+    }
+  }, [isMyTurn, gameState?.phase]);
 
   const toggleDebugRevealAll = useCallback(async () => {
     if (!DEBUG_MODE || !gameState) return;
@@ -857,8 +895,9 @@ export const GameBoard: FC = () => {
                     });
                   }
                 }}
+                leftIcon={<PlayCircleOutlined />}
               >
-                {'\u25B6'} Resume
+                Resume
               </Button>
             ) : (
               <Text fontSize="sm" color="gray.500">
@@ -938,9 +977,7 @@ export const GameBoard: FC = () => {
               _hover={{ bg: debugRevealAll ? 'purple.400' : 'gray.500' }}
               title={debugRevealAll ? 'Hide all cards' : 'Reveal all cards (debug)'}
             >
-              <Text fontSize="14px" lineHeight={1}>
-                {'\u{1F441}'}
-              </Text>
+              <EyeOutlined style={{ fontSize: '14px', color: 'white' }} />
             </Box>
           )}
           <Text fontSize="sm" color="gray.400">
@@ -957,17 +994,24 @@ export const GameBoard: FC = () => {
           </Text>
         </HStack>
         <HStack spacing={2}>
-          <Text fontSize="sm" color="gray.400">
-            Phase:{' '}
-            <Text as="span" color="gray.100" fontWeight="bold">
-              {gameState.phase}
-            </Text>
-          </Text>
           {/* Check called banner */}
           {checkCalledData && (
             <Badge colorScheme="red" fontSize="xs" px={2} py={1}>
               CHECK ({checkCalledData.playerId === playerId ? 'You' : checkCalledData.username})
             </Badge>
+          )}
+          {/* CHECK button — only visible on player's turn when check is available */}
+          {turnData?.canCheck && !hasDrawnCard && !pendingEffect && (
+            <Tooltip label="Call CHECK" placement="bottom">
+              <IconButton
+                aria-label="Call check"
+                size="xs"
+                colorScheme="red"
+                variant="solid"
+                onClick={handleCallCheck}
+                icon={<CheckCircleOutlined />}
+              />
+            </Tooltip>
           )}
           {/* Menu button */}
           <IconButton
@@ -977,11 +1021,7 @@ export const GameBoard: FC = () => {
             color="gray.400"
             _hover={{ color: 'white', bg: 'whiteAlpha.100' }}
             onClick={onMenuOpen}
-            icon={
-              <Text fontSize="lg" lineHeight={1} fontWeight="bold">
-                ☰
-              </Text>
-            }
+            icon={<MenuOutlined />}
           />
         </HStack>
       </Flex>
@@ -1000,11 +1040,7 @@ export const GameBoard: FC = () => {
               <Button
                 variant="ghost"
                 justifyContent="flex-start"
-                leftIcon={
-                  <Text fontSize="md" lineHeight={1}>
-                    {gameState.paused ? '▶' : '⏸'}
-                  </Text>
-                }
+                leftIcon={gameState.paused ? <PlayCircleOutlined /> : <PauseCircleOutlined />}
                 isDisabled={
                   gameState.phase === 'roundEnd' ||
                   gameState.phase === 'gameEnd' ||
@@ -1032,11 +1068,7 @@ export const GameBoard: FC = () => {
               <Button
                 variant="ghost"
                 justifyContent="flex-start"
-                leftIcon={
-                  <Text fontSize="md" lineHeight={1}>
-                    🏆
-                  </Text>
-                }
+                leftIcon={<TrophyOutlined />}
                 onClick={() => {
                   onMenuClose();
                   setShowLeaderboard(true);
@@ -1052,11 +1084,7 @@ export const GameBoard: FC = () => {
                 variant="ghost"
                 colorScheme="red"
                 justifyContent="flex-start"
-                leftIcon={
-                  <Text fontSize="md" lineHeight={1}>
-                    🚪
-                  </Text>
-                }
+                leftIcon={<LogoutOutlined />}
                 onClick={() => {
                   onMenuClose();
                   handleExitGame();
@@ -1113,6 +1141,7 @@ export const GameBoard: FC = () => {
                 gameState.players[gameState.currentTurnIndex]?.playerId === opp.playerId
               }
               debugRevealed={debugRevealed}
+              modifiedSlots={modifiedSlots}
             />
           ))}
         </Flex>
@@ -1297,9 +1326,7 @@ export const GameBoard: FC = () => {
                       border="2px solid"
                       borderColor="orange.300"
                     >
-                      <Text fontSize="12px" lineHeight={1}>
-                        {'\uD83D\uDD25'}
-                      </Text>
+                      <FireOutlined style={{ fontSize: '12px', color: 'white' }} />
                     </Box>
                   )}
                 </Box>
@@ -1368,22 +1395,9 @@ export const GameBoard: FC = () => {
               Click a hand card to swap, or click discard to keep hand
             </Text>
           ) : gameState.players[gameState.currentTurnIndex]?.playerId === playerId ? (
-            <HStack spacing={3}>
-              <Heading size="sm" color="yellow.300">
-                Your Turn
-              </Heading>
-              {turnData?.canCheck && !hasDrawnCard && !pendingEffect && (
-                <Button
-                  size="sm"
-                  colorScheme="red"
-                  variant="solid"
-                  fontWeight="bold"
-                  onClick={handleCallCheck}
-                >
-                  CHECK
-                </Button>
-              )}
-            </HStack>
+            <Heading size="sm" color="yellow.300">
+              Your Turn
+            </Heading>
           ) : (
             <Text fontSize="sm" color="gray.500">
               {gameState.players[gameState.currentTurnIndex]?.username}&apos;s turn
@@ -1456,9 +1470,20 @@ export const GameBoard: FC = () => {
                   }
                 };
 
+                const isModified =
+                  playerId !== null &&
+                  modifiedSlots.some((m) => m.playerId === playerId && m.slot === h.slot);
+
                 return (
                   <Tooltip key={h.slot} label={tooltipLabel} isDisabled={!isClickable}>
-                    <VStack spacing={1} position="relative" flexShrink={0}>
+                    <VStack
+                      spacing={1}
+                      position="relative"
+                      flexShrink={0}
+                      boxShadow={isModified ? '0 0 14px 4px rgba(72, 187, 120, 0.85)' : 'none'}
+                      transition="box-shadow 0.4s ease"
+                      borderRadius="sm"
+                    >
                       {showFaceUp && peekedCard ? (
                         <FlippableCard
                           card={peekedCard}
@@ -1511,7 +1536,8 @@ export const GameBoard: FC = () => {
         <ModalOverlay bg="blackAlpha.600" />
         <ModalContent bg="gray.800" color="white">
           <ModalHeader fontSize="md" pb={2}>
-            {'\u{1F3C6}'} Leaderboard — Round {gameState.roundNumber}
+            <TrophyOutlined style={{ marginRight: 8 }} /> Leaderboard — Round{' '}
+            {gameState.roundNumber}
           </ModalHeader>
           <ModalBody>
             <Table size="sm" variant="simple">
