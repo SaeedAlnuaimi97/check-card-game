@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, FC } from 'react';
+import { useEffect, useState, useCallback, useRef, FC } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   Box,
@@ -168,6 +168,7 @@ export const GameBoard: FC = () => {
     resumeGame,
     clearRoundEndData,
     clearGameEndData,
+    undoTakeDiscard,
   } = useSocket();
   const toast = useToast();
 
@@ -200,6 +201,12 @@ export const GameBoard: FC = () => {
 
   // Red card flash state (UI-006)
   const [showRedFlash, setShowRedFlash] = useState(false);
+
+  // Long-press state for discard pile take (2 second hold required)
+  const [discardLongPressProgress, setDiscardLongPressProgress] = useState(0);
+  const discardLongPressTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const discardLongPressStartRef = useRef<number | null>(null);
+  const DISCARD_LONG_PRESS_MS = 2000;
 
   // Trigger red flash when a red face card special effect activates
   useEffect(() => {
@@ -535,6 +542,43 @@ export const GameBoard: FC = () => {
       vibrateTap();
     }
   }, [canAct, hasDrawnCard, turnData, performAction, toast]);
+
+  const handleUndoTakeDiscard = useCallback(async () => {
+    const result = await undoTakeDiscard();
+    if (!result.success && result.error) {
+      toast({ title: result.error, status: 'error', duration: 2000, position: 'top' });
+    }
+  }, [undoTakeDiscard, toast]);
+
+  // Long-press handlers for discard pile take
+  const handleDiscardLongPressStart = useCallback(() => {
+    if (!canAct || hasDrawnCard || !turnData?.availableActions.includes('takeDiscard')) return;
+    discardLongPressStartRef.current = Date.now();
+    discardLongPressTimerRef.current = setInterval(() => {
+      const elapsed = Date.now() - (discardLongPressStartRef.current ?? Date.now());
+      const progress = Math.min((elapsed / DISCARD_LONG_PRESS_MS) * 100, 100);
+      setDiscardLongPressProgress(progress);
+      if (progress >= 100) {
+        // Fire the action
+        if (discardLongPressTimerRef.current) {
+          clearInterval(discardLongPressTimerRef.current);
+          discardLongPressTimerRef.current = null;
+        }
+        discardLongPressStartRef.current = null;
+        setDiscardLongPressProgress(0);
+        handleTakeDiscard();
+      }
+    }, 30);
+  }, [canAct, hasDrawnCard, turnData, handleTakeDiscard]);
+
+  const handleDiscardLongPressEnd = useCallback(() => {
+    if (discardLongPressTimerRef.current) {
+      clearInterval(discardLongPressTimerRef.current);
+      discardLongPressTimerRef.current = null;
+    }
+    discardLongPressStartRef.current = null;
+    setDiscardLongPressProgress(0);
+  }, []);
 
   const handleBurnCard = useCallback(
     async (slot: string) => {
@@ -1100,7 +1144,7 @@ export const GameBoard: FC = () => {
                   : topDiscard?.isBurned
                     ? 'Burned card — cannot pick up'
                     : canAct && turnData?.availableActions.includes('takeDiscard')
-                      ? 'Take from discard'
+                      ? 'Hold 2 seconds to take from discard'
                       : !canAct
                         ? 'Not your turn'
                         : ''
@@ -1110,24 +1154,93 @@ export const GameBoard: FC = () => {
             <VStack spacing={2}>
               {topDiscard ? (
                 <Box position="relative">
-                  <Card
-                    card={topDiscard}
-                    size="lg"
-                    isClickable={
-                      hasDrawnCard
-                        ? !drawnFromDiscard
-                        : canAct &&
-                          !topDiscard.isBurned &&
-                          (turnData?.availableActions.includes('takeDiscard') ?? false)
+                  <Box
+                    position="relative"
+                    onMouseDown={
+                      !hasDrawnCard && !topDiscard.isBurned
+                        ? handleDiscardLongPressStart
+                        : undefined
                     }
-                    onClick={
-                      hasDrawnCard && !drawnFromDiscard
-                        ? () => handleDiscardChoice(null)
-                        : !hasDrawnCard && !topDiscard.isBurned
-                          ? handleTakeDiscard
+                    onMouseUp={
+                      !hasDrawnCard && !topDiscard.isBurned ? handleDiscardLongPressEnd : undefined
+                    }
+                    onMouseLeave={
+                      !hasDrawnCard && !topDiscard.isBurned ? handleDiscardLongPressEnd : undefined
+                    }
+                    onTouchStart={
+                      !hasDrawnCard && !topDiscard.isBurned
+                        ? (e) => {
+                            e.preventDefault();
+                            handleDiscardLongPressStart();
+                          }
+                        : undefined
+                    }
+                    onTouchEnd={
+                      !hasDrawnCard && !topDiscard.isBurned ? handleDiscardLongPressEnd : undefined
+                    }
+                    onTouchCancel={
+                      !hasDrawnCard && !topDiscard.isBurned ? handleDiscardLongPressEnd : undefined
+                    }
+                    userSelect="none"
+                    style={{ WebkitUserSelect: 'none', touchAction: 'none' }}
+                  >
+                    <Card
+                      card={topDiscard}
+                      size="lg"
+                      isClickable={
+                        hasDrawnCard
+                          ? !drawnFromDiscard
+                          : canAct &&
+                            !topDiscard.isBurned &&
+                            (turnData?.availableActions.includes('takeDiscard') ?? false)
+                      }
+                      onClick={
+                        hasDrawnCard && !drawnFromDiscard
+                          ? () => handleDiscardChoice(null)
                           : undefined
-                    }
-                  />
+                      }
+                    />
+                    {/* Long-press progress ring overlay */}
+                    {!hasDrawnCard &&
+                      !topDiscard.isBurned &&
+                      canAct &&
+                      (turnData?.availableActions.includes('takeDiscard') ?? false) && (
+                        <Box
+                          position="absolute"
+                          inset={0}
+                          borderRadius="md"
+                          pointerEvents="none"
+                          display="flex"
+                          alignItems="center"
+                          justifyContent="center"
+                        >
+                          {discardLongPressProgress > 0 && (
+                            <Box
+                              position="absolute"
+                              inset={0}
+                              borderRadius="md"
+                              border="3px solid"
+                              borderColor="yellow.300"
+                              opacity={discardLongPressProgress / 100}
+                              bg="blackAlpha.400"
+                            />
+                          )}
+                          {discardLongPressProgress === 0 && (
+                            <Text
+                              fontSize="2xs"
+                              color="yellow.300"
+                              fontWeight="bold"
+                              bg="blackAlpha.600"
+                              px={1}
+                              borderRadius="sm"
+                              textAlign="center"
+                            >
+                              Hold
+                            </Text>
+                          )}
+                        </Box>
+                      )}
+                  </Box>
                   {topDiscard.isBurned && (
                     <Box
                       position="absolute"
@@ -1197,9 +1310,19 @@ export const GameBoard: FC = () => {
               Round Over
             </Text>
           ) : hasDrawnCard && drawnFromDiscard ? (
-            <Text fontSize="sm" color="yellow.300" fontWeight="bold">
-              Click a hand card to swap (must swap)
-            </Text>
+            <HStack spacing={3}>
+              <Text fontSize="sm" color="yellow.300" fontWeight="bold">
+                Click a hand card to swap (must swap)
+              </Text>
+              <Button
+                size="xs"
+                colorScheme="orange"
+                variant="outline"
+                onClick={handleUndoTakeDiscard}
+              >
+                Undo
+              </Button>
+            </HStack>
           ) : hasDrawnCard ? (
             <Text fontSize="sm" color="yellow.300" fontWeight="bold">
               Click a hand card to swap, or click discard to keep hand

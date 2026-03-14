@@ -90,6 +90,8 @@ interface SocketContextValue {
   ) => Promise<{ success: boolean; error?: string }>;
   /** After drawing from deck or taking from discard, choose to swap with a hand slot or discard the drawn card (F-038, F-042) */
   discardChoice: (slot: SlotLabel | null) => Promise<{ success: boolean; error?: string }>;
+  /** Undo a pending take-from-discard action — puts the card back on the discard pile */
+  undoTakeDiscard: () => Promise<{ success: boolean; error?: string }>;
   /** Red Jack: swap or skip (F-049) */
   redJackSwap: (
     skip: boolean,
@@ -201,7 +203,7 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
             error?: string;
           }) => {
             if (response.success) {
-              console.log('[reconnect] Rejoin successful');
+              console.log('[reconnect] Rejoin successful, room status:', response.room?.status);
               setPlayerId(storedPlayerId);
               setUsername(sessionStorage.getItem('username') || 'Player');
               if (response.room) {
@@ -209,12 +211,15 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
               }
               if (response.gameState) {
                 setGameState(response.gameState);
-                // Navigate to game if we're in a playing state
+                // Navigate to game board for an active game
                 navigateRef.current('/game');
+              } else if (response.room?.status === 'lobby') {
+                // Navigate back to lobby (e.g. player refreshed while waiting)
+                navigateRef.current('/room');
               }
             } else {
               console.log('[reconnect] Rejoin failed:', response.error);
-              // Clear stale session data
+              // Clear stale session data so the home page shows normally
               sessionStorage.removeItem('playerId');
               sessionStorage.removeItem('roomCode');
               sessionStorage.removeItem('username');
@@ -684,6 +689,29 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
   );
 
   // ----------------------------------------------------------
+  // Undo Take Discard — cancel pending take-from-discard action
+  // ----------------------------------------------------------
+  const undoTakeDiscard = useCallback((): Promise<{ success: boolean; error?: string }> => {
+    return new Promise((resolve) => {
+      if (!roomData || !playerId) {
+        resolve({ success: false, error: 'Not in a room' });
+        return;
+      }
+      socket.emit(
+        'undoTakeDiscard',
+        { roomCode: roomData.roomCode, playerId },
+        (response: { success: boolean; error?: string }) => {
+          if (response.success) {
+            setDrawnCard(null);
+            setDrawnFromDiscard(false);
+          }
+          resolve(response);
+        },
+      );
+    });
+  }, [roomData, playerId]);
+
+  // ----------------------------------------------------------
   // Red Jack Swap — swap or skip (F-049)
   // ----------------------------------------------------------
   const redJackSwap = useCallback(
@@ -840,6 +868,7 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
     callCheck,
     performAction,
     discardChoice,
+    undoTakeDiscard,
     redJackSwap,
     redQueenPeek,
     redKingChoice,

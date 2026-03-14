@@ -407,7 +407,7 @@ export function registerRoomHandlers(io: SocketIOServer, socket: Socket): void {
   });
 
   // ----------------------------------------------------------
-  // Rejoin Room — reconnect after disconnect grace period
+  // Rejoin Room — reconnect after disconnect (grace period OR lobby refresh)
   // ----------------------------------------------------------
   socket.on(
     'rejoinRoom',
@@ -439,12 +439,6 @@ export function registerRoomHandlers(io: SocketIOServer, socket: Socket): void {
 
       const release = await getRoomMutex(roomCode).acquire();
       try {
-        // Check if the player has a pending disconnect (grace period active)
-        if (!hasPendingDisconnect(data.playerId)) {
-          callback?.({ success: false, error: 'No pending reconnection for this player' });
-          return;
-        }
-
         const room = await RoomModel.findOne({ roomCode });
         if (!room) {
           cancelGracePeriod(data.playerId);
@@ -460,24 +454,35 @@ export function registerRoomHandlers(io: SocketIOServer, socket: Socket): void {
           return;
         }
 
-        // Reconnect: cancel grace period, re-register mapping, rejoin socket.io room
-        const pending = reconnectPlayer(socket.id, data.playerId);
-        if (!pending) {
-          callback?.({ success: false, error: 'Reconnection failed' });
-          return;
+        const hasPending = hasPendingDisconnect(data.playerId);
+
+        if (hasPending) {
+          // In-game reconnect path: cancel grace period, re-register
+          const pending = reconnectPlayer(socket.id, data.playerId);
+          if (!pending) {
+            callback?.({ success: false, error: 'Reconnection failed' });
+            return;
+          }
+
+          await socket.join(roomCode);
+          console.log(
+            `Player ${pending.mapping.username} (${data.playerId}) rejoined room ${roomCode} (grace period)`,
+          );
+
+          io.to(roomCode).emit('playerReconnected', {
+            playerId: data.playerId,
+            username: pending.mapping.username,
+          });
+        } else {
+          // Lobby / fresh-tab path: player is still in DB but has no in-memory
+          // mapping (e.g. they refreshed or had a brief disconnect not in a game).
+          // Re-register directly with the stored username from the room document.
+          registerPlayer(socket.id, data.playerId, roomCode, playerInRoom.username);
+          await socket.join(roomCode);
+          console.log(
+            `Player ${playerInRoom.username} (${data.playerId}) rejoined room ${roomCode} (lobby/refresh)`,
+          );
         }
-
-        await socket.join(roomCode);
-
-        console.log(
-          `Player ${pending.mapping.username} (${data.playerId}) rejoined room ${roomCode}`,
-        );
-
-        // Notify others that the player reconnected
-        io.to(roomCode).emit('playerReconnected', {
-          playerId: data.playerId,
-          username: pending.mapping.username,
-        });
 
         // Send current state back to the reconnected player
         if (room.status === 'playing' && room.gameState) {

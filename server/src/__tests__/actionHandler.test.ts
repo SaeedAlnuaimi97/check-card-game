@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   handleDrawFromDeck,
   handleTakeDiscard,
+  undoTakeDiscard,
   validateDiscardChoice,
   processDiscardChoice,
   isRedFaceCard,
@@ -1207,5 +1208,115 @@ describe('processRedKingChoice', () => {
 
     expect(result.success).toBe(false);
     expect(result.error).toContain('Invalid choice type');
+  });
+});
+
+// ============================================================
+// undoTakeDiscard (UX improvement)
+// ============================================================
+
+describe('undoTakeDiscard', () => {
+  it('returns the card to the top of the discard pile and clears pending state', () => {
+    const takenCard = makeCard('taken', '7', '♥');
+    const existingDiscard = makeCard('existing', '3', '♠');
+    const gs = createTestGameState({
+      discardPile: [existingDiscard],
+      drawnCard: takenCard,
+      drawnByPlayerId: 'p1',
+      drawnSource: 'discard',
+    });
+
+    const result = undoTakeDiscard(gs, 'p1');
+
+    expect(result.success).toBe(true);
+    expect(result.returnedCard).toEqual(takenCard);
+    expect(gs.drawnCard).toBeNull();
+    expect(gs.drawnByPlayerId).toBeNull();
+    expect(gs.drawnSource).toBeNull();
+    // The card should be back on top of the discard pile
+    expect(gs.discardPile).toHaveLength(2);
+    expect(gs.discardPile[gs.discardPile.length - 1]).toEqual(takenCard);
+  });
+
+  it('works when discard pile was empty before the take', () => {
+    const takenCard = makeCard('taken', 'K', '♣');
+    const gs = createTestGameState({
+      discardPile: [],
+      drawnCard: takenCard,
+      drawnByPlayerId: 'p1',
+      drawnSource: 'discard',
+    });
+
+    const result = undoTakeDiscard(gs, 'p1');
+
+    expect(result.success).toBe(true);
+    expect(gs.discardPile).toHaveLength(1);
+    expect(gs.discardPile[0]).toEqual(takenCard);
+    expect(gs.drawnCard).toBeNull();
+  });
+
+  it('returns error when there is no pending drawn card', () => {
+    const gs = createTestGameState({
+      discardPile: [makeCard('top')],
+      drawnCard: null,
+      drawnByPlayerId: null,
+      drawnSource: null,
+    });
+
+    const result = undoTakeDiscard(gs, 'p1');
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBe('No pending taken card to undo');
+  });
+
+  it('returns error when the pending card was drawn by a different player', () => {
+    const gs = createTestGameState({
+      discardPile: [],
+      drawnCard: makeCard('taken'),
+      drawnByPlayerId: 'p2',
+      drawnSource: 'discard',
+    });
+
+    const result = undoTakeDiscard(gs, 'p1');
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBe('No pending taken card to undo');
+    // State should be unchanged
+    expect(gs.drawnCard).not.toBeNull();
+    expect(gs.drawnByPlayerId).toBe('p2');
+  });
+
+  it('returns error when the pending card was drawn from deck (not discard)', () => {
+    const gs = createTestGameState({
+      discardPile: [],
+      drawnCard: makeCard('deck-card'),
+      drawnByPlayerId: 'p1',
+      drawnSource: 'deck',
+    });
+
+    const result = undoTakeDiscard(gs, 'p1');
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBe('Can only undo a take from discard');
+    // State should be unchanged
+    expect(gs.drawnCard).not.toBeNull();
+    expect(gs.drawnSource).toBe('deck');
+  });
+
+  it('does not mutate state on failure', () => {
+    const deckCard = makeCard('deck-card', 'A', '♥');
+    const gs = createTestGameState({
+      discardPile: [makeCard('top')],
+      drawnCard: deckCard,
+      drawnByPlayerId: 'p1',
+      drawnSource: 'deck',
+    });
+
+    undoTakeDiscard(gs, 'p1');
+
+    expect(gs.discardPile).toHaveLength(1);
+    expect(gs.drawnCard).toEqual(deckCard);
+    expect(gs.drawnByPlayerId).toBe('p1');
+    expect(gs.drawnSource).toBe('deck');
   });
 });
