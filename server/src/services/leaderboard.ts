@@ -41,14 +41,19 @@ export interface PlayerStats {
   recentGames: RecentGame[];
 }
 
+// Guest IDs excluded from the public leaderboard (private/test players).
+const LEADERBOARD_BLOCKLIST = new Set(['guest_bb4c938b', 'guest_50f97244', 'guest_c46a5f83']);
+
 /**
  * Get the global leaderboard (top players by win count).
  */
 export async function getLeaderboard(limit: number): Promise<LeaderboardEntry[]> {
   const safeLimit = Number.isFinite(limit) && limit > 0 ? Math.min(limit, 100) : 50;
+  const blocklist = [...LEADERBOARD_BLOCKLIST];
 
   const pipeline = [
     { $unwind: '$players' as const },
+    { $match: { 'players.guestId': { $nin: blocklist } } },
     {
       $group: {
         _id: '$players.guestId',

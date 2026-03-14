@@ -91,7 +91,7 @@ describe('leaderboard service', () => {
 
       const pipeline = mockAggregate.mock.calls[0][0];
       const stages = pipeline.map((s: Record<string, unknown>) => Object.keys(s)[0]);
-      expect(stages).toEqual(['$unwind', '$group', '$addFields', '$sort', '$limit']);
+      expect(stages).toEqual(['$unwind', '$match', '$group', '$addFields', '$sort', '$limit']);
     });
   });
 
