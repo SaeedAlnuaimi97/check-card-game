@@ -2,7 +2,7 @@ import { Server as SocketIOServer } from 'socket.io';
 import { registerRoomHandlers } from './roomHandlers';
 import { registerGameHandlers } from './gameHandlers';
 import { GuestProfileModel } from '../models/GuestProfile';
-import { GameResultModel } from '../models/GameResult';
+import { getLeaderboard, getPlayerStats } from '../services/leaderboard';
 
 export function registerSocketHandlers(io: SocketIOServer): void {
   io.on('connection', (socket) => {
@@ -56,55 +56,7 @@ export function registerSocketHandlers(io: SocketIOServer): void {
           const limit =
             Number.isFinite(limitParam) && limitParam > 0 ? Math.min(limitParam, 100) : 50;
 
-          const pipeline = [
-            { $unwind: '$players' as const },
-            {
-              $group: {
-                _id: '$players.guestId',
-                username: { $last: '$players.username' },
-                gamesPlayed: { $sum: 1 },
-                wins: { $sum: { $cond: ['$players.isWinner', 1, 0] } },
-                losses: { $sum: { $cond: ['$players.isLoser', 1, 0] } },
-                totalScore: { $sum: '$players.finalScore' },
-                lastPlayedAt: { $max: '$endedAt' },
-              },
-            },
-            {
-              $addFields: {
-                winRate: {
-                  $cond: [
-                    { $gt: ['$gamesPlayed', 0] },
-                    { $round: [{ $multiply: [{ $divide: ['$wins', '$gamesPlayed'] }, 100] }, 1] },
-                    0,
-                  ],
-                },
-                avgScore: {
-                  $cond: [
-                    { $gt: ['$gamesPlayed', 0] },
-                    { $round: [{ $divide: ['$totalScore', '$gamesPlayed'] }, 1] },
-                    0,
-                  ],
-                },
-              },
-            },
-            { $sort: { wins: -1 as const, winRate: -1 as const, gamesPlayed: -1 as const } },
-            { $limit: limit },
-          ];
-
-          const results = await GameResultModel.aggregate(pipeline);
-
-          const leaderboard = results.map((entry, index) => ({
-            rank: index + 1,
-            guestId: entry._id,
-            username: entry.username,
-            gamesPlayed: entry.gamesPlayed,
-            wins: entry.wins,
-            losses: entry.losses,
-            winRate: entry.winRate,
-            avgScore: entry.avgScore,
-            lastPlayedAt: entry.lastPlayedAt,
-          }));
-
+          const leaderboard = await getLeaderboard(limit);
           callback?.({ success: true, leaderboard });
         } catch (err) {
           console.error(`[${socket.id}] getLeaderboard error:`, err);
@@ -131,92 +83,8 @@ export function registerSocketHandlers(io: SocketIOServer): void {
         }
 
         try {
-          const statsPipeline = [
-            { $match: { 'players.guestId': guestId } },
-            { $unwind: '$players' as const },
-            { $match: { 'players.guestId': guestId } },
-            {
-              $group: {
-                _id: '$players.guestId',
-                username: { $last: '$players.username' },
-                gamesPlayed: { $sum: 1 },
-                wins: { $sum: { $cond: ['$players.isWinner', 1, 0] } },
-                losses: { $sum: { $cond: ['$players.isLoser', 1, 0] } },
-                totalScore: { $sum: '$players.finalScore' },
-              },
-            },
-            {
-              $addFields: {
-                winRate: {
-                  $cond: [
-                    { $gt: ['$gamesPlayed', 0] },
-                    { $round: [{ $multiply: [{ $divide: ['$wins', '$gamesPlayed'] }, 100] }, 1] },
-                    0,
-                  ],
-                },
-                avgScore: {
-                  $cond: [
-                    { $gt: ['$gamesPlayed', 0] },
-                    { $round: [{ $divide: ['$totalScore', '$gamesPlayed'] }, 1] },
-                    0,
-                  ],
-                },
-              },
-            },
-          ];
-
-          const statsResults = await GameResultModel.aggregate(statsPipeline);
-
-          if (statsResults.length === 0) {
-            callback?.({
-              success: true,
-              stats: {
-                guestId,
-                username: 'Unknown',
-                gamesPlayed: 0,
-                wins: 0,
-                losses: 0,
-                winRate: 0,
-                avgScore: 0,
-                recentGames: [],
-              },
-            });
-            return;
-          }
-
-          const st = statsResults[0];
-
-          const recentGames = await GameResultModel.find({ 'players.guestId': guestId })
-            .sort({ endedAt: -1 })
-            .limit(20)
-            .lean();
-
-          const formattedRecentGames = recentGames.map((game) => {
-            const myEntry = game.players.find((p) => p.guestId === guestId);
-            return {
-              roomCode: game.roomCode,
-              endedAt: game.endedAt,
-              totalRounds: game.totalRounds,
-              playerCount: game.players.length,
-              myScore: myEntry?.finalScore ?? 0,
-              winnerUsername: game.winnerUsername,
-              isWin: myEntry?.isWinner ?? false,
-            };
-          });
-
-          callback?.({
-            success: true,
-            stats: {
-              guestId,
-              username: st.username,
-              gamesPlayed: st.gamesPlayed,
-              wins: st.wins,
-              losses: st.losses,
-              winRate: st.winRate,
-              avgScore: st.avgScore,
-              recentGames: formattedRecentGames,
-            },
-          });
+          const stats = await getPlayerStats(guestId);
+          callback?.({ success: true, stats });
         } catch (err) {
           console.error(`[${socket.id}] getStats error:`, err);
           callback?.({ success: false, error: 'Failed to fetch player stats' });

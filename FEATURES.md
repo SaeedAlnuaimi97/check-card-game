@@ -279,21 +279,21 @@ Derived from PLAN.md. Features are grouped by domain and ordered by implementati
 
 ### Cloud Deployment
 
-- [ ] **F-250**: Cosmos DB compatible database connection
-- [ ] **F-251**: Verify aggregation pipelines for Cosmos DB
-- [ ] **F-252**: Server production build configuration
-- [ ] **F-253**: CORS hardening for production
-- [ ] **F-254**: Azure App Service deployment configuration
-- [ ] **F-255**: Client production build with configurable server URL
-- [ ] **F-256**: Static Web App configuration (SPA fallback)
-- [ ] **F-257**: Azure Static Web Apps deployment
-- [ ] **F-258**: GitHub Actions CI pipeline
-- [ ] **F-259**: GitHub Actions CD — server deploy
-- [ ] **F-260**: GitHub Actions CD — client deploy
-- [ ] **F-261**: Rate limiting on REST endpoints
-- [ ] **F-262**: Security headers and compression
-- [ ] **F-263**: Structured logging
-- [ ] **F-264**: Global error handling middleware
+- [x] **F-250**: Cosmos DB compatible database connection
+- [x] **F-251**: Verify aggregation pipelines for Cosmos DB
+- [x] **F-252**: Server production build configuration
+- [x] **F-253**: CORS hardening for production
+- [x] **F-254**: Azure App Service deployment configuration
+- [x] **F-255**: Client production build with configurable server URL
+- [x] **F-256**: Static Web App configuration (SPA fallback)
+- [x] **F-257**: Azure Static Web Apps deployment
+- [x] **F-258**: GitHub Actions CI pipeline
+- [x] **F-259**: GitHub Actions CD — server deploy
+- [x] **F-260**: GitHub Actions CD — client deploy
+- [x] **F-261**: Rate limiting on REST endpoints
+- [x] **F-262**: Security headers and compression
+- [x] **F-263**: Structured logging
+- [x] **F-264**: Global error handling middleware
 
 ### Pause Game
 
