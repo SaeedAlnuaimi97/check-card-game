@@ -9,6 +9,7 @@ import compression from 'compression';
 import rateLimit from 'express-rate-limit';
 import { Server as SocketIOServer } from 'socket.io';
 import { connectDB, registerShutdownHandlers } from './utils/database';
+import { startRoomExpiryJob } from './utils/roomExpiry';
 import healthRouter from './routes/health';
 import leaderboardRouter from './routes/leaderboard';
 import guestRouter from './routes/guest';
@@ -86,6 +87,7 @@ async function startServer() {
   try {
     await connectDB();
     registerShutdownHandlers();
+    startRoomExpiryJob();
     server.listen(PORT, () => {
       logger.info(
         {

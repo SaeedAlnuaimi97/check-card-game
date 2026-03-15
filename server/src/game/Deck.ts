@@ -1,3 +1,4 @@
+import { randomInt } from 'crypto';
 import { Card, Rank, Suit, GameState } from '../types/game.types';
 
 // ============================================================
@@ -34,7 +35,8 @@ function getCardValue(suit: Suit, rank: Rank): number {
 // ============================================================
 
 /**
- * Creates a standard 52-card deck with correct point values.
+ * Creates a 54-card deck: the standard 52 cards plus 2 extra red 10s
+ * (an additional 10♥ and 10♦), giving 4 red 10s (value 0) in total.
  * Cards are returned in a deterministic order (not shuffled).
  */
 export function initializeDeck(): Card[] {
@@ -53,6 +55,17 @@ export function initializeDeck(): Card[] {
     }
   }
 
+  // Add 2 extra red 10s (one extra 10♥ and one extra 10♦) — value 0 each
+  for (const suit of ['♥', '♦'] as Suit[]) {
+    deck.push({
+      id: `card-${cardIndex++}`,
+      suit,
+      rank: '10',
+      value: 0,
+      isRed: true,
+    });
+  }
+
   return deck;
 }
 
@@ -61,12 +74,13 @@ export function initializeDeck(): Card[] {
 // ============================================================
 
 /**
- * Shuffles an array of cards in place using the Fisher-Yates algorithm.
+ * Shuffles an array of cards in place using the Fisher-Yates algorithm
+ * with a cryptographically secure random number generator (Node.js crypto.randomInt).
  * Returns the same array reference (mutated).
  */
 export function shuffleDeck(cards: Card[]): Card[] {
   for (let i = cards.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
+    const j = randomInt(0, i + 1);
     [cards[i], cards[j]] = [cards[j], cards[i]];
   }
   return cards;
@@ -155,7 +169,7 @@ export function reshuffleDiscard(gameState: GameState): void {
 // ============================================================
 
 /**
- * Creates and returns a shuffled 52-card deck.
+ * Creates and returns a shuffled 54-card deck.
  * Convenience wrapper around initializeDeck + shuffleDeck.
  */
 export function createShuffledDeck(): Card[] {

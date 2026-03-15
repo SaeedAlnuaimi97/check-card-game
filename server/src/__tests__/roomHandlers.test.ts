@@ -11,7 +11,7 @@ import { unregisterPlayer, cancelGracePeriod, hasPendingDisconnect } from '../so
 interface MockRoom {
   roomCode: string;
   host: string;
-  players: { id: string; username: string }[];
+  players: { id: string; username: string; isBot?: boolean; botDifficulty?: string }[];
   status: string;
   gameState: GameState | null;
   save: () => Promise<void>;
@@ -27,7 +27,7 @@ vi.mock('../models/Room', () => {
     data: {
       roomCode: string;
       host: string;
-      players: { id: string; username: string }[];
+      players: { id: string; username: string; isBot?: boolean; botDifficulty?: string }[];
       gameState: null;
       status: string;
     },
@@ -52,6 +52,10 @@ vi.mock('../models/Room', () => {
   };
   MockRoomModel.deleteOne = async ({ roomCode }: { roomCode: string }) => {
     delete rooms[roomCode];
+  };
+  MockRoomModel.countDocuments = async () => {
+    return Object.values(rooms).filter((r) => r.status === 'lobby' || r.status === 'playing')
+      .length;
   };
 
   return { RoomModel: MockRoomModel };
@@ -302,6 +306,37 @@ describe('roomHandlers', () => {
       expect(rooms[roomCode].host).toBe('player-2');
     });
 
+    it('skips bots when reassigning host', async () => {
+      // Replace player-2 with a bot, add a human player-3
+      rooms[roomCode].players = [
+        rooms[roomCode].players[0], // host
+        { id: 'bot-1', username: 'Luca', isBot: true },
+        { id: 'player-3', username: 'Carol' },
+      ];
+
+      const callback = vi.fn();
+      await emitEvent('leaveRoom', { roomCode, playerId: hostId }, callback);
+
+      expect(callback).toHaveBeenCalledWith({ success: true });
+      // Host should be player-3 (human), not bot-1
+      expect(rooms[roomCode].host).toBe('player-3');
+    });
+
+    it('deletes room when host leaves and only bots remain', async () => {
+      // Replace player-2 with a bot so only a bot remains after host leaves
+      rooms[roomCode].players = [
+        rooms[roomCode].players[0], // host
+        { id: 'bot-1', username: 'Luca', isBot: true },
+      ];
+
+      const callback = vi.fn();
+      await emitEvent('leaveRoom', { roomCode, playerId: hostId }, callback);
+
+      expect(callback).toHaveBeenCalledWith({ success: true });
+      // Room should be deleted since no human players remain
+      expect(rooms[roomCode]).toBeUndefined();
+    });
+
     it('deletes room when last player leaves', async () => {
       // Remove both players
       const cb1 = vi.fn();
@@ -453,17 +488,42 @@ describe('roomHandlers', () => {
       vi.useRealTimers();
     });
 
-    it('immediately removes player from lobby on disconnect', async () => {
-      // Player is in lobby (not playing) — should be removed immediately
+    it('starts grace period for lobby player on disconnect (60s)', async () => {
+      // Player is in lobby (not playing) — should get a 15s grace period
       rooms[roomCode].players.push({ id: 'player-2', username: 'Bob' });
 
       await emitEvent('disconnect');
 
-      // Host should have been removed
-      // The room should still exist with player-2
+      // Host should NOT be removed yet — grace period is active
       expect(rooms[roomCode]).toBeDefined();
+      expect(rooms[roomCode].players).toHaveLength(2);
+      expect(hasPendingDisconnect(hostId)).toBe(true);
+
+      // Notify other players
+      expect(mockIO.to).toHaveBeenCalledWith(roomCode);
+      expect(mockIO._toEmit).toHaveBeenCalledWith(
+        'playerDisconnected',
+        expect.objectContaining({
+          playerId: hostId,
+          username: 'Host',
+        }),
+      );
+    });
+
+    it('removes lobby player after lobby grace period expires (60s)', async () => {
+      rooms[roomCode].players.push({ id: 'player-2', username: 'Bob' });
+
+      await emitEvent('disconnect');
+
+      expect(rooms[roomCode].players).toHaveLength(2);
+
+      // Advance past the 60s lobby grace period
+      await vi.advanceTimersByTimeAsync(61000);
+
+      // Host should now be removed
       expect(rooms[roomCode].players).toHaveLength(1);
       expect(rooms[roomCode].players[0].id).toBe('player-2');
+      expect(hasPendingDisconnect(hostId)).toBe(false);
     });
 
     it('starts grace period for in-game player on disconnect', async () => {
@@ -679,6 +739,258 @@ describe('roomHandlers', () => {
       unregisterPlayer('socket-new');
     });
 
+    it('restores drawnCard and drawnFromDiscard on rejoin mid-draw', async () => {
+      // Set up in-game state where host has drawn a card from the deck
+      const drawnCard = { id: 'c1', rank: '7', suit: '♥', value: 7, isRed: true };
+      rooms[roomCode].status = 'playing';
+      rooms[roomCode].players.push({ id: 'player-2', username: 'Bob' });
+      rooms[roomCode].gameState = {
+        phase: 'playing',
+        players: [
+          {
+            playerId: hostId,
+            username: 'Host',
+            hand: [{ slot: 'A', card: { rank: '5', suit: '♥', value: 5 } }],
+            peekedSlots: ['C', 'D'],
+          },
+          {
+            playerId: 'player-2',
+            username: 'Bob',
+            hand: [{ slot: 'A', card: { rank: '3', suit: '♠', value: 3 } }],
+            peekedSlots: ['C', 'D'],
+          },
+        ],
+        deck: [],
+        discardPile: [],
+        currentTurnIndex: 0,
+        checkCalledBy: null,
+        roundNumber: 1,
+        scores: { [hostId]: 0, 'player-2': 0 },
+        turnStartedAt: null,
+        // Mid-draw state: host drew from deck
+        drawnCard,
+        drawnByPlayerId: hostId,
+        drawnSource: 'deck',
+      } as unknown as GameState;
+
+      // Simulate disconnect
+      await emitEvent('disconnect');
+      expect(hasPendingDisconnect(hostId)).toBe(true);
+      vi.clearAllMocks();
+
+      // Rejoin with a new socket
+      const newSocket = createMockSocket('socket-draw');
+      const newIO = createMockIO();
+      registerRoomHandlers(newIO as never, newSocket as never);
+
+      const callback = vi.fn();
+      await newSocket._handlers['rejoinRoom']({ playerId: hostId, roomCode }, callback);
+
+      expect(callback).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: true,
+          drawnCard: expect.objectContaining({ rank: '7', suit: '♥' }),
+          drawnFromDiscard: false,
+        }),
+      );
+
+      unregisterPlayer('socket-draw');
+    });
+
+    it('restores drawnCard with drawnFromDiscard=true when drawn from discard', async () => {
+      const drawnCard = { id: 'c2', rank: 'K', suit: '♦', value: 10, isRed: true };
+      rooms[roomCode].status = 'playing';
+      rooms[roomCode].players.push({ id: 'player-2', username: 'Bob' });
+      rooms[roomCode].gameState = {
+        phase: 'playing',
+        players: [
+          {
+            playerId: hostId,
+            username: 'Host',
+            hand: [{ slot: 'A', card: { rank: '5', suit: '♥', value: 5 } }],
+            peekedSlots: ['C', 'D'],
+          },
+          {
+            playerId: 'player-2',
+            username: 'Bob',
+            hand: [{ slot: 'A', card: { rank: '3', suit: '♠', value: 3 } }],
+            peekedSlots: ['C', 'D'],
+          },
+        ],
+        deck: [],
+        discardPile: [],
+        currentTurnIndex: 0,
+        checkCalledBy: null,
+        roundNumber: 1,
+        scores: { [hostId]: 0, 'player-2': 0 },
+        turnStartedAt: null,
+        drawnCard,
+        drawnByPlayerId: hostId,
+        drawnSource: 'discard',
+      } as unknown as GameState;
+
+      await emitEvent('disconnect');
+      vi.clearAllMocks();
+
+      const newSocket = createMockSocket('socket-discard');
+      const newIO = createMockIO();
+      registerRoomHandlers(newIO as never, newSocket as never);
+
+      const callback = vi.fn();
+      await newSocket._handlers['rejoinRoom']({ playerId: hostId, roomCode }, callback);
+
+      expect(callback).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: true,
+          drawnCard: expect.objectContaining({ rank: 'K', suit: '♦' }),
+          drawnFromDiscard: true,
+        }),
+      );
+
+      unregisterPlayer('socket-discard');
+    });
+
+    it('restores pendingEffect on rejoin mid-effect', async () => {
+      rooms[roomCode].status = 'playing';
+      rooms[roomCode].players.push({ id: 'player-2', username: 'Bob' });
+      rooms[roomCode].gameState = {
+        phase: 'playing',
+        players: [
+          {
+            playerId: hostId,
+            username: 'Host',
+            hand: [{ slot: 'A', card: { rank: 'J', suit: '♥', value: 10 } }],
+            peekedSlots: ['C', 'D'],
+          },
+          {
+            playerId: 'player-2',
+            username: 'Bob',
+            hand: [{ slot: 'A', card: { rank: '3', suit: '♠', value: 3 } }],
+            peekedSlots: ['C', 'D'],
+          },
+        ],
+        deck: [],
+        discardPile: [],
+        currentTurnIndex: 0,
+        checkCalledBy: null,
+        roundNumber: 1,
+        scores: { [hostId]: 0, 'player-2': 0 },
+        turnStartedAt: null,
+        // Pending Red Jack effect
+        pendingEffect: {
+          type: 'redJack',
+          playerId: hostId,
+        },
+      } as unknown as GameState;
+
+      await emitEvent('disconnect');
+      vi.clearAllMocks();
+
+      const newSocket = createMockSocket('socket-effect');
+      const newIO = createMockIO();
+      registerRoomHandlers(newIO as never, newSocket as never);
+
+      const callback = vi.fn();
+      await newSocket._handlers['rejoinRoom']({ playerId: hostId, roomCode }, callback);
+
+      expect(callback).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: true,
+          pendingEffect: expect.objectContaining({
+            effect: 'redJack',
+            playerId: hostId,
+          }),
+        }),
+      );
+
+      unregisterPlayer('socket-effect');
+    });
+
+    it('does not restore mid-turn state for a different player', async () => {
+      // drawnCard belongs to player-2, but host is rejoining
+      rooms[roomCode].status = 'playing';
+      rooms[roomCode].players.push({ id: 'player-2', username: 'Bob' });
+      rooms[roomCode].gameState = {
+        phase: 'playing',
+        players: [
+          {
+            playerId: hostId,
+            username: 'Host',
+            hand: [{ slot: 'A', card: { rank: '5', suit: '♥', value: 5 } }],
+            peekedSlots: ['C', 'D'],
+          },
+          {
+            playerId: 'player-2',
+            username: 'Bob',
+            hand: [{ slot: 'A', card: { rank: '3', suit: '♠', value: 3 } }],
+            peekedSlots: ['C', 'D'],
+          },
+        ],
+        deck: [],
+        discardPile: [],
+        currentTurnIndex: 1,
+        checkCalledBy: null,
+        roundNumber: 1,
+        scores: { [hostId]: 0, 'player-2': 0 },
+        turnStartedAt: null,
+        drawnCard: { id: 'c3', rank: '9', suit: '♣', value: 9, isRed: false },
+        drawnByPlayerId: 'player-2',
+        drawnSource: 'deck',
+        pendingEffect: {
+          type: 'redQueen',
+          playerId: 'player-2',
+        },
+      } as unknown as GameState;
+
+      await emitEvent('disconnect');
+      vi.clearAllMocks();
+
+      const newSocket = createMockSocket('socket-other');
+      const newIO = createMockIO();
+      registerRoomHandlers(newIO as never, newSocket as never);
+
+      const callback = vi.fn();
+      await newSocket._handlers['rejoinRoom']({ playerId: hostId, roomCode }, callback);
+
+      // drawnCard and pendingEffect should NOT be set for the host
+      const response = callback.mock.calls[0][0];
+      expect(response.success).toBe(true);
+      expect(response.drawnCard).toBeNull();
+      expect(response.pendingEffect).toBeNull();
+
+      unregisterPlayer('socket-other');
+    });
+
+    it('successfully rejoins lobby during lobby grace period', async () => {
+      // Host disconnects from lobby (15s grace period applies)
+      await emitEvent('disconnect');
+      expect(hasPendingDisconnect(hostId)).toBe(true);
+      vi.clearAllMocks();
+
+      // Rejoin within the 15s window
+      const newSocket = createMockSocket('socket-lobby');
+      const newIO = createMockIO();
+      registerRoomHandlers(newIO as never, newSocket as never);
+
+      const callback = vi.fn();
+      await newSocket._handlers['rejoinRoom']({ playerId: hostId, roomCode }, callback);
+
+      expect(callback).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: true,
+          room: expect.objectContaining({
+            roomCode,
+            status: 'lobby',
+          }),
+        }),
+      );
+
+      // Grace period should be cancelled
+      expect(hasPendingDisconnect(hostId)).toBe(false);
+
+      unregisterPlayer('socket-lobby');
+    });
+
     it('rejects rejoin with missing playerId', async () => {
       const callback = vi.fn();
       await emitEvent('rejoinRoom', { playerId: '', roomCode }, callback);
@@ -688,6 +1000,86 @@ describe('roomHandlers', () => {
           success: false,
           error: 'Missing player ID',
         }),
+      );
+    });
+  });
+
+  // ----------------------------------------------------------
+  // kickPlayer (F-203/F-306)
+  // ----------------------------------------------------------
+  describe('kickPlayer', () => {
+    let roomCode: string;
+    let hostId: string;
+    let guestId: string;
+
+    beforeEach(async () => {
+      const createCb = vi.fn();
+      await emitEvent('createRoom', { username: 'Host' }, createCb);
+      roomCode = createCb.mock.calls[0][0].roomCode;
+      hostId = createCb.mock.calls[0][0].playerId;
+
+      // Add a second player
+      const joinSocket = createMockSocket('socket-2');
+      const joinIO = createMockIO();
+      registerRoomHandlers(joinIO as never, joinSocket as never);
+      const joinCb = vi.fn();
+      await joinSocket._handlers['joinRoom']({ roomCode, username: 'Guest' }, joinCb);
+      guestId = joinCb.mock.calls[0][0].playerId;
+    });
+
+    it('host can kick another player in the lobby', async () => {
+      const callback = vi.fn();
+      await emitEvent('kickPlayer', { roomCode, hostId, targetPlayerId: guestId }, callback);
+
+      expect(callback).toHaveBeenCalledWith({ success: true });
+      const room = rooms[roomCode];
+      expect(room.players.find((p) => p.id === guestId)).toBeUndefined();
+    });
+
+    it('non-host cannot kick', async () => {
+      const callback = vi.fn();
+      await emitEvent(
+        'kickPlayer',
+        { roomCode, hostId: guestId, targetPlayerId: hostId },
+        callback,
+      );
+
+      expect(callback).toHaveBeenCalledWith(
+        expect.objectContaining({ success: false, error: 'Only the host can kick players' }),
+      );
+    });
+
+    it('host cannot kick themselves', async () => {
+      const callback = vi.fn();
+      await emitEvent('kickPlayer', { roomCode, hostId, targetPlayerId: hostId }, callback);
+
+      expect(callback).toHaveBeenCalledWith(
+        expect.objectContaining({ success: false, error: 'Host cannot kick themselves' }),
+      );
+    });
+
+    it('returns error for non-existent player', async () => {
+      const callback = vi.fn();
+      await emitEvent(
+        'kickPlayer',
+        { roomCode, hostId, targetPlayerId: 'nonexistent-player' },
+        callback,
+      );
+
+      expect(callback).toHaveBeenCalledWith(
+        expect.objectContaining({ success: false, error: 'Player not found in room' }),
+      );
+    });
+
+    it('cannot kick during a game', async () => {
+      // Set room status to playing
+      rooms[roomCode].status = 'playing';
+
+      const callback = vi.fn();
+      await emitEvent('kickPlayer', { roomCode, hostId, targetPlayerId: guestId }, callback);
+
+      expect(callback).toHaveBeenCalledWith(
+        expect.objectContaining({ success: false, error: 'Can only kick players in the lobby' }),
       );
     });
   });

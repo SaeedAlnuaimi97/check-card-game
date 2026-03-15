@@ -26,6 +26,8 @@ export interface ClientGameState {
   paused: boolean;
   /** Player ID of who triggered the pause (F-271) */
   pausedBy: string | null;
+  /** Custom score threshold at which the game ends (F-310). Defaults to 70. */
+  targetScore: number;
 }
 
 // ============================================================
@@ -37,6 +39,10 @@ export type RoomStatus = 'lobby' | 'playing' | 'finished';
 export interface RoomPlayer {
   id: string;
   username: string;
+  /** True if this slot is a bot player (F-300) */
+  isBot?: boolean;
+  /** Bot difficulty level (F-301) */
+  botDifficulty?: 'easy' | 'expert';
 }
 
 export interface RoomData {

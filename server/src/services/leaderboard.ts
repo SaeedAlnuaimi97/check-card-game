@@ -53,7 +53,7 @@ export async function getLeaderboard(limit: number): Promise<LeaderboardEntry[]>
 
   const pipeline = [
     { $unwind: '$players' as const },
-    { $match: { 'players.guestId': { $nin: blocklist } } },
+    { $match: { 'players.guestId': { $nin: [...blocklist, 'bot', 'unknown'] } } },
     {
       $group: {
         _id: '$players.guestId',
