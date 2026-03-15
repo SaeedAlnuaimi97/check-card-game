@@ -16,14 +16,21 @@ import {
   useToast,
   VStack,
 } from '@chakra-ui/react';
-import { CopyOutlined, ShareAltOutlined, CloseOutlined, RobotOutlined } from '@ant-design/icons';
+import {
+  CopyOutlined,
+  ShareAltOutlined,
+  CloseOutlined,
+  RobotOutlined,
+  CheckOutlined,
+} from '@ant-design/icons';
 import { useSocket } from '../context/SocketContext';
 
 const MIN_PLAYERS = 2;
 const MAX_PLAYERS = 6;
 
 export const RoomLobby: FC = () => {
-  const { playerId, roomData, leaveRoom, startGame, kickPlayer, addBot, removeBot } = useSocket();
+  const { playerId, roomData, leaveRoom, startGame, kickPlayer, addBot, removeBot, toggleReady } =
+    useSocket();
   const navigate = useNavigate();
   const toast = useToast();
   const { onCopy, hasCopied } = useClipboard(roomData?.roomCode ?? '');
@@ -40,7 +47,10 @@ export const RoomLobby: FC = () => {
   if (!roomData || !playerId) return null;
 
   const isHost = roomData.host === playerId;
-  const canStart = isHost && roomData.players.length >= MIN_PLAYERS;
+  const allPlayersReady = roomData.players.every(
+    (p) => p.isBot || p.id === roomData.host || p.isReady,
+  );
+  const canStart = isHost && roomData.players.length >= MIN_PLAYERS && allPlayersReady;
   const playerSlots = Array.from({ length: MAX_PLAYERS }, (_, i) => roomData.players[i] ?? null);
 
   const handleLeave = () => {
@@ -223,7 +233,15 @@ export const RoomLobby: FC = () => {
                     w={3}
                     h={3}
                     borderRadius="full"
-                    bg={player ? (player.isBot ? 'purple.400' : 'green.400') : 'gray.600'}
+                    bg={
+                      player
+                        ? player.isBot
+                          ? 'purple.400'
+                          : player.isReady || player.id === roomData.host
+                            ? 'green.400'
+                            : 'yellow.400'
+                        : 'gray.600'
+                    }
                   />
                   <Text
                     fontWeight={player ? 'medium' : 'normal'}
@@ -242,6 +260,15 @@ export const RoomLobby: FC = () => {
                   {player && player.isBot && (
                     <Badge colorScheme="purple" fontSize="xs">
                       {player.botDifficulty ?? 'bot'}
+                    </Badge>
+                  )}
+                  {player && !player.isBot && player.id !== roomData.host && (
+                    <Badge
+                      colorScheme={player.isReady ? 'green' : 'gray'}
+                      fontSize="xs"
+                      variant={player.isReady ? 'solid' : 'outline'}
+                    >
+                      {player.isReady ? 'Ready' : 'Not Ready'}
                     </Badge>
                   )}
                   {player && player.id === playerId && (
@@ -360,17 +387,47 @@ export const RoomLobby: FC = () => {
                 onClick={handleStart}
                 isDisabled={!canStart}
               >
-                {canStart
-                  ? 'Start Game'
-                  : `Need ${MIN_PLAYERS - roomData.players.length} more player${MIN_PLAYERS - roomData.players.length !== 1 ? 's' : ''}`}
+                {roomData.players.length < MIN_PLAYERS
+                  ? `Need ${MIN_PLAYERS - roomData.players.length} more player${MIN_PLAYERS - roomData.players.length !== 1 ? 's' : ''}`
+                  : !allPlayersReady
+                    ? 'Waiting for players to ready up...'
+                    : 'Start Game'}
               </Button>
             </>
           )}
 
           {!isHost && (
-            <Text fontSize="sm" color="gray.500" textAlign="center">
-              Waiting for host to start the game...
-            </Text>
+            <>
+              <Button
+                colorScheme={
+                  roomData.players.find((p) => p.id === playerId)?.isReady ? 'green' : 'yellow'
+                }
+                size="lg"
+                w="100%"
+                leftIcon={
+                  roomData.players.find((p) => p.id === playerId)?.isReady ? (
+                    <CheckOutlined />
+                  ) : undefined
+                }
+                onClick={async () => {
+                  const result = await toggleReady();
+                  if (!result.success) {
+                    toast({
+                      title: 'Error',
+                      description: result.error,
+                      status: 'error',
+                      duration: 2000,
+                      position: 'top',
+                    });
+                  }
+                }}
+              >
+                {roomData.players.find((p) => p.id === playerId)?.isReady ? 'Ready!' : 'Ready Up'}
+              </Button>
+              <Text fontSize="sm" color="gray.500" textAlign="center">
+                Waiting for host to start the game...
+              </Text>
+            </>
           )}
 
           <Button variant="outline" colorScheme="red" size="md" w="100%" onClick={handleLeave}>

@@ -194,16 +194,19 @@ export function removePlayerFromGame(gameState: GameState, playerId: string): Re
     gameState.checkCalledAtIndex = null;
   }
 
-  // 4. Remove the player from the array
+  // 4. Remove the player's stale score entry
+  delete gameState.scores[playerId];
+
+  // 5. Remove the player from the array
   gameState.players.splice(playerIndex, 1);
 
-  // 5. Check if game should end
+  // 6. Check if game should end
   if (gameState.players.length < 2) {
     gameState.phase = 'roundEnd';
     return { removed: true, turnChanged: false, gameEnded: true, username: player.username };
   }
 
-  // 6. Fix currentTurnIndex
+  // 7. Fix currentTurnIndex
   let turnChanged = false;
   if (wasCurrentTurn) {
     // The removed player had the turn — the next player (now at the same index) gets it

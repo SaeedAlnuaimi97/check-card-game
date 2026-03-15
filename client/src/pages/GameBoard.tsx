@@ -39,6 +39,7 @@ import {
   EyeOutlined,
   FireOutlined,
   CheckCircleOutlined,
+  CloseOutlined,
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { useSocket } from '../context/SocketContext';
@@ -53,6 +54,7 @@ import {
   playSwapSound,
   playWinSound,
   playTurnSound,
+  playGameStartingSound,
 } from '../utils/sound';
 import { vibrateTap, vibrateSuccess, vibrateWarning } from '../utils/haptics';
 import type { Card as CardType } from '../types/card.types';
@@ -266,6 +268,7 @@ export const GameBoard: FC = () => {
     roundEndData,
     gameEndData,
     modifiedSlots,
+    nextRoundStartsAt,
     endPeek,
     callCheck,
     performAction,
@@ -274,9 +277,10 @@ export const GameBoard: FC = () => {
     redQueenPeek,
     redKingChoice,
     leaveRoom,
+    kickPlayer,
     debugPeek,
-    startNextRound,
     endGame,
+    startNextRound,
     pauseGame,
     resumeGame,
     clearRoundEndData,
@@ -317,6 +321,10 @@ export const GameBoard: FC = () => {
 
   // Red card flash state (UI-006)
   const [showRedFlash, setShowRedFlash] = useState(false);
+
+  // Round countdown timer state (seconds remaining before next round auto-starts)
+  const [roundCountdown, setRoundCountdown] = useState<number | null>(null);
+  const roundCountdownSoundPlayedRef = useRef(false);
 
   // Long-press state for discard pile take (2 second hold required)
   const [discardLongPressProgress, setDiscardLongPressProgress] = useState(0);
@@ -363,6 +371,29 @@ export const GameBoard: FC = () => {
       playTurnSound();
     }
   }, [isMyTurn, gameState?.phase]);
+
+  // Round countdown timer — ticks down seconds until next round auto-starts
+  useEffect(() => {
+    if (nextRoundStartsAt == null) {
+      setRoundCountdown(null);
+      roundCountdownSoundPlayedRef.current = false;
+      return;
+    }
+
+    // Play game-starting audio once when countdown begins
+    if (!roundCountdownSoundPlayedRef.current) {
+      roundCountdownSoundPlayedRef.current = true;
+      playGameStartingSound();
+    }
+
+    const tick = () => {
+      const remaining = Math.max(0, Math.ceil((nextRoundStartsAt - Date.now()) / 1000));
+      setRoundCountdown(remaining);
+    };
+    tick();
+    const interval = setInterval(tick, 200);
+    return () => clearInterval(interval);
+  }, [nextRoundStartsAt]);
 
   const toggleDebugRevealAll = useCallback(async () => {
     if (!DEBUG_MODE || !gameState) return;
@@ -1189,6 +1220,54 @@ export const GameBoard: FC = () => {
               </Button>
 
               <Divider borderColor="gray.700" />
+
+              {/* Manage Players — host-only, in-game kick (F-365) */}
+              {roomData?.host === playerId &&
+                gameState.players.filter((p) => p.playerId !== playerId).length > 0 && (
+                  <>
+                    <Text
+                      fontSize="xs"
+                      color="gray.500"
+                      fontWeight="bold"
+                      textTransform="uppercase"
+                      letterSpacing="wider"
+                    >
+                      Players
+                    </Text>
+                    <VStack spacing={1} align="stretch">
+                      {gameState.players
+                        .filter((p) => p.playerId !== playerId)
+                        .map((p) => (
+                          <HStack key={p.playerId} justify="space-between" px={2} py={1}>
+                            <Text fontSize="sm" color="gray.200">
+                              {p.username}
+                              {p.isBot ? ' (Bot)' : ''}
+                            </Text>
+                            <IconButton
+                              aria-label={`Kick ${p.username}`}
+                              size="xs"
+                              variant="ghost"
+                              colorScheme="red"
+                              icon={<CloseOutlined />}
+                              onClick={async () => {
+                                onMenuClose();
+                                const result = await kickPlayer(p.playerId);
+                                toast({
+                                  title: result.success
+                                    ? `${p.username} was removed`
+                                    : (result.error ?? 'Failed to kick player'),
+                                  status: result.success ? 'info' : 'error',
+                                  duration: 2500,
+                                  position: 'top',
+                                });
+                              }}
+                            />
+                          </HStack>
+                        ))}
+                    </VStack>
+                    <Divider borderColor="gray.700" />
+                  </>
+                )}
 
               {/* Exit */}
               <Button
@@ -2291,20 +2370,30 @@ export const GameBoard: FC = () => {
           </ModalBody>
           <ModalFooter justifyContent="center">
             {roundEndData?.nextRoundStarting ? (
-              roomData?.host === playerId ? (
-                <HStack spacing={3}>
-                  <Button colorScheme="green" onClick={() => startNextRound()}>
+              <VStack spacing={2}>
+                {roundCountdown != null && roundCountdown > 0 ? (
+                  <Text fontSize="md" fontWeight="bold" color="brand.300">
+                    Next round in {roundCountdown}s...
+                  </Text>
+                ) : roundCountdown === 0 ? (
+                  <Text fontSize="md" fontWeight="bold" color="green.300">
+                    Starting...
+                  </Text>
+                ) : roomData?.host === playerId ? (
+                  <Button colorScheme="green" size="sm" onClick={() => startNextRound()}>
                     Next Round
                   </Button>
-                  <Button colorScheme="red" variant="outline" onClick={() => endGame()}>
+                ) : (
+                  <Text fontSize="sm" color="gray.400">
+                    Waiting for host to start next round...
+                  </Text>
+                )}
+                {roomData?.host === playerId && roundCountdown != null && roundCountdown > 0 && (
+                  <Button colorScheme="red" variant="outline" size="sm" onClick={() => endGame()}>
                     End Game
                   </Button>
-                </HStack>
-              ) : (
-                <Text fontSize="xs" color="gray.500">
-                  Waiting for host to start next round...
-                </Text>
-              )
+                )}
+              </VStack>
             ) : (
               <Text fontSize="xs" color="gray.500">
                 Game over!

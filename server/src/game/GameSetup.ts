@@ -170,6 +170,68 @@ export function initializeGameState(
 }
 
 // ============================================================
+// F-364: Add Player to Active Game (Mid-Game Join)
+// ============================================================
+
+/**
+ * Adds a new player to an active game. The new player:
+ * 1. Is dealt 4 cards (slots A-D) from the current deck.
+ * 2. Receives the highest current score among existing players.
+ * 3. Gets peek slots C and D (same as initial game setup).
+ * 4. Is appended to the end of the players array (doesn't disrupt turn order).
+ *
+ * Mutates the gameState in place.
+ *
+ * @returns The newly created PlayerState, or null if cards couldn't be dealt.
+ */
+export function addPlayerToActiveGame(
+  gameState: GameState,
+  playerInfo: {
+    id: string;
+    username: string;
+    isBot?: boolean;
+    botDifficulty?: BotDifficulty;
+  },
+): PlayerState | null {
+  // Compute the highest current score among existing players
+  const highestScore = Math.max(0, ...Object.values(gameState.scores));
+
+  // Create the new player state
+  const newPlayer: PlayerState = {
+    playerId: playerInfo.id,
+    username: playerInfo.username,
+    hand: [],
+    peekedSlots: [],
+    totalScore: highestScore,
+    ...(playerInfo.isBot
+      ? { isBot: true, botDifficulty: playerInfo.botDifficulty ?? 'easy' }
+      : {}),
+  };
+
+  // Deal 4 cards to the new player
+  for (let i = 0; i < CARDS_PER_PLAYER; i++) {
+    const card = drawFromDeck(gameState);
+    if (!card) {
+      // Not enough cards — cannot add player
+      return null;
+    }
+    newPlayer.hand.push({
+      slot: INITIAL_SLOTS[i],
+      card,
+    });
+  }
+
+  // Set peek slots (same as initial game setup)
+  newPlayer.peekedSlots = selectInitialPeekSlots(newPlayer);
+
+  // Add the player to the game state
+  gameState.players.push(newPlayer);
+  gameState.scores[playerInfo.id] = highestScore;
+
+  return newPlayer;
+}
+
+// ============================================================
 // Sanitize Game State for Client (F-014, F-015, F-030)
 // ============================================================
 
