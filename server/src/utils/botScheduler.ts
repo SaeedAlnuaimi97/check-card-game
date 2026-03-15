@@ -55,6 +55,8 @@ function emitYourTurnFromBot(io: SocketIOServer, roomCode: string, gameState: Ga
 
   gameState.turnStartedAt = Date.now();
 
+  const currentPlayer = gameState.players.find((p) => p.playerId === turnPlayerId);
+
   const socketId = getSocketByPlayer(turnPlayerId);
   if (socketId) {
     io.to(socketId).emit('yourTurn', {
@@ -69,14 +71,17 @@ function emitYourTurnFromBot(io: SocketIOServer, roomCode: string, gameState: Ga
   // timers from a prior human turn firing during a bot transition.
   clearTurnTimer(roomCode);
 
-  // Start a safety turn timer. For bots, this acts as a fallback in
-  // case executeBotTurn gets stuck. For humans, this ensures they get
-  // timed out if they don't act within 30 seconds.
-  startTurnTimer(roomCode, (rc) => {
-    handleBotTurnTimeout(io, rc).catch((err) => {
-      console.error(`Room ${rc}: Turn timeout handler error:`, err);
+  // Start a safety turn timer. This acts as a fallback in case a bot
+  // gets stuck or a human doesn't act within 30 seconds.
+  // Only start the timer for non-bot players (bot turns are managed
+  // by scheduleBotTurnIfNeeded which has its own scheduling).
+  if (!currentPlayer?.isBot) {
+    startTurnTimer(roomCode, (rc) => {
+      handleBotTurnTimeout(io, rc).catch((err) => {
+        console.error(`Room ${rc}: Turn timeout handler error:`, err);
+      });
     });
-  });
+  }
 }
 
 /**
@@ -95,7 +100,7 @@ async function handleBotTurnTimeout(io: SocketIOServer, roomCode: string): Promi
     const timedOutPlayer = gameState.players[gameState.currentTurnIndex];
     if (!timedOutPlayer) return;
 
-    console.log(`Room ${roomCode}: Bot ${timedOutPlayer.username} turn timed out — auto-advancing`);
+    console.log(`Room ${roomCode}: ${timedOutPlayer.username} turn timed out — auto-advancing`);
 
     // If the bot has a pending drawn card, discard it
     if (gameState.drawnCard && gameState.drawnByPlayerId === timedOutPlayer.playerId) {

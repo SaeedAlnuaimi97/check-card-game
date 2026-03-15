@@ -291,11 +291,11 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
       console.log('Game state updated, phase:', data.phase);
       setGameState(data);
 
-      // Determine if it's still this player's turn based on game state
+      // Determine if it's this player's turn based on game state
       const currentTurnPlayer = data.players[data.currentTurnIndex];
-      const stillMyTurn = currentTurnPlayer?.playerId === playerIdRef.current;
+      const isMyTurnNow = currentTurnPlayer?.playerId === playerIdRef.current;
 
-      if (!stillMyTurn) {
+      if (!isMyTurnNow) {
         // Turn has changed to another player — clear turn state
         setIsMyTurn(false);
         setTurnData(null);
@@ -318,7 +318,10 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
       }
     });
 
-    socket.on('cardDrawn', (data: { card: Card; fromDiscard?: boolean }) => {
+    socket.on('cardDrawn', (data: { card?: Card; fromDiscard?: boolean; playerId?: string }) => {
+      // Ignore bot broadcasts that carry no card (only a playerId).
+      // Only set drawnCard when the server sends an actual card object for us.
+      if (!data.card) return;
       console.log('Card drawn:', data.card, data.fromDiscard ? '(from discard)' : '(from deck)');
       setDrawnCard(data.card);
       setDrawnFromDiscard(data.fromDiscard === true);

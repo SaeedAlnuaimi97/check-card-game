@@ -329,13 +329,11 @@ Derived from PLAN.md. Features are grouped by domain and ordered by implementati
 - [ ] **F-304**: Player profiles and avatar selection
 - [x] **F-305**: Room expiration (24 hours)
 - [x] **F-306**: Host can kick players
-- [ ] **F-307**: Spectator mode
 - [x] **F-308**: Card draw/discard/flip animations
 - [x] **F-309**: Victory animations
 - [x] **F-310**: Custom target scores (configurable game end threshold)
 - [ ] **F-311**: Tournament mode
 - [ ] **F-312**: Friend system and direct invites
-- [ ] **F-313**: Game replay viewer
 
 ### Bot Enhancements
 
@@ -363,12 +361,14 @@ Derived from PLAN.md. Features are grouped by domain and ordered by implementati
 - [x] **F-347**: Fix bot turns silently failing — inverted validatePlayerTurn check in botScheduler caused all bot actions to exit immediately
 - [x] **F-348**: Fix stale human turn timer firing for bot turns — clearTurnTimer called before bot guard in emitYourTurn to prevent old timers from timing out bots
 - [x] **F-349**: Fix emitYourTurnFromBot timer cleanup — clear previous timer before starting safety timer for next player's turn
+- [x] **F-350**: Fix human turn unresponsive after bot plays — bot cardDrawn broadcast set drawnCard to undefined on human client, blocking all actions until page refresh
+- [x] **F-351**: Fix emitYourTurnFromBot timer for human players — only start 30s turn timer when next player is human, not for bots (bots use scheduleBotTurnIfNeeded)
 
 ---
 
 **Total MVP Features:** 112  
 **Total Phase 2 Features:** 54  
 **UX Improvements:** 6  
-**Bot, Bug Fixes & Stability:** 18  
-**Document Version:** 1.6  
+**Bot, Bug Fixes & Stability:** 20  
+**Document Version:** 1.7  
 **Last Updated:** 2026-03-15
