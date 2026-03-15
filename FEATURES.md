@@ -364,6 +364,7 @@ Derived from PLAN.md. Features are grouped by domain and ordered by implementati
 - [x] **F-349**: Fix emitYourTurnFromBot timer cleanup — clear previous timer before starting safety timer for next player's turn
 - [x] **F-350**: Fix human turn unresponsive after bot plays — bot cardDrawn broadcast set drawnCard to undefined on human client, blocking all actions until page refresh
 - [x] **F-351**: Fix emitYourTurnFromBot timer for human players — only start 30s turn timer when next player is human, not for bots (bots use scheduleBotTurnIfNeeded)
+- [x] **F-352**: Fix stale score on player removal — removePlayerFromGame now deletes removed player's entry from gameState.scores to prevent phantom game-end triggers
 
 ### Notification System
 
@@ -401,7 +402,7 @@ Derived from PLAN.md. Features are grouped by domain and ordered by implementati
 **Total MVP Features:** 112  
 **Total Phase 2 Features:** 54  
 **UX Improvements:** 6  
-**Bot, Bug Fixes & Stability:** 21  
+**Bot, Bug Fixes & Stability:** 22  
 **Notifications:** 2  
 **Tablet Optimization:** 3  
 **Player Profiles & Social:** 2  

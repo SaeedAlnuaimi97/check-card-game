@@ -442,6 +442,27 @@ describe('removePlayerFromGame', () => {
 
     expect(result.username).toBe(username);
   });
+
+  it('deletes the removed player score from gameState.scores to prevent stale game-end triggers', () => {
+    const gs = createPlayingGameState(4);
+    const removedPlayerId = gs.players[2].playerId;
+    // Give the removed player a high score that would trigger game end
+    gs.scores[removedPlayerId] = 85;
+    // Give other players low scores
+    gs.scores[gs.players[0].playerId] = 10;
+    gs.scores[gs.players[1].playerId] = 15;
+    gs.scores[gs.players[3].playerId] = 20;
+
+    removePlayerFromGame(gs, removedPlayerId);
+
+    // The removed player's score should be deleted entirely
+    expect(gs.scores[removedPlayerId]).toBeUndefined();
+    expect(Object.keys(gs.scores)).toHaveLength(3);
+    // Remaining scores should be untouched
+    expect(gs.scores[gs.players[0].playerId]).toBe(10);
+    expect(gs.scores[gs.players[1].playerId]).toBe(15);
+    expect(gs.scores[gs.players[2].playerId]).toBe(20); // was index 3, now index 2 after splice
+  });
 });
 
 // ============================================================
