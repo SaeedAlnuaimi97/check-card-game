@@ -113,6 +113,8 @@ export interface RoomPlayer {
   isBot?: boolean;
   /** Bot difficulty level (F-301) */
   botDifficulty?: BotDifficulty;
+  /** Whether this player is ready in the lobby (bots are always ready) */
+  isReady?: boolean;
 }
 
 export interface Room {

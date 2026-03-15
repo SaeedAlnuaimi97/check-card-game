@@ -586,3 +586,173 @@ describe('sanitizeGameState', () => {
     expect(client.pausedBy).toBeNull();
   });
 });
+
+// ============================================================
+// addPlayerToActiveGame (F-364: Mid-Game Join)
+// ============================================================
+
+import { addPlayerToActiveGame } from '../game/GameSetup';
+
+describe('addPlayerToActiveGame', () => {
+  function createGameWithDeck(deckSize: number): GameState {
+    const deck: Card[] = [];
+    for (let i = 0; i < deckSize; i++) {
+      deck.push(makeCard(`deck-${i}`, '5', '♠'));
+    }
+
+    const p1 = createTestPlayer('p1', 'Alice', [
+      makeCard('a1'),
+      makeCard('a2'),
+      makeCard('a3'),
+      makeCard('a4'),
+    ]);
+    p1.totalScore = 10;
+
+    const p2 = createTestPlayer('p2', 'Bob', [
+      makeCard('b1'),
+      makeCard('b2'),
+      makeCard('b3'),
+      makeCard('b4'),
+    ]);
+    p2.totalScore = 25;
+
+    return createTestGameState({
+      deck,
+      players: [p1, p2],
+      scores: { p1: 10, p2: 25 },
+      phase: 'playing',
+      currentTurnIndex: 0,
+    });
+  }
+
+  it('deals 4 cards to the new player with slots A-D', () => {
+    const gs = createGameWithDeck(10);
+    const result = addPlayerToActiveGame(gs, { id: 'p3', username: 'Carol' });
+
+    expect(result).not.toBeNull();
+    expect(result!.hand).toHaveLength(4);
+    expect(result!.hand.map((h) => h.slot)).toEqual(['A', 'B', 'C', 'D']);
+  });
+
+  it('assigns the highest current score among existing players', () => {
+    const gs = createGameWithDeck(10);
+    // p1 has 10, p2 has 25 — new player should get 25
+    const result = addPlayerToActiveGame(gs, { id: 'p3', username: 'Carol' });
+
+    expect(result).not.toBeNull();
+    expect(result!.totalScore).toBe(25);
+    expect(gs.scores['p3']).toBe(25);
+  });
+
+  it('assigns score 0 when all existing players have score 0', () => {
+    const gs = createGameWithDeck(10);
+    gs.scores = { p1: 0, p2: 0 };
+    gs.players[0].totalScore = 0;
+    gs.players[1].totalScore = 0;
+
+    const result = addPlayerToActiveGame(gs, { id: 'p3', username: 'Carol' });
+
+    expect(result).not.toBeNull();
+    expect(result!.totalScore).toBe(0);
+    expect(gs.scores['p3']).toBe(0);
+  });
+
+  it('sets peek slots C and D', () => {
+    const gs = createGameWithDeck(10);
+    const result = addPlayerToActiveGame(gs, { id: 'p3', username: 'Carol' });
+
+    expect(result).not.toBeNull();
+    expect(result!.peekedSlots.sort()).toEqual(['C', 'D']);
+  });
+
+  it('appends the new player to the end of the players array', () => {
+    const gs = createGameWithDeck(10);
+    expect(gs.players).toHaveLength(2);
+
+    addPlayerToActiveGame(gs, { id: 'p3', username: 'Carol' });
+
+    expect(gs.players).toHaveLength(3);
+    expect(gs.players[2].playerId).toBe('p3');
+    expect(gs.players[2].username).toBe('Carol');
+  });
+
+  it('does not change currentTurnIndex when appending to end', () => {
+    const gs = createGameWithDeck(10);
+    gs.currentTurnIndex = 1;
+
+    addPlayerToActiveGame(gs, { id: 'p3', username: 'Carol' });
+
+    expect(gs.currentTurnIndex).toBe(1);
+  });
+
+  it('removes dealt cards from the deck', () => {
+    const gs = createGameWithDeck(10);
+    const originalDeckSize = gs.deck.length;
+
+    addPlayerToActiveGame(gs, { id: 'p3', username: 'Carol' });
+
+    expect(gs.deck).toHaveLength(originalDeckSize - 4);
+  });
+
+  it('updates gameState.scores with the new player entry', () => {
+    const gs = createGameWithDeck(10);
+    expect(gs.scores['p3']).toBeUndefined();
+
+    addPlayerToActiveGame(gs, { id: 'p3', username: 'Carol' });
+
+    expect(gs.scores['p3']).toBeDefined();
+    expect(gs.scores['p3']).toBe(25);
+  });
+
+  it('returns null when deck has fewer than 4 cards', () => {
+    const gs = createGameWithDeck(3); // Only 3 cards — not enough for 4
+    const result = addPlayerToActiveGame(gs, { id: 'p3', username: 'Carol' });
+
+    expect(result).toBeNull();
+    // Player should NOT have been added to the game state
+    expect(gs.players).toHaveLength(2);
+  });
+
+  it('returns null when deck is empty', () => {
+    const gs = createGameWithDeck(0);
+    const result = addPlayerToActiveGame(gs, { id: 'p3', username: 'Carol' });
+
+    expect(result).toBeNull();
+  });
+
+  it('preserves existing players when adding a new one', () => {
+    const gs = createGameWithDeck(10);
+
+    addPlayerToActiveGame(gs, { id: 'p3', username: 'Carol' });
+
+    expect(gs.players[0].playerId).toBe('p1');
+    expect(gs.players[1].playerId).toBe('p2');
+    expect(gs.players[0].hand).toHaveLength(4);
+    expect(gs.players[1].hand).toHaveLength(4);
+  });
+
+  it('handles bot players correctly', () => {
+    const gs = createGameWithDeck(10);
+    const result = addPlayerToActiveGame(gs, {
+      id: 'bot1',
+      username: 'BotPlayer',
+      isBot: true,
+      botDifficulty: 'expert',
+    });
+
+    expect(result).not.toBeNull();
+    expect(result!.isBot).toBe(true);
+    expect(result!.botDifficulty).toBe('expert');
+  });
+
+  it('deals cards from the top of the deck', () => {
+    const gs = createGameWithDeck(10);
+    const topCardIds = gs.deck.slice(0, 4).map((c) => c.id);
+
+    const result = addPlayerToActiveGame(gs, { id: 'p3', username: 'Carol' });
+
+    expect(result).not.toBeNull();
+    const dealtIds = result!.hand.map((h) => h.card.id);
+    expect(dealtIds).toEqual(topCardIds);
+  });
+});

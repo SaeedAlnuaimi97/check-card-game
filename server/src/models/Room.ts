@@ -93,6 +93,7 @@ const RoomPlayerSchema = new Schema(
     guestId: { type: String, default: undefined },
     isBot: { type: Boolean, default: undefined },
     botDifficulty: { type: String, enum: ['easy', 'expert'], default: undefined },
+    isReady: { type: Boolean, default: undefined },
   },
   { _id: false },
 );
@@ -106,6 +107,7 @@ export interface RoomDocument extends Document {
     guestId?: string;
     isBot?: boolean;
     botDifficulty?: string;
+    isReady?: boolean;
   }[];
   gameState: GameState | null;
   status: RoomStatus;

@@ -18,6 +18,9 @@ winAudio.preload = 'auto';
 const turnAudio = new Audio('/player-turn.mp3');
 turnAudio.preload = 'auto';
 
+const gameStartingAudio = new Audio('/game-starting.mp3');
+gameStartingAudio.preload = 'auto';
+
 /**
  * Play a cloned audio node at given volume.
  * Non-blocking — errors are silently ignored (e.g. browser autoplay policy).
@@ -63,4 +66,11 @@ export function playWinSound(): void {
  */
 export function playTurnSound(): void {
   playClone(turnAudio, 0.6);
+}
+
+/**
+ * Play the game-starting countdown sound effect (between rounds).
+ */
+export function playGameStartingSound(): void {
+  playClone(gameStartingAudio, 0.6);
 }

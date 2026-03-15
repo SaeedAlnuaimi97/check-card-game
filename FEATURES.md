@@ -326,14 +326,14 @@ Derived from PLAN.md. Features are grouped by domain and ordered by implementati
 - [x] **F-301**: Bot difficulty levels
 - [ ] **F-302**: User accounts — email/password registration
 - [ ] **F-303**: Guest-to-registered account migration
-- [ ] **F-304**: Player profiles and avatar selection
+- [x] **F-304**: Player profiles and avatar selection — avatar picker on home page, persist in GuestProfile, display in lobby/game/leaderboard
 - [x] **F-305**: Room expiration (24 hours)
 - [x] **F-306**: Host can kick players
 - [x] **F-308**: Card draw/discard/flip animations
 - [x] **F-309**: Victory animations
 - [x] **F-310**: Custom target scores (configurable game end threshold)
-- [ ] **F-311**: Tournament mode
-- [ ] **F-312**: Friend system and direct invites
+- [ ] **F-311**: Tournament mode — bracket/round-robin tournament system with lobby, progression tracking, and bracket display
+- [ ] **F-312**: Friend system and direct invites — friend list, friend requests, direct game invites via socket
 
 ### Bot Enhancements
 
@@ -348,6 +348,7 @@ Derived from PLAN.md. Features are grouped by domain and ordered by implementati
 - [x] **F-319**: Fix game stuck on bot timeout — proper timeout handling for pending draws/effects
 - [x] **F-330**: Fix green glow effect clipping on current player's hand cards
 - [x] **F-331**: Fix bot turn timer duplication — emitYourTurn only starts timer for human players; bot turns managed by botScheduler
+- [x] **F-360**: Fix bot stuck after pause/resume — resumeGame handler must call scheduleBotTurnIfNeeded when current turn is a bot
 
 ### Room & Game Stability
 
@@ -364,11 +365,48 @@ Derived from PLAN.md. Features are grouped by domain and ordered by implementati
 - [x] **F-350**: Fix human turn unresponsive after bot plays — bot cardDrawn broadcast set drawnCard to undefined on human client, blocking all actions until page refresh
 - [x] **F-351**: Fix emitYourTurnFromBot timer for human players — only start 30s turn timer when next player is human, not for bots (bots use scheduleBotTurnIfNeeded)
 
+### Notification System
+
+- [x] **F-361**: Notification overhaul — replace distracting toasts with subtle inline banners/snackbar, add close button to all notifications
+- [x] **F-362**: Fix duplicate notifications — prevent same notification from showing twice
+
+### Tablet & iPad Optimization
+
+- [x] **F-370**: Tablet-responsive card sizes — use `lg` breakpoint (992px) to differentiate tablet from desktop; increase card sizes for iPad/tablet viewports
+- [x] **F-371**: Tablet board space — increase padding, gaps, and opponent card sizes for tablet breakpoints; lift maxW constraint
+- [x] **F-372**: Tablet opponent display — larger opponent card backs and username font on tablet
+
+### Player Profiles & Social
+
+- [x] **F-304**: Player profiles and avatar selection — avatar picker on home page, persist in GuestProfile, display in lobby/game/leaderboard
+- [x] **F-363**: Country flag from IP — detect player country via IP geolocation on connect, store in GuestProfile, display flag emoji in lobby/game/leaderboard
+
+### Mid-Game Join & Host Management
+
+- [x] **F-364**: Mid-game join — allow players to join active games if capacity remains; new joiners get highest current score and are dealt 4 cards
+- [x] **F-365**: Host player management menu — in-game hamburger menu for host to kick players or manage access during gameplay
+
+### Lobby Ready Toggle
+
+- [x] **F-366**: Lobby ready toggle — non-host players must toggle ready before host can start; bots auto-ready; ready status badges in lobby UI
+- [x] **F-367**: Start game readiness validation — server rejects startGame when any non-host human player is not ready
+
+### Round Transition Timer
+
+- [x] **F-368**: Host-triggered round countdown — host clicks "Next Round" to start 5-second countdown with audio cue; server auto-starts next round after countdown; non-hosts see "Waiting for host..."
+- [x] **F-369**: Cancel round countdown — endGame handler cancels pending countdown; host can end game during countdown
+
 ---
 
 **Total MVP Features:** 112  
 **Total Phase 2 Features:** 54  
 **UX Improvements:** 6  
-**Bot, Bug Fixes & Stability:** 20  
-**Document Version:** 1.7  
+**Bot, Bug Fixes & Stability:** 21  
+**Notifications:** 2  
+**Tablet Optimization:** 3  
+**Player Profiles & Social:** 2  
+**Mid-Game & Host Management:** 2  
+**Lobby Ready Toggle:** 2  
+**Round Transition Timer:** 2  
+**Document Version:** 1.9  
 **Last Updated:** 2026-03-15

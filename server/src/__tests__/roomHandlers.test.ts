@@ -11,7 +11,13 @@ import { unregisterPlayer, cancelGracePeriod, hasPendingDisconnect } from '../so
 interface MockRoom {
   roomCode: string;
   host: string;
-  players: { id: string; username: string; isBot?: boolean; botDifficulty?: string }[];
+  players: {
+    id: string;
+    username: string;
+    isBot?: boolean;
+    botDifficulty?: string;
+    isReady?: boolean;
+  }[];
   status: string;
   gameState: GameState | null;
   save: () => Promise<void>;
@@ -27,7 +33,13 @@ vi.mock('../models/Room', () => {
     data: {
       roomCode: string;
       host: string;
-      players: { id: string; username: string; isBot?: boolean; botDifficulty?: string }[];
+      players: {
+        id: string;
+        username: string;
+        isBot?: boolean;
+        botDifficulty?: string;
+        isReady?: boolean;
+      }[];
       gameState: null;
       status: string;
     },
@@ -248,14 +260,25 @@ describe('roomHandlers', () => {
       );
     });
 
-    it('rejects when game already started', async () => {
+    it('rejects when room is finished', async () => {
+      rooms[roomCode].status = 'finished';
+
+      const callback = vi.fn();
+      await emitEvent('joinRoom', { roomCode, username: 'Late' }, callback);
+
+      expect(callback).toHaveBeenCalledWith(
+        expect.objectContaining({ success: false, error: 'Cannot join this room' }),
+      );
+    });
+
+    it('allows mid-game join when room status is playing (F-364)', async () => {
       rooms[roomCode].status = 'playing';
 
       const callback = vi.fn();
       await emitEvent('joinRoom', { roomCode, username: 'Late' }, callback);
 
       expect(callback).toHaveBeenCalledWith(
-        expect.objectContaining({ success: false, error: 'Game already started' }),
+        expect.objectContaining({ success: true, playerId: expect.any(String) }),
       );
     });
 
@@ -369,9 +392,9 @@ describe('roomHandlers', () => {
       await emitEvent('createRoom', { username: 'Host' }, callback);
       roomCode = callback.mock.calls[0][0].roomCode;
       hostId = callback.mock.calls[0][0].playerId;
-      // Add 3 more players (total 4 = minimum)
+      // Add 3 more players (total 4 = minimum), all marked ready
       for (let i = 2; i <= 4; i++) {
-        rooms[roomCode].players.push({ id: `player-${i}`, username: `P${i}` });
+        rooms[roomCode].players.push({ id: `player-${i}`, username: `P${i}`, isReady: true });
       }
       vi.clearAllMocks();
     });
@@ -1071,15 +1094,328 @@ describe('roomHandlers', () => {
       );
     });
 
-    it('cannot kick during a game', async () => {
-      // Set room status to playing
-      rooms[roomCode].status = 'playing';
+    it('cannot kick in a finished game', async () => {
+      rooms[roomCode].status = 'finished';
 
       const callback = vi.fn();
       await emitEvent('kickPlayer', { roomCode, hostId, targetPlayerId: guestId }, callback);
 
       expect(callback).toHaveBeenCalledWith(
-        expect.objectContaining({ success: false, error: 'Can only kick players in the lobby' }),
+        expect.objectContaining({
+          success: false,
+          error: 'Cannot kick players from a finished game',
+        }),
+      );
+    });
+
+    it('kicks player during an active game (F-365)', async () => {
+      // Set up an active game state
+      rooms[roomCode].status = 'playing';
+      rooms[roomCode].gameState = {
+        phase: 'playing',
+        players: [
+          {
+            playerId: hostId,
+            username: 'Host',
+            hand: [
+              {
+                slot: 'A',
+                card: { id: 'c1', rank: '5', suit: '♥', value: 5, isRed: true },
+              },
+            ],
+            peekedSlots: [],
+          },
+          {
+            playerId: guestId,
+            username: 'Guest',
+            hand: [
+              {
+                slot: 'A',
+                card: { id: 'c2', rank: '3', suit: '♠', value: 3, isRed: false },
+              },
+            ],
+            peekedSlots: [],
+          },
+        ],
+        deck: [],
+        discardPile: [],
+        currentTurnIndex: 0,
+        checkCalledBy: null,
+        roundNumber: 1,
+        scores: { [hostId]: 0, [guestId]: 0 },
+        turnStartedAt: null,
+      } as unknown as GameState;
+
+      const callback = vi.fn();
+      await emitEvent('kickPlayer', { roomCode, hostId, targetPlayerId: guestId }, callback);
+
+      expect(callback).toHaveBeenCalledWith({ success: true });
+      // Guest should be removed from room players
+      expect(rooms[roomCode].players.find((p) => p.id === guestId)).toBeUndefined();
+    });
+
+    it('ends game when kicked player leaves fewer than 2 in-game (F-365)', async () => {
+      rooms[roomCode].status = 'playing';
+      rooms[roomCode].gameState = {
+        phase: 'playing',
+        players: [
+          {
+            playerId: hostId,
+            username: 'Host',
+            hand: [
+              {
+                slot: 'A',
+                card: { id: 'c1', rank: '5', suit: '♥', value: 5, isRed: true },
+              },
+            ],
+            peekedSlots: [],
+          },
+          {
+            playerId: guestId,
+            username: 'Guest',
+            hand: [
+              {
+                slot: 'A',
+                card: { id: 'c2', rank: '3', suit: '♠', value: 3, isRed: false },
+              },
+            ],
+            peekedSlots: [],
+          },
+        ],
+        deck: [],
+        discardPile: [],
+        currentTurnIndex: 0,
+        checkCalledBy: null,
+        roundNumber: 1,
+        scores: { [hostId]: 0, [guestId]: 0 },
+        turnStartedAt: null,
+      } as unknown as GameState;
+
+      const callback = vi.fn();
+      await emitEvent('kickPlayer', { roomCode, hostId, targetPlayerId: guestId }, callback);
+
+      expect(callback).toHaveBeenCalledWith({ success: true });
+      // Room should be set to finished since only 1 player remains
+      expect(rooms[roomCode].status).toBe('finished');
+    });
+
+    it('emits kicked event to the kicked player socket', async () => {
+      const callback = vi.fn();
+      await emitEvent('kickPlayer', { roomCode, hostId, targetPlayerId: guestId }, callback);
+
+      expect(callback).toHaveBeenCalledWith({ success: true });
+      // io.to should be called with the guest's socket to emit 'kicked'
+      expect(mockIO.to).toHaveBeenCalled();
+    });
+  });
+
+  // ----------------------------------------------------------
+  // toggleReady
+  // ----------------------------------------------------------
+  describe('toggleReady', () => {
+    let hostId: string;
+    let roomCode: string;
+    let guestId: string;
+
+    beforeEach(async () => {
+      const createCb = vi.fn();
+      await emitEvent('createRoom', { username: 'Host' }, createCb);
+      roomCode = createCb.mock.calls[0][0].roomCode;
+      hostId = createCb.mock.calls[0][0].playerId;
+
+      // Add a second player
+      const joinSocket = createMockSocket('socket-2');
+      const joinIO = createMockIO();
+      registerRoomHandlers(joinIO as never, joinSocket as never);
+      const joinCb = vi.fn();
+      await joinSocket._handlers['joinRoom']({ roomCode, username: 'Guest' }, joinCb);
+      guestId = joinCb.mock.calls[0][0].playerId;
+      vi.clearAllMocks();
+    });
+
+    it('toggles a player to ready', async () => {
+      const callback = vi.fn();
+      await emitEvent('toggleReady', { roomCode, playerId: guestId }, callback);
+
+      expect(callback).toHaveBeenCalledWith(
+        expect.objectContaining({ success: true, isReady: true }),
+      );
+    });
+
+    it('toggles back to not ready', async () => {
+      // First toggle: ready
+      const cb1 = vi.fn();
+      await emitEvent('toggleReady', { roomCode, playerId: guestId }, cb1);
+      expect(cb1).toHaveBeenCalledWith(expect.objectContaining({ isReady: true }));
+
+      // Second toggle: not ready
+      const cb2 = vi.fn();
+      await emitEvent('toggleReady', { roomCode, playerId: guestId }, cb2);
+      expect(cb2).toHaveBeenCalledWith(expect.objectContaining({ success: true, isReady: false }));
+    });
+
+    it('rejects when room is not in lobby', async () => {
+      rooms[roomCode].status = 'playing';
+
+      const callback = vi.fn();
+      await emitEvent('toggleReady', { roomCode, playerId: guestId }, callback);
+
+      expect(callback).toHaveBeenCalledWith(
+        expect.objectContaining({ success: false, error: 'Can only toggle ready in the lobby' }),
+      );
+    });
+
+    it('rejects for bots', async () => {
+      rooms[roomCode].players.push({
+        id: 'bot-1',
+        username: 'Luca',
+        isBot: true,
+        botDifficulty: 'easy',
+      });
+
+      const callback = vi.fn();
+      await emitEvent('toggleReady', { roomCode, playerId: 'bot-1' }, callback);
+
+      expect(callback).toHaveBeenCalledWith(
+        expect.objectContaining({ success: false, error: 'Bots are always ready' }),
+      );
+    });
+
+    it('rejects for player not in room', async () => {
+      const callback = vi.fn();
+      await emitEvent('toggleReady', { roomCode, playerId: 'nonexistent' }, callback);
+
+      expect(callback).toHaveBeenCalledWith(
+        expect.objectContaining({ success: false, error: 'Player not found in room' }),
+      );
+    });
+
+    it('rejects with missing playerId', async () => {
+      const callback = vi.fn();
+      await emitEvent('toggleReady', { roomCode, playerId: '' }, callback);
+
+      expect(callback).toHaveBeenCalledWith(
+        expect.objectContaining({ success: false, error: 'Missing player ID' }),
+      );
+    });
+
+    it('rejects for nonexistent room', async () => {
+      const callback = vi.fn();
+      await emitEvent('toggleReady', { roomCode: 'ZZZZZZ', playerId: guestId }, callback);
+
+      expect(callback).toHaveBeenCalledWith(
+        expect.objectContaining({ success: false, error: 'Room not found' }),
+      );
+    });
+
+    it('broadcasts roomUpdated after toggle', async () => {
+      const callback = vi.fn();
+      await emitEvent('toggleReady', { roomCode, playerId: guestId }, callback);
+
+      expect(callback).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
+      // broadcastRoomUpdate should call io.to(roomCode).emit('roomUpdated', ...)
+      expect(mockIO.to).toHaveBeenCalledWith(roomCode);
+      expect(mockIO._toEmit).toHaveBeenCalledWith(
+        'roomUpdated',
+        expect.objectContaining({
+          roomCode,
+          status: 'lobby',
+        }),
+      );
+    });
+
+    it('host can also toggle ready', async () => {
+      const callback = vi.fn();
+      await emitEvent('toggleReady', { roomCode, playerId: hostId }, callback);
+
+      expect(callback).toHaveBeenCalledWith(
+        expect.objectContaining({ success: true, isReady: true }),
+      );
+    });
+  });
+
+  // ----------------------------------------------------------
+  // startGame — readiness validation
+  // ----------------------------------------------------------
+  describe('startGame — readiness validation', () => {
+    let hostId: string;
+    let roomCode: string;
+
+    beforeEach(async () => {
+      const callback = vi.fn();
+      await emitEvent('createRoom', { username: 'Host' }, callback);
+      roomCode = callback.mock.calls[0][0].roomCode;
+      hostId = callback.mock.calls[0][0].playerId;
+      // Add a second human player (not ready by default)
+      rooms[roomCode].players.push({ id: 'player-2', username: 'P2' });
+      vi.clearAllMocks();
+    });
+
+    it('rejects start when non-host human players are not ready', async () => {
+      const callback = vi.fn();
+      await emitEvent('startGame', { roomCode, playerId: hostId }, callback);
+
+      expect(callback).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: false,
+          error: 'All players must be ready before starting',
+        }),
+      );
+    });
+
+    it('allows start when all non-host human players are ready', async () => {
+      // Mark the second player as ready
+      rooms[roomCode].players[1].isReady = true;
+
+      const callback = vi.fn();
+      await emitEvent('startGame', { roomCode, playerId: hostId }, callback);
+
+      expect(callback).toHaveBeenCalledWith({ success: true });
+      expect(rooms[roomCode].status).toBe('playing');
+    });
+
+    it('allows start with only bots (bots are implicitly ready)', async () => {
+      // Replace human player-2 with a bot
+      rooms[roomCode].players[1] = {
+        id: 'bot-1',
+        username: 'Luca',
+        isBot: true,
+        botDifficulty: 'easy',
+        isReady: true,
+      };
+
+      const callback = vi.fn();
+      await emitEvent('startGame', { roomCode, playerId: hostId }, callback);
+
+      expect(callback).toHaveBeenCalledWith({ success: true });
+    });
+
+    it('allows start when host is the only human (no readiness check needed)', async () => {
+      // Remove the second player, add a bot instead
+      rooms[roomCode].players = [
+        rooms[roomCode].players[0],
+        { id: 'bot-1', username: 'Luca', isBot: true, botDifficulty: 'easy', isReady: true },
+      ];
+
+      const callback = vi.fn();
+      await emitEvent('startGame', { roomCode, playerId: hostId }, callback);
+
+      expect(callback).toHaveBeenCalledWith({ success: true });
+    });
+
+    it('rejects when one of multiple human players is not ready', async () => {
+      // Add a third human player, mark player-2 as ready but not player-3
+      rooms[roomCode].players[1].isReady = true;
+      rooms[roomCode].players.push({ id: 'player-3', username: 'P3' });
+
+      const callback = vi.fn();
+      await emitEvent('startGame', { roomCode, playerId: hostId }, callback);
+
+      expect(callback).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: false,
+          error: 'All players must be ready before starting',
+        }),
       );
     });
   });

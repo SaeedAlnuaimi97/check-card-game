@@ -1,7 +1,12 @@
 import { Server as SocketIOServer, Socket } from 'socket.io';
 import { RoomModel } from '../models/Room';
 import { GuestProfileModel } from '../models/GuestProfile';
-import { initializeGameState, sanitizeGameState, getPeekedCards } from '../game/GameSetup';
+import {
+  initializeGameState,
+  sanitizeGameState,
+  getPeekedCards,
+  addPlayerToActiveGame,
+} from '../game/GameSetup';
 import { removePlayerFromGame } from '../game/TurnManager';
 import {
   generatePlayerId,
@@ -20,9 +25,9 @@ import {
   reconnectPlayer,
   DISCONNECT_GRACE_MS,
 } from './playerMapping';
-import { emitYourTurn } from './gameHandlers';
+import { emitYourTurn, broadcastGameState } from './gameHandlers';
 import { scheduleBotTurnIfNeeded } from '../utils/botScheduler';
-import type { GameState, BotDifficulty } from '../types/game.types';
+import type { GameState, BotDifficulty, ClientGameState, PeekedCard } from '../types/game.types';
 
 // ============================================================
 // Constants
@@ -102,6 +107,7 @@ async function broadcastRoomUpdate(io: SocketIOServer, roomCode: string): Promis
       username: p.username,
       isBot: p.isBot ?? false,
       botDifficulty: p.botDifficulty,
+      isReady: p.isBot ? true : (p.isReady ?? false),
     })),
     status: room.status,
     maxPlayers: MAX_PLAYERS,
@@ -134,6 +140,8 @@ export function registerRoomHandlers(io: SocketIOServer, socket: Socket): void {
           minPlayers: number;
         };
         error?: string;
+        gameState?: ClientGameState;
+        peekedCards?: PeekedCard[];
       }) => void,
     ) => {
       // Check room limit before creating
@@ -238,6 +246,8 @@ export function registerRoomHandlers(io: SocketIOServer, socket: Socket): void {
           status: string;
         };
         error?: string;
+        gameState?: ClientGameState;
+        peekedCards?: PeekedCard[];
       }) => void,
     ) => {
       const username = validateUsername(data?.username);
@@ -260,8 +270,9 @@ export function registerRoomHandlers(io: SocketIOServer, socket: Socket): void {
           return;
         }
 
-        if (room.status !== 'lobby') {
-          callback?.({ success: false, error: 'Game already started' });
+        // F-364: Allow joining rooms in 'lobby' or 'playing' status
+        if (room.status !== 'lobby' && room.status !== 'playing') {
+          callback?.({ success: false, error: 'Cannot join this room' });
           return;
         }
 
@@ -270,17 +281,89 @@ export function registerRoomHandlers(io: SocketIOServer, socket: Socket): void {
           return;
         }
 
+        // F-364: Block mid-game join during non-playing phases (roundEnd, gameEnd, dealing)
+        if (room.status === 'playing' && room.gameState) {
+          const gs = room.gameState as unknown as GameState;
+          if (gs.phase !== 'playing' && gs.phase !== 'peeking') {
+            callback?.({ success: false, error: 'Cannot join during this game phase' });
+            return;
+          }
+        }
+
         const playerId = generatePlayerId();
 
         const guestId =
           typeof data?.guestId === 'string' && data.guestId.length > 0 ? data.guestId : undefined;
 
         room.players.push({ id: playerId, username, guestId });
-        await room.save();
 
         // Join socket.io room and register mapping
         await socket.join(roomCode);
         registerPlayer(socket.id, playerId, roomCode, username);
+
+        // F-364: Mid-game join — add player to active game state
+        if (room.status === 'playing' && room.gameState) {
+          const gameState = room.gameState as unknown as GameState;
+          const newPlayer = addPlayerToActiveGame(gameState, { id: playerId, username });
+
+          if (!newPlayer) {
+            // Undo: remove the player we just added to the room
+            room.players = room.players.filter((p) => p.id !== playerId);
+            await room.save();
+            callback?.({ success: false, error: 'Not enough cards to join mid-game' });
+            return;
+          }
+
+          // Save updated game state with new player
+          room.gameState = gameState;
+          room.markModified('gameState');
+          await room.save();
+
+          console.log(
+            `${username} (${playerId}) joined active game in room ${roomCode} (mid-game join, score: ${newPlayer.totalScore})`,
+          );
+
+          // Upsert guest profile so returning users are recognized
+          if (guestId) {
+            GuestProfileModel.findOneAndUpdate(
+              { guestId },
+              { username, lastSeenAt: new Date() },
+              { upsert: true },
+            ).catch((err) => console.error('Failed to upsert guest profile:', err));
+          }
+
+          // Send game state to the new player with peeked cards
+          const clientState = sanitizeGameState(gameState, playerId);
+          const peekedCards = getPeekedCards(newPlayer);
+
+          callback?.({
+            success: true,
+            playerId,
+            room: {
+              roomCode: room.roomCode,
+              host: room.host,
+              players: room.players.map((p) => ({ id: p.id, username: p.username })),
+              status: room.status,
+            },
+            gameState: clientState,
+            peekedCards,
+          });
+
+          // Notify existing players that someone joined the active game
+          socket.to(roomCode).emit('playerJoinedGame', {
+            playerId,
+            username,
+            score: newPlayer.totalScore,
+          });
+
+          // Broadcast updated game state to all existing players
+          await broadcastGameState(io, roomCode, gameState);
+          await broadcastRoomUpdate(io, roomCode);
+          return;
+        }
+
+        // Standard lobby join path
+        await room.save();
 
         console.log(`${username} (${playerId}) joined room ${roomCode}`);
 
@@ -382,6 +465,15 @@ export function registerRoomHandlers(io: SocketIOServer, socket: Socket): void {
         // Validate room status (F-021)
         if (room.status !== 'lobby') {
           callback?.({ success: false, error: 'Game already started' });
+          return;
+        }
+
+        // Validate all human players are ready
+        const unreadyHumans = room.players.filter(
+          (p) => !p.isBot && p.id !== room.host && !p.isReady,
+        );
+        if (unreadyHumans.length > 0) {
+          callback?.({ success: false, error: 'All players must be ready before starting' });
           return;
         }
 
@@ -499,7 +591,7 @@ export function registerRoomHandlers(io: SocketIOServer, socket: Socket): void {
   });
 
   // ----------------------------------------------------------
-  // F-203/F-306: Kick Player (host-only, lobby only)
+  // F-203/F-306/F-365: Kick Player (host-only, lobby + in-game)
   // ----------------------------------------------------------
   socket.on(
     'kickPlayer',
@@ -526,8 +618,8 @@ export function registerRoomHandlers(io: SocketIOServer, socket: Socket): void {
           return;
         }
 
-        if (room.status !== 'lobby') {
-          callback?.({ success: false, error: 'Can only kick players in the lobby' });
+        if (room.status === 'finished') {
+          callback?.({ success: false, error: 'Cannot kick players from a finished game' });
           return;
         }
 
@@ -544,17 +636,14 @@ export function registerRoomHandlers(io: SocketIOServer, socket: Socket): void {
 
         const targetUsername = room.players[targetIndex].username;
         room.players.splice(targetIndex, 1);
-        await room.save();
 
         // Notify the kicked player via their socket and clean up their mapping
         const targetSocketId = getSocketByPlayer(data.targetPlayerId);
         if (targetSocketId) {
-          // Send kick notification (client will navigate away on receiving this)
           io.to(targetSocketId).emit('kicked', {
             roomCode,
             reason: 'You were removed by the host',
           });
-          // Unregister removes the socket<->player mapping so they can't rejoin
           unregisterPlayer(targetSocketId);
         }
 
@@ -562,6 +651,56 @@ export function registerRoomHandlers(io: SocketIOServer, socket: Socket): void {
           `Player ${targetUsername} (${data.targetPlayerId}) kicked from room ${roomCode}`,
         );
 
+        // F-365: Handle in-game kick — remove from active game state
+        if (room.gameState && room.status === 'playing') {
+          const gameState = room.gameState as unknown as GameState;
+          const result = removePlayerFromGame(gameState, data.targetPlayerId);
+
+          if (result.removed) {
+            console.log(
+              `Player ${targetUsername} removed from active game in room ${roomCode} (kicked)`,
+            );
+
+            if (result.gameEnded) {
+              room.status = 'finished';
+              console.log(`Game ended in room ${roomCode} — not enough players after kick`);
+            }
+
+            room.gameState = gameState;
+            room.markModified('gameState');
+            await room.save();
+
+            // Notify remaining players someone was kicked
+            io.to(roomCode).emit('playerLeftGame', {
+              username: targetUsername,
+              gameEnded: result.gameEnded,
+            });
+
+            // Broadcast updated game state to remaining players
+            for (const player of gameState.players) {
+              const sid = getSocketByPlayer(player.playerId);
+              if (!sid) continue;
+              const clientState = sanitizeGameState(gameState, player.playerId);
+              io.to(sid).emit('gameStateUpdated', clientState);
+            }
+
+            // If the turn changed, notify the new current player
+            if (result.turnChanged && !result.gameEnded && gameState.phase === 'playing') {
+              emitYourTurn(io, roomCode, gameState);
+              scheduleBotTurnIfNeeded(io, roomCode, gameState);
+
+              room.gameState = gameState;
+              room.markModified('gameState');
+              await room.save();
+            }
+
+            callback?.({ success: true });
+            return;
+          }
+        }
+
+        // Lobby kick path
+        await room.save();
         callback?.({ success: true });
         await broadcastRoomUpdate(io, roomCode);
       } catch (error) {
@@ -782,6 +921,7 @@ export function registerRoomHandlers(io: SocketIOServer, socket: Socket): void {
           username: botUsername,
           isBot: true,
           botDifficulty: difficulty,
+          isReady: true,
         });
         await room.save();
 
@@ -850,6 +990,69 @@ export function registerRoomHandlers(io: SocketIOServer, socket: Socket): void {
       } catch (error) {
         console.error('Error removing bot:', error);
         callback?.({ success: false, error: 'Failed to remove bot' });
+      } finally {
+        release();
+      }
+    },
+  );
+
+  // ----------------------------------------------------------
+  // Toggle Ready — player toggles their ready status in the lobby
+  // ----------------------------------------------------------
+  socket.on(
+    'toggleReady',
+    async (
+      data: { roomCode: string; playerId: string },
+      callback?: (response: { success: boolean; isReady?: boolean; error?: string }) => void,
+    ) => {
+      const roomCode = validateRoomCode(data?.roomCode);
+      if (!roomCode) {
+        callback?.({ success: false, error: 'Invalid room code' });
+        return;
+      }
+
+      if (!data?.playerId) {
+        callback?.({ success: false, error: 'Missing player ID' });
+        return;
+      }
+
+      const release = await getRoomMutex(roomCode).acquire();
+      try {
+        const room = await RoomModel.findOne({ roomCode });
+        if (!room) {
+          callback?.({ success: false, error: 'Room not found' });
+          return;
+        }
+
+        if (room.status !== 'lobby') {
+          callback?.({ success: false, error: 'Can only toggle ready in the lobby' });
+          return;
+        }
+
+        const player = room.players.find((p) => p.id === data.playerId);
+        if (!player) {
+          callback?.({ success: false, error: 'Player not found in room' });
+          return;
+        }
+
+        if (player.isBot) {
+          callback?.({ success: false, error: 'Bots are always ready' });
+          return;
+        }
+
+        // Toggle ready state
+        player.isReady = !player.isReady;
+        await room.save();
+
+        console.log(
+          `Player ${player.username} (${data.playerId}) is now ${player.isReady ? 'ready' : 'not ready'} in room ${roomCode}`,
+        );
+
+        callback?.({ success: true, isReady: player.isReady });
+        await broadcastRoomUpdate(io, roomCode);
+      } catch (error) {
+        console.error('Error toggling ready:', error);
+        callback?.({ success: false, error: 'Failed to toggle ready status' });
       } finally {
         release();
       }

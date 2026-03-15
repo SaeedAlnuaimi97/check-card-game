@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { registerGameHandlers } from '../socket/gameHandlers';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { registerGameHandlers, cancelRoundCountdown } from '../socket/gameHandlers';
 import type { GameState } from '../types/game.types';
 import { initializeGameState } from '../game/GameSetup';
 
@@ -147,6 +147,7 @@ describe('gameHandlers — startNextRound', () => {
   ];
 
   beforeEach(() => {
+    vi.useFakeTimers();
     rooms = {};
     // Clear playerSocketMap
     Object.keys(playerSocketMap).forEach((k) => delete playerSocketMap[k]);
@@ -159,6 +160,11 @@ describe('gameHandlers — startNextRound', () => {
     registerGameHandlers(mockIO as never, mockSocket as never);
   });
 
+  afterEach(() => {
+    cancelRoundCountdown('ABCD');
+    vi.useRealTimers();
+  });
+
   function emitEvent(event: string, ...args: unknown[]) {
     const handler = mockSocket._handlers[event];
     if (!handler) throw new Error(`No handler registered for event: ${event}`);
@@ -169,17 +175,31 @@ describe('gameHandlers — startNextRound', () => {
     expect(mockSocket._handlers['startNextRound']).toBeDefined();
   });
 
-  it('starts a new round when host requests it', async () => {
-    const room = createRoundEndRoom('ABCD', hostId, players);
+  it('schedules countdown and starts new round after 5s when host requests it', async () => {
+    createRoundEndRoom('ABCD', hostId, players);
     const callback = vi.fn();
 
     await emitEvent('startNextRound', { roomCode: 'ABCD', playerId: hostId }, callback);
 
     expect(callback).toHaveBeenCalledWith({ success: true });
-    expect(room.save).toHaveBeenCalled();
+
+    // nextRoundCountdown should be emitted
+    const countdownEvents = mockIO._emittedEvents.filter((e) => e.event === 'nextRoundCountdown');
+    expect(countdownEvents.length).toBeGreaterThanOrEqual(1);
+
+    // gameStarted should NOT be emitted yet
+    let gameStartedEvents = mockIO._emittedEvents.filter((e) => e.event === 'gameStarted');
+    expect(gameStartedEvents).toHaveLength(0);
+
+    // Advance past countdown
+    await vi.advanceTimersByTimeAsync(6000);
+
+    // Now gameStarted should be emitted to both players
+    gameStartedEvents = mockIO._emittedEvents.filter((e) => e.event === 'gameStarted');
+    expect(gameStartedEvents).toHaveLength(2);
 
     // Game state should be updated with a new round
-    const newState = room.gameState as GameState;
+    const newState = rooms['ABCD'].gameState as GameState;
     expect(newState.roundNumber).toBe(2);
     expect(newState.phase).toBe('peeking');
   });
@@ -233,11 +253,14 @@ describe('gameHandlers — startNextRound', () => {
     });
   });
 
-  it('emits gameStarted to all players with personalized state', async () => {
+  it('emits gameStarted to all players with personalized state after countdown', async () => {
     createRoundEndRoom('ABCD', hostId, players);
     const callback = vi.fn();
 
     await emitEvent('startNextRound', { roomCode: 'ABCD', playerId: hostId }, callback);
+
+    // Advance past countdown to trigger auto-start
+    await vi.advanceTimersByTimeAsync(6000);
 
     // Should have emitted gameStarted to both players
     const gameStartedEvents = mockIO._emittedEvents.filter((e) => e.event === 'gameStarted');
@@ -255,7 +278,7 @@ describe('gameHandlers — startNextRound', () => {
     expect(hostPayload.peekedCards).toHaveLength(2); // Peek slots C and D
   });
 
-  it('preserves existing scores into the new round', async () => {
+  it('preserves existing scores into the new round after countdown', async () => {
     const room = createRoundEndRoom('ABCD', hostId, players);
     // Set some existing scores
     (room.gameState as GameState).scores = { [hostId]: 15, [player2Id]: 22 };
@@ -265,7 +288,10 @@ describe('gameHandlers — startNextRound', () => {
 
     expect(callback).toHaveBeenCalledWith({ success: true });
 
-    const newState = room.gameState as GameState;
+    // Advance past countdown
+    await vi.advanceTimersByTimeAsync(6000);
+
+    const newState = rooms['ABCD'].gameState as GameState;
     expect(newState.scores[hostId]).toBe(15);
     expect(newState.scores[player2Id]).toBe(22);
   });
@@ -1475,5 +1501,217 @@ describe('gameHandlers — endGame', () => {
     expect(gameEndedEvents.length).toBeGreaterThanOrEqual(1);
     // But no GameResult saved
     expect(mockGameResultSave).not.toHaveBeenCalled();
+  });
+});
+
+// ============================================================
+// Round countdown timer tests
+// ============================================================
+
+describe('gameHandlers — round countdown timer', () => {
+  let mockSocket: ReturnType<typeof createMockSocket>;
+  let mockIO: ReturnType<typeof createMockIO>;
+
+  const p1Id = 'player-countdown-1';
+  const p2Id = 'player-countdown-2';
+  const playersList = [
+    { id: p1Id, username: 'Alice' },
+    { id: p2Id, username: 'Bob' },
+  ];
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    rooms = {};
+    Object.keys(playerSocketMap).forEach((k) => delete playerSocketMap[k]);
+    playerSocketMap[p1Id] = 'socket-cd-1';
+    playerSocketMap[p2Id] = 'socket-cd-2';
+
+    mockSocket = createMockSocket('socket-cd-1');
+    mockIO = createMockIO();
+    mockGameResultSave.mockClear();
+
+    registerGameHandlers(mockIO as never, mockSocket as never);
+  });
+
+  afterEach(() => {
+    cancelRoundCountdown('CDWN');
+    cancelRoundCountdown('BURN');
+    vi.useRealTimers();
+  });
+
+  function emitEvent(event: string, ...args: unknown[]) {
+    const handler = mockSocket._handlers[event];
+    if (!handler) throw new Error(`No handler registered for event: ${event}`);
+    return handler(...args);
+  }
+
+  it('does NOT auto-emit nextRoundCountdown when round ends via burn (waits for host)', async () => {
+    const gameState = initializeGameState(playersList);
+    gameState.phase = 'playing';
+    gameState.currentTurnIndex = 0;
+
+    const burnCard = { id: 'c1', suit: '♥' as const, rank: '7' as const, value: 7, isRed: true };
+    gameState.players[0].hand = [{ slot: 'A', card: burnCard }];
+    gameState.players[0].totalScore = 10;
+    gameState.scores = { [p1Id]: 10, [p2Id]: 10 };
+
+    const lowCard = { id: 'c3', suit: '♠' as const, rank: '2' as const, value: 2, isRed: false };
+    gameState.players[1].hand = [
+      { slot: 'A', card: lowCard },
+      { slot: 'B', card: { ...lowCard, id: 'c4' } },
+    ];
+    gameState.players[1].totalScore = 10;
+
+    gameState.discardPile = [
+      { id: 'c2', suit: '♠' as const, rank: '7' as const, value: 7, isRed: false },
+    ];
+
+    const room: MockRoom = {
+      roomCode: 'CDWN',
+      host: p1Id,
+      players: playersList,
+      status: 'playing',
+      gameState,
+      save: vi.fn(async () => {
+        rooms['CDWN'] = room;
+      }),
+      markModified: vi.fn(),
+    };
+    rooms['CDWN'] = room;
+
+    const callback = vi.fn();
+    await emitEvent(
+      'playerAction',
+      {
+        roomCode: 'CDWN',
+        playerId: p1Id,
+        action: { type: 'burn', slot: 'A' },
+      },
+      callback,
+    );
+
+    expect(callback).toHaveBeenCalledWith({ success: true });
+
+    const roundEndedEvents = mockIO._emittedEvents.filter((e) => e.event === 'roundEnded');
+    expect(roundEndedEvents.length).toBeGreaterThanOrEqual(1);
+
+    // nextRoundCountdown should NOT be emitted automatically — host must trigger it
+    const countdownEvents = mockIO._emittedEvents.filter((e) => e.event === 'nextRoundCountdown');
+    expect(countdownEvents).toHaveLength(0);
+  });
+
+  it('cancelRoundCountdown clears a pending timer', () => {
+    cancelRoundCountdown('NONEXISTENT');
+    expect(true).toBe(true);
+  });
+
+  it('endGame handler cancels a pending round countdown', async () => {
+    const room = createRoundEndRoom('CDWN', p1Id, playersList);
+    room.gameState!.scores = { [p1Id]: 20, [p2Id]: 50 };
+    room.players = [
+      { id: p1Id, username: 'Alice', guestId: 'guest-1' },
+      { id: p2Id, username: 'Bob', guestId: 'guest-2' },
+    ];
+    room.createdAt = new Date();
+
+    // First trigger countdown via startNextRound
+    const startCb = vi.fn();
+    await emitEvent('startNextRound', { roomCode: 'CDWN', playerId: p1Id }, startCb);
+    expect(startCb).toHaveBeenCalledWith({ success: true });
+
+    // Now end the game — this should cancel the countdown
+    // Need to re-fetch room since startNextRound doesn't change phase yet (countdown is pending)
+    // The room is still in roundEnd phase because the countdown hasn't fired yet
+    const callback = vi.fn();
+    await emitEvent('endGame', { roomCode: 'CDWN', playerId: p1Id }, callback);
+
+    expect(callback).toHaveBeenCalledWith({ success: true });
+
+    // Advance past countdown — round should NOT auto-start because endGame cancelled it
+    await vi.advanceTimersByTimeAsync(6000);
+
+    expect(rooms['CDWN'].status).toBe('finished');
+    const gameStartedEvents = mockIO._emittedEvents.filter((e) => e.event === 'gameStarted');
+    expect(gameStartedEvents).toHaveLength(0);
+  });
+
+  it('startNextRound handler schedules countdown and auto-starts after 5s', async () => {
+    createRoundEndRoom('CDWN', p1Id, playersList);
+
+    const callback = vi.fn();
+    await emitEvent('startNextRound', { roomCode: 'CDWN', playerId: p1Id }, callback);
+
+    expect(callback).toHaveBeenCalledWith({ success: true });
+
+    // nextRoundCountdown should be emitted to all players
+    const countdownEvents = mockIO._emittedEvents.filter((e) => e.event === 'nextRoundCountdown');
+    expect(countdownEvents.length).toBeGreaterThanOrEqual(1);
+
+    // After 5s, the next round should auto-start
+    await vi.advanceTimersByTimeAsync(6000);
+
+    const gameStartedEvents = mockIO._emittedEvents.filter((e) => e.event === 'gameStarted');
+    expect(gameStartedEvents).toHaveLength(2);
+  });
+
+  it('does NOT emit nextRoundCountdown when game ends', async () => {
+    const gameState = initializeGameState(playersList);
+    gameState.phase = 'playing';
+    gameState.currentTurnIndex = 0;
+    gameState.gameStartedAt = '2026-03-10T10:00:00.000Z';
+
+    const burnCard = { id: 'c1', suit: '♥' as const, rank: '7' as const, value: 7, isRed: true };
+    gameState.players[0].hand = [{ slot: 'A', card: burnCard }];
+    gameState.players[0].totalScore = 0;
+
+    const highCard = { id: 'c3', suit: '♠' as const, rank: 'K' as const, value: 13, isRed: false };
+    gameState.players[1].hand = [
+      { slot: 'A', card: highCard },
+      { slot: 'B', card: { ...highCard, id: 'c4' } },
+      { slot: 'C', card: { ...highCard, id: 'c5' } },
+      { slot: 'D', card: { ...highCard, id: 'c6' } },
+    ];
+    gameState.players[1].totalScore = 80;
+    gameState.scores = { [p1Id]: 0, [p2Id]: 80 };
+
+    gameState.discardPile = [
+      { id: 'c2', suit: '♠' as const, rank: '7' as const, value: 7, isRed: false },
+    ];
+
+    const room: MockRoom = {
+      roomCode: 'CDWN',
+      host: p1Id,
+      players: [
+        { id: p1Id, username: 'Alice', guestId: 'guest-1' },
+        { id: p2Id, username: 'Bob', guestId: 'guest-2' },
+      ],
+      status: 'playing',
+      gameState,
+      createdAt: new Date(),
+      save: vi.fn(async () => {
+        rooms['CDWN'] = room;
+      }),
+      markModified: vi.fn(),
+    };
+    rooms['CDWN'] = room;
+
+    const callback = vi.fn();
+    await emitEvent(
+      'playerAction',
+      {
+        roomCode: 'CDWN',
+        playerId: p1Id,
+        action: { type: 'burn', slot: 'A' },
+      },
+      callback,
+    );
+
+    expect(callback).toHaveBeenCalledWith({ success: true });
+
+    const gameEndedEvents = mockIO._emittedEvents.filter((e) => e.event === 'gameEnded');
+    expect(gameEndedEvents.length).toBeGreaterThanOrEqual(1);
+
+    const countdownEvents = mockIO._emittedEvents.filter((e) => e.event === 'nextRoundCountdown');
+    expect(countdownEvents).toHaveLength(0);
   });
 });

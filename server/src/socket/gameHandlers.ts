@@ -37,6 +37,121 @@ import { scheduleBotTurnIfNeeded } from '../utils/botScheduler';
 import type { GameState, ActionType, SlotLabel, Card } from '../types/game.types';
 
 // ============================================================
+// Round Countdown Timer — 5-second auto-start between rounds
+// ============================================================
+
+/** Delay in ms before the next round starts automatically */
+const ROUND_COUNTDOWN_MS = 5_000;
+
+/** Active round countdown timers, keyed by roomCode */
+const roundCountdownTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+/** Cancel any pending round countdown for a room */
+export function cancelRoundCountdown(roomCode: string): void {
+  const timer = roundCountdownTimers.get(roomCode);
+  if (timer) {
+    clearTimeout(timer);
+    roundCountdownTimers.delete(roomCode);
+  }
+}
+
+/**
+ * Executes the "start next round" logic: initializes a new round from
+ * the current gameState, saves to DB, and emits gameStarted to all players.
+ * Used by both the auto-countdown timer and the manual startNextRound handler.
+ */
+async function executeStartNextRound(io: SocketIOServer, roomCode: string): Promise<boolean> {
+  const release = await getRoomMutex(roomCode).acquire();
+  try {
+    const room = await RoomModel.findOne({ roomCode });
+    if (!room || !room.gameState) return false;
+
+    if (room.status !== 'playing') return false;
+
+    const oldGameState = room.gameState as unknown as GameState;
+    if (oldGameState.phase !== 'roundEnd') return false;
+
+    // Initialize new round with existing scores and incremented round number
+    const players = oldGameState.players.map((p) => ({
+      id: p.playerId,
+      username: p.username,
+      isBot: p.isBot,
+      botDifficulty: p.botDifficulty,
+    }));
+    const newGameState = initializeGameState(
+      players,
+      oldGameState.scores,
+      oldGameState.roundNumber + 1,
+      oldGameState.targetScore,
+    );
+
+    // Preserve gameStartedAt from the first round (F-234)
+    if (oldGameState.gameStartedAt) {
+      newGameState.gameStartedAt = oldGameState.gameStartedAt;
+    }
+
+    // Save new game state
+    room.gameState = newGameState;
+    room.markModified('gameState');
+    await room.save();
+
+    // Send personalized gameStarted events to each player (same as initial start)
+    for (const player of newGameState.players) {
+      const socketId = getSocketByPlayer(player.playerId);
+      if (!socketId) continue;
+
+      const clientState = sanitizeGameState(newGameState, player.playerId);
+      const peeked = getPeekedCards(player);
+
+      io.to(socketId).emit('gameStarted', {
+        gameState: clientState,
+        peekedCards: peeked,
+      });
+    }
+
+    console.log(`Room ${roomCode}: Auto-started new round ${newGameState.roundNumber}`);
+    return true;
+  } catch (error) {
+    console.error('Error in executeStartNextRound:', error);
+    return false;
+  } finally {
+    release();
+  }
+}
+
+/**
+ * Schedule the next round to start automatically after ROUND_COUNTDOWN_MS.
+ * Emits a 'nextRoundCountdown' event to all players so the client can
+ * display a countdown and play audio.
+ */
+function scheduleNextRoundCountdown(
+  io: SocketIOServer,
+  roomCode: string,
+  gameState: GameState,
+): void {
+  // Cancel any existing countdown for this room
+  cancelRoundCountdown(roomCode);
+
+  const startsAt = Date.now() + ROUND_COUNTDOWN_MS;
+
+  // Notify all players of the countdown
+  for (const player of gameState.players) {
+    const sid = getSocketByPlayer(player.playerId);
+    if (sid) {
+      io.to(sid).emit('nextRoundCountdown', { startsAt });
+    }
+  }
+
+  // Schedule auto-start
+  const timer = setTimeout(async () => {
+    roundCountdownTimers.delete(roomCode);
+    await executeStartNextRound(io, roomCode);
+  }, ROUND_COUNTDOWN_MS);
+
+  roundCountdownTimers.set(roomCode, timer);
+}
+
+// ============================================================
 // Helper: Format card for logging (e.g. "J♥" or "10♠")
 // ============================================================
 
@@ -248,7 +363,7 @@ async function advanceTurnAndCheckRoundEnd(
       `Room ${roomCode}: GAME ENDED — Winner: ${gameEndResult.winner.username} (${gameEndResult.winner.score}), Loser: ${gameEndResult.loser.username} (${gameEndResult.loser.score})`,
     );
   } else {
-    // Round ended but game continues — host must manually start next round
+    // Round ended but game continues — wait for host to start next round
     console.log(
       `Room ${roomCode}: Round ${roundResult.roundNumber} ended. Waiting for host to start next round.`,
     );
@@ -1234,7 +1349,7 @@ export function registerGameHandlers(io: SocketIOServer, socket: Socket): void {
   );
 
   // ----------------------------------------------------------
-  // startNextRound — host manually starts the next round
+  // startNextRound — host triggers next round countdown
   // ----------------------------------------------------------
   socket.on(
     'startNextRound',
@@ -1242,6 +1357,9 @@ export function registerGameHandlers(io: SocketIOServer, socket: Socket): void {
       data: { roomCode: string; playerId: string },
       callback?: (response: { success: boolean; error?: string }) => void,
     ) => {
+      // Cancel any pending auto-start countdown (idempotent)
+      cancelRoundCountdown(data.roomCode);
+
       const release = await getRoomMutex(data.roomCode).acquire();
       try {
         const room = await RoomModel.findOne({ roomCode: data.roomCode });
@@ -1262,56 +1380,22 @@ export function registerGameHandlers(io: SocketIOServer, socket: Socket): void {
           return;
         }
 
-        const oldGameState = room.gameState as unknown as GameState;
+        const gameState = room.gameState as unknown as GameState;
 
         // Game state must be in 'roundEnd' phase
-        if (oldGameState.phase !== 'roundEnd') {
+        if (gameState.phase !== 'roundEnd') {
           callback?.({ success: false, error: 'Round has not ended yet' });
           return;
         }
 
-        // Initialize new round with existing scores and incremented round number
-        const players = oldGameState.players.map((p) => ({
-          id: p.playerId,
-          username: p.username,
-          isBot: p.isBot,
-          botDifficulty: p.botDifficulty,
-        }));
-        const newGameState = initializeGameState(
-          players,
-          oldGameState.scores,
-          oldGameState.roundNumber + 1,
-          oldGameState.targetScore,
-        );
-
-        // Preserve gameStartedAt from the first round (F-234)
-        if (oldGameState.gameStartedAt) {
-          newGameState.gameStartedAt = oldGameState.gameStartedAt;
-        }
-
-        // Save new game state
-        room.gameState = newGameState;
-        room.markModified('gameState');
-        await room.save();
-
         callback?.({ success: true });
 
-        // Send personalized gameStarted events to each player (same as initial start)
-        for (const player of newGameState.players) {
-          const socketId = getSocketByPlayer(player.playerId);
-          if (!socketId) continue;
-
-          const clientState = sanitizeGameState(newGameState, player.playerId);
-          const peeked = getPeekedCards(player);
-
-          io.to(socketId).emit('gameStarted', {
-            gameState: clientState,
-            peekedCards: peeked,
-          });
-        }
+        // Schedule countdown — emits nextRoundCountdown to all players,
+        // then auto-starts the next round after ROUND_COUNTDOWN_MS
+        scheduleNextRoundCountdown(io, data.roomCode, gameState);
 
         console.log(
-          `Room ${data.roomCode}: ${getUsername(newGameState, data.playerId)} started new round ${newGameState.roundNumber}`,
+          `Room ${data.roomCode}: ${getUsername(gameState, data.playerId)} triggered next round countdown (${ROUND_COUNTDOWN_MS / 1000}s).`,
         );
       } catch (error) {
         console.error('Error in startNextRound:', error);
@@ -1331,6 +1415,9 @@ export function registerGameHandlers(io: SocketIOServer, socket: Socket): void {
       data: { roomCode: string; playerId: string },
       callback?: (response: { success: boolean; error?: string }) => void,
     ) => {
+      // Cancel any pending auto-start countdown
+      cancelRoundCountdown(data.roomCode);
+
       const release = await getRoomMutex(data.roomCode).acquire();
       try {
         const room = await RoomModel.findOne({ roomCode: data.roomCode });

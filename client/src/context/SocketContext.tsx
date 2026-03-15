@@ -67,6 +67,8 @@ interface SocketContextValue {
   roundEndData: RoundEndedPayload | null;
   /** Game end results, including winner and loser (F-075) */
   gameEndData: GameEndedPayload | null;
+  /** Timestamp (ms) when the next round auto-starts */
+  nextRoundStartsAt: number | null;
   /** Last Red Jack swap result — both players get notified which slots were swapped */
   lastSwapResult: SpecialEffectResolvedPayload | null;
   /** Slots that were recently modified (swap, burn penalty, red king placement) — cleared after 2.5s */
@@ -85,6 +87,8 @@ interface SocketContextValue {
   addBot: (difficulty: 'easy' | 'expert') => Promise<{ success: boolean; error?: string }>;
   /** Host removes a bot from the lobby (F-300/F-301) */
   removeBot: (botPlayerId: string) => Promise<{ success: boolean; error?: string }>;
+  /** Player toggles ready status in lobby */
+  toggleReady: () => Promise<{ success: boolean; isReady?: boolean; error?: string }>;
   /** Host pauses the game (F-272) */
   pauseGame: () => Promise<{ success: boolean; error?: string }>;
   /** Host resumes the game (F-273) */
@@ -168,6 +172,7 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
   const [roundEndData, setRoundEndData] = useState<RoundEndedPayload | null>(null);
   const [gameEndData, setGameEndData] = useState<GameEndedPayload | null>(null);
   const [storedUsername, setStoredUsername] = useState<string | null>(null);
+  const [nextRoundStartsAt, setNextRoundStartsAt] = useState<number | null>(null);
 
   // Use a ref for navigate to avoid re-registering socket listeners
   const navigateRef = useRef(navigate);
@@ -284,6 +289,7 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
       setDrawnFromDiscard(false);
       setPendingEffect(null);
       setLastBurnResult(null);
+      setNextRoundStartsAt(null);
       navigateRef.current('/game');
     });
 
@@ -381,6 +387,11 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
       console.log(`Player ${data.username} reconnected`);
     });
 
+    // F-364: A new player joined the active game mid-game
+    socket.on('playerJoinedGame', (data: { playerId: string; username: string; score: number }) => {
+      console.log(`Player ${data.username} joined mid-game with score ${data.score}`);
+    });
+
     // F-062: Someone called check
     socket.on('checkCalled', (data: CheckCalledPayload) => {
       console.log(`${data.username} called CHECK!`);
@@ -420,6 +431,12 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
     // F-274: Game resumed notification
     socket.on('gameResumed', (data: { turnStartedAt: number }) => {
       console.log('Game resumed, turnStartedAt:', data.turnStartedAt);
+    });
+
+    // Next round countdown — server schedules 5s auto-start
+    socket.on('nextRoundCountdown', (data: { startsAt: number }) => {
+      console.log('Next round countdown started, startsAt:', data.startsAt);
+      setNextRoundStartsAt(data.startsAt);
     });
 
     socket.on('slotsModified', (data: { changes: { playerId: string; slot: string }[] }) => {
@@ -467,12 +484,14 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
       socket.off('playerLeftGame');
       socket.off('playerDisconnected');
       socket.off('playerReconnected');
+      socket.off('playerJoinedGame');
       socket.off('checkCalled');
       socket.off('roundEnded');
       socket.off('gameEnded');
       socket.off('turnTimedOut');
       socket.off('gamePaused');
       socket.off('gameResumed');
+      socket.off('nextRoundCountdown');
       socket.off('slotsModified');
       socket.off('kicked');
       socket.disconnect();
@@ -520,7 +539,14 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
         socket.emit(
           'joinRoom',
           { roomCode, username: name, guestId: getOrCreateGuestId() },
-          (response: { success: boolean; playerId?: string; room?: RoomData; error?: string }) => {
+          (response: {
+            success: boolean;
+            playerId?: string;
+            room?: RoomData;
+            gameState?: ClientGameState;
+            peekedCards?: PeekedCard[];
+            error?: string;
+          }) => {
             if (response.success && response.playerId) {
               setPlayerId(response.playerId);
               setUsername(name);
@@ -530,6 +556,23 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
               localStorage.setItem('username', name);
               if (response.room) {
                 setRoomData(response.room);
+              }
+              // F-364: Mid-game join — set game state and navigate to game board
+              if (response.gameState) {
+                setGameState(response.gameState);
+                if (response.peekedCards) {
+                  setPeekedCards(response.peekedCards);
+                }
+                setIsMyTurn(false);
+                setTurnData(null);
+                setCheckCalledData(null);
+                setRoundEndData(null);
+                setGameEndData(null);
+                setDrawnCard(null);
+                setDrawnFromDiscard(false);
+                setPendingEffect(null);
+                setLastBurnResult(null);
+                navigateRef.current('/game');
               }
             }
             resolve({ success: response.success, error: response.error });
@@ -692,6 +735,29 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
     },
     [roomData, playerId],
   );
+
+  // ----------------------------------------------------------
+  // Toggle Ready — player toggles ready status in lobby
+  // ----------------------------------------------------------
+  const toggleReady = useCallback((): Promise<{
+    success: boolean;
+    isReady?: boolean;
+    error?: string;
+  }> => {
+    return new Promise((resolve) => {
+      if (!roomData || !playerId) {
+        resolve({ success: false, error: 'Not in a room' });
+        return;
+      }
+      socket.emit(
+        'toggleReady',
+        { roomCode: roomData.roomCode, playerId },
+        (response: { success: boolean; isReady?: boolean; error?: string }) => {
+          resolve(response);
+        },
+      );
+    });
+  }, [roomData, playerId]);
 
   // ----------------------------------------------------------
   // Pause Game — host pauses the game (F-272)
@@ -1095,6 +1161,7 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
     checkCalledData,
     roundEndData,
     gameEndData,
+    nextRoundStartsAt,
     createRoom,
     joinRoom,
     leaveRoom,
@@ -1104,6 +1171,7 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
     kickPlayer,
     addBot,
     removeBot,
+    toggleReady,
     pauseGame,
     resumeGame,
     endPeek,
