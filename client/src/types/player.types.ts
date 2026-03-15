@@ -22,4 +22,6 @@ export interface ClientPlayerState {
   hand: ClientHandSlot[];
   cardCount: number;
   totalScore: number;
+  /** True if this player is a bot */
+  isBot?: boolean;
 }

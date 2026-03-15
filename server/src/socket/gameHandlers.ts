@@ -1,6 +1,6 @@
 import { Server as SocketIOServer, Socket } from 'socket.io';
 import { RoomModel } from '../models/Room';
-import { GameResultModel } from '../models/GameResult';
+import { saveGameResult } from '../utils/saveGameResult';
 import { sanitizeGameState, initializeGameState } from '../game/GameSetup';
 import {
   validatePlayerTurn,
@@ -33,68 +33,8 @@ import {
   startTurnTimerWithDuration,
   TURN_TIMEOUT_MS,
 } from '../game/TurnTimer';
+import { scheduleBotTurnIfNeeded } from '../utils/botScheduler';
 import type { GameState, ActionType, SlotLabel, Card } from '../types/game.types';
-import type { RoomDocument } from '../models/Room';
-
-// ============================================================
-// Helper: Save game result to database (F-233)
-// ============================================================
-
-async function saveGameResult(
-  room: RoomDocument,
-  gameState: GameState,
-  gameEndResult: {
-    winner: { playerId: string; username: string; score: number };
-    loser: { playerId: string; username: string; score: number };
-  },
-): Promise<void> {
-  try {
-    // Build a map from playerId -> guestId using room.players
-    const guestIdMap = new Map<string, string>();
-    for (const rp of room.players) {
-      if (rp.guestId) {
-        guestIdMap.set(rp.id, rp.guestId);
-      }
-    }
-
-    // Only save if we have guestIds for winner and loser
-    const winnerGuestId = guestIdMap.get(gameEndResult.winner.playerId);
-    const loserGuestId = guestIdMap.get(gameEndResult.loser.playerId);
-    if (!winnerGuestId || !loserGuestId) {
-      console.warn(
-        `Room ${room.roomCode}: Cannot save GameResult — missing guestId for winner or loser`,
-      );
-      return;
-    }
-
-    const gameResult = new GameResultModel({
-      roomCode: room.roomCode,
-      startedAt: gameState.gameStartedAt ? new Date(gameState.gameStartedAt) : room.createdAt,
-      endedAt: new Date(),
-      totalRounds: gameState.roundNumber,
-      players: gameState.players.map((p) => ({
-        playerId: p.playerId,
-        guestId: guestIdMap.get(p.playerId) ?? 'unknown',
-        username: p.username,
-        finalScore: p.totalScore,
-        isWinner: p.playerId === gameEndResult.winner.playerId,
-        isLoser: p.playerId === gameEndResult.loser.playerId,
-      })),
-      winnerId: winnerGuestId,
-      loserId: loserGuestId,
-      winnerUsername: gameEndResult.winner.username,
-      loserUsername: gameEndResult.loser.username,
-    });
-
-    await gameResult.save();
-    console.log(
-      `Room ${room.roomCode}: GameResult saved — winner=${gameEndResult.winner.username}, loser=${gameEndResult.loser.username}`,
-    );
-  } catch (error) {
-    // Non-fatal — log but don't crash the game
-    console.error(`Room ${room.roomCode}: Failed to save GameResult:`, error);
-  }
-}
 
 // ============================================================
 // Helper: Format card for logging (e.g. "J♥" or "10♠")
@@ -138,20 +78,33 @@ export function emitYourTurn(io: SocketIOServer, roomCode: string, gameState: Ga
   // Set the turn start timestamp
   gameState.turnStartedAt = Date.now();
 
+  const currentPlayer = gameState.players.find((p) => p.playerId === turnPlayerId);
+
   const socketId = getSocketByPlayer(turnPlayerId);
-  if (!socketId) return;
 
-  io.to(socketId).emit('yourTurn', {
-    playerId: turnPlayerId,
-    canCheck: gameState.checkCalledBy === null,
-    availableActions: getAvailableActions(gameState),
-    turnStartedAt: gameState.turnStartedAt,
-  });
+  // Only emit to human players (bots have no socket)
+  if (socketId) {
+    io.to(socketId).emit('yourTurn', {
+      playerId: turnPlayerId,
+      canCheck: gameState.checkCalledBy === null,
+      availableActions: getAvailableActions(gameState),
+      turnStartedAt: gameState.turnStartedAt,
+    });
+  }
 
-  // Start (or restart) the turn timer
-  startTurnTimer(roomCode, (rc) => {
-    handleTurnTimeout(io, rc);
-  });
+  // Always clear the previous turn timer first — this prevents stale
+  // human timers from firing during a bot's turn when transitioning
+  // from human → bot.
+  clearTurnTimer(roomCode);
+
+  // Start turn timer for human players only.
+  // Bot turns are managed by scheduleBotTurnIfNeeded / emitYourTurnFromBot
+  // which has its own timer with handleBotTurnTimeout.
+  if (!currentPlayer?.isBot) {
+    startTurnTimer(roomCode, (rc) => {
+      handleTurnTimeout(io, rc);
+    });
+  }
 }
 
 // ============================================================
@@ -208,6 +161,7 @@ async function handleTurnTimeout(io: SocketIOServer, roomCode: string): Promise<
       await room.save();
 
       emitYourTurn(io, roomCode, gameState);
+      scheduleBotTurnIfNeeded(io, roomCode, gameState);
       await broadcastGameState(io, roomCode, gameState);
     }
 
@@ -358,6 +312,7 @@ export function registerGameHandlers(io: SocketIOServer, socket: Socket): void {
 
         // Notify the first player it's their turn
         emitYourTurn(io, data.roomCode, gameState);
+        scheduleBotTurnIfNeeded(io, data.roomCode, gameState);
 
         // Broadcast the updated state to all players
         await broadcastGameState(io, data.roomCode, gameState);
@@ -426,6 +381,7 @@ export function registerGameHandlers(io: SocketIOServer, socket: Socket): void {
 
         // F-060: Checker still takes their normal turn — re-emit yourTurn
         emitYourTurn(io, data.roomCode, gameState);
+        scheduleBotTurnIfNeeded(io, data.roomCode, gameState);
 
         // Broadcast updated game state (checkCalledBy is now set)
         await broadcastGameState(io, data.roomCode, gameState);
@@ -639,6 +595,7 @@ export function registerGameHandlers(io: SocketIOServer, socket: Socket): void {
           if (!burnRoundEnded) {
             // Notify the next player it's their turn
             emitYourTurn(io, data.roomCode, gameState);
+            scheduleBotTurnIfNeeded(io, data.roomCode, gameState);
 
             // Emit slot modification glow for penalty slot on burn failure
             if (!burnResult.burnSuccess && burnResult.penaltySlot) {
@@ -799,6 +756,7 @@ export function registerGameHandlers(io: SocketIOServer, socket: Socket): void {
         if (!discardRoundEnded) {
           // Notify the next player it's their turn
           emitYourTurn(io, data.roomCode, gameState);
+          scheduleBotTurnIfNeeded(io, data.roomCode, gameState);
 
           // Emit slot modification glow for the swapped slot
           if (data.slot !== null) {
@@ -1032,6 +990,7 @@ export function registerGameHandlers(io: SocketIOServer, socket: Socket): void {
         if (!jackRoundEnded) {
           // Notify the next player it's their turn
           emitYourTurn(io, data.roomCode, gameState);
+          scheduleBotTurnIfNeeded(io, data.roomCode, gameState);
 
           // Emit slot modification glow for swapped slots (when not skipped)
           if (!data.skip && data.mySlot && data.targetPlayerId && data.targetSlot) {
@@ -1132,6 +1091,7 @@ export function registerGameHandlers(io: SocketIOServer, socket: Socket): void {
         if (!queenRoundEnded) {
           // Emit yourTurn first so turnStartedAt is set before broadcast
           emitYourTurn(io, data.roomCode, gameState);
+          scheduleBotTurnIfNeeded(io, data.roomCode, gameState);
 
           // Broadcast updated game state (includes fresh turnStartedAt)
           await broadcastGameState(io, data.roomCode, gameState);
@@ -1255,6 +1215,7 @@ export function registerGameHandlers(io: SocketIOServer, socket: Socket): void {
 
           // Emit yourTurn first so turnStartedAt is set before broadcast
           emitYourTurn(io, data.roomCode, gameState);
+          scheduleBotTurnIfNeeded(io, data.roomCode, gameState);
 
           // Broadcast updated game state (includes fresh turnStartedAt)
           await broadcastGameState(io, data.roomCode, gameState);
@@ -1313,11 +1274,14 @@ export function registerGameHandlers(io: SocketIOServer, socket: Socket): void {
         const players = oldGameState.players.map((p) => ({
           id: p.playerId,
           username: p.username,
+          isBot: p.isBot,
+          botDifficulty: p.botDifficulty,
         }));
         const newGameState = initializeGameState(
           players,
           oldGameState.scores,
           oldGameState.roundNumber + 1,
+          oldGameState.targetScore,
         );
 
         // Preserve gameStartedAt from the first round (F-234)

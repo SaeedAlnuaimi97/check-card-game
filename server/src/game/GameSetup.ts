@@ -1,4 +1,5 @@
 import {
+  BotDifficulty,
   ClientGameState,
   ClientPlayerState,
   GameState,
@@ -96,11 +97,13 @@ export function selectFirstPlayer(playerCount: number): number {
  * @param players Array of { id, username } from the room.
  * @param existingScores Optional scores carried over from previous rounds.
  * @param roundNumber The current round number (default 1).
+ * @param targetScore Custom score threshold for game end (default 70, F-310).
  */
 export function initializeGameState(
-  players: { id: string; username: string }[],
+  players: { id: string; username: string; isBot?: boolean; botDifficulty?: BotDifficulty }[],
   existingScores?: Record<string, number>,
   roundNumber = 1,
+  targetScore = 70,
 ): GameState {
   const deck = createShuffledDeck();
 
@@ -117,6 +120,7 @@ export function initializeGameState(
     hand: [],
     peekedSlots: [],
     totalScore: scores[p.id],
+    ...(p.isBot ? { isBot: true, botDifficulty: p.botDifficulty ?? 'easy' } : {}),
   }));
 
   const gameState: GameState = {
@@ -139,6 +143,7 @@ export function initializeGameState(
     pausedBy: null,
     pausedAt: null,
     turnTimeRemainingMs: null,
+    targetScore,
   };
 
   // Deal 4 cards to each player (F-028)
@@ -184,6 +189,7 @@ export function sanitizeGameState(gameState: GameState, _forPlayerId: string): C
       })),
       cardCount: p.hand.length,
       totalScore: p.totalScore,
+      isBot: p.isBot || undefined,
     };
   });
 
@@ -199,5 +205,6 @@ export function sanitizeGameState(gameState: GameState, _forPlayerId: string): C
     turnStartedAt: gameState.turnStartedAt,
     paused: gameState.paused,
     pausedBy: gameState.pausedBy,
+    targetScore: gameState.targetScore,
   };
 }

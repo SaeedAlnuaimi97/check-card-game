@@ -259,8 +259,8 @@ Derived from PLAN.md. Features are grouped by domain and ordered by implementati
 
 - [x] **F-200**: Reconnection logic — save state to DB, rejoin after disconnect, resume from current state
 - [x] **F-201**: Disconnection timeout — auto-kick after timeout (45s grace period)
-- [ ] **F-202**: Room expiration (24 hours)
-- [ ] **F-203**: Host can kick players
+- [x] **F-202**: Room expiration (24 hours)
+- [x] **F-203**: Host can kick players
 - [ ] **F-204**: Spectator mode
 
 ### Game History & Leaderboard
@@ -322,25 +322,53 @@ Derived from PLAN.md. Features are grouped by domain and ordered by implementati
 
 ### Future Enhancements
 
-- [ ] **F-300**: Bot players — basic AI strategy, fill empty slots
-- [ ] **F-301**: Bot difficulty levels
+- [x] **F-300**: Bot players — basic AI strategy, fill empty slots
+- [x] **F-301**: Bot difficulty levels
 - [ ] **F-302**: User accounts — email/password registration
 - [ ] **F-303**: Guest-to-registered account migration
 - [ ] **F-304**: Player profiles and avatar selection
-- [ ] **F-305**: Room expiration (24 hours)
-- [ ] **F-306**: Host can kick players
-- [ ] **F-307**: Spectator mode
-- [ ] **F-308**: Card draw/discard/flip animations
-- [ ] **F-309**: Victory animations
-- [ ] **F-310**: Custom target scores (configurable game end threshold)
+- [x] **F-305**: Room expiration (24 hours)
+- [x] **F-306**: Host can kick players
+- [x] **F-308**: Card draw/discard/flip animations
+- [x] **F-309**: Victory animations
+- [x] **F-310**: Custom target scores (configurable game end threshold)
 - [ ] **F-311**: Tournament mode
 - [ ] **F-312**: Friend system and direct invites
-- [ ] **F-313**: Game replay viewer
+
+### Bot Enhancements
+
+- [x] **F-314**: Bot difficulty simplified to Easy/Expert (removed medium/hard)
+- [x] **F-315**: Randomized European bot names with collision avoidance
+- [x] **F-316**: Distinct purple styling and BOT badge for bot players in-game
+- [x] **F-317**: Target score slider (50–150 range, step 5)
+
+### Bug Fixes
+
+- [x] **F-318**: Fix bots not playing on their turn — emitYourTurn no longer skips timer for bots
+- [x] **F-319**: Fix game stuck on bot timeout — proper timeout handling for pending draws/effects
+- [x] **F-330**: Fix green glow effect clipping on current player's hand cards
+- [x] **F-331**: Fix bot turn timer duplication — emitYourTurn only starts timer for human players; bot turns managed by botScheduler
+
+### Room & Game Stability
+
+- [x] **F-340**: Lobby disconnect grace period — 60s grace period for lobby disconnects (page refresh, tab switch) instead of immediate removal
+- [x] **F-341**: localStorage session persistence — session credentials survive tab close and browser restart (migrated from sessionStorage)
+- [x] **F-342**: Mid-turn state restoration on rejoin — drawnCard, drawnFromDiscard, and pendingEffect restored when player reconnects during their turn
+- [x] **F-343**: URL-based game rejoin — `/game/:roomCode` route allows players to rejoin by navigating directly to the game URL
+- [x] **F-344**: rejoinWithCode context method — SocketContext exposes rejoinWithCode for programmatic room rejoin with full state restoration
+- [x] **F-345**: Host reassignment skips bots — when host disconnects, new host is always a human player; room deleted if only bots remain
+- [x] **F-346**: Max 5 simultaneous rooms — createRoom rejects with error if 5 rooms already exist
+- [x] **F-347**: Fix bot turns silently failing — inverted validatePlayerTurn check in botScheduler caused all bot actions to exit immediately
+- [x] **F-348**: Fix stale human turn timer firing for bot turns — clearTurnTimer called before bot guard in emitYourTurn to prevent old timers from timing out bots
+- [x] **F-349**: Fix emitYourTurnFromBot timer cleanup — clear previous timer before starting safety timer for next player's turn
+- [x] **F-350**: Fix human turn unresponsive after bot plays — bot cardDrawn broadcast set drawnCard to undefined on human client, blocking all actions until page refresh
+- [x] **F-351**: Fix emitYourTurnFromBot timer for human players — only start 30s turn timer when next player is human, not for bots (bots use scheduleBotTurnIfNeeded)
 
 ---
 
 **Total MVP Features:** 112  
 **Total Phase 2 Features:** 54  
 **UX Improvements:** 6  
-**Document Version:** 1.3  
-**Last Updated:** 2026-03-14
+**Bot, Bug Fixes & Stability:** 20  
+**Document Version:** 1.7  
+**Last Updated:** 2026-03-15

@@ -44,6 +44,7 @@ function createTestGameState(overrides: Partial<GameState> = {}): GameState {
     pausedBy: null,
     pausedAt: null,
     turnTimeRemainingMs: null,
+    targetScore: 70,
     ...overrides,
   };
 }
@@ -341,8 +342,8 @@ describe('initializeGameState', () => {
 
   it('deck has correct remaining card count', () => {
     const gs = initializeGameState(testPlayers);
-    // 52 total - (4 players * 4 cards) - 1 discard = 35
-    expect(gs.deck).toHaveLength(35);
+    // 54 total - (4 players * 4 cards) - 1 discard = 37
+    expect(gs.deck).toHaveLength(37);
   });
 
   it('assigns peek slots C and D to each player', () => {
@@ -387,8 +388,8 @@ describe('initializeGameState', () => {
       allIds.push(...player.hand.map((h) => h.card.id));
     }
 
-    expect(allIds).toHaveLength(52);
-    expect(new Set(allIds).size).toBe(52);
+    expect(allIds).toHaveLength(54);
+    expect(new Set(allIds).size).toBe(54);
   });
 
   it('sets player usernames correctly', () => {
@@ -400,6 +401,16 @@ describe('initializeGameState', () => {
     }
   });
 
+  it('sets targetScore to 70 by default (F-310)', () => {
+    const gs = initializeGameState(testPlayers);
+    expect(gs.targetScore).toBe(70);
+  });
+
+  it('uses provided targetScore (F-310)', () => {
+    const gs = initializeGameState(testPlayers, undefined, 1, 50);
+    expect(gs.targetScore).toBe(50);
+  });
+
   it('works with 6 players', () => {
     const sixPlayers = Array.from({ length: 6 }, (_, i) => ({
       id: `p${i}`,
@@ -409,8 +420,8 @@ describe('initializeGameState', () => {
     const gs = initializeGameState(sixPlayers);
 
     expect(gs.players).toHaveLength(6);
-    // 52 - (6 * 4) - 1 = 27
-    expect(gs.deck).toHaveLength(27);
+    // 54 - (6 * 4) - 1 = 29
+    expect(gs.deck).toHaveLength(29);
     expect(gs.discardPile).toHaveLength(1);
 
     for (const player of gs.players) {

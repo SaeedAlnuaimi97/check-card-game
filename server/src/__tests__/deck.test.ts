@@ -35,6 +35,7 @@ function createTestGameState(overrides: Partial<GameState> = {}): GameState {
     pausedBy: null,
     pausedAt: null,
     turnTimeRemainingMs: null,
+    targetScore: 70,
     ...overrides,
   };
 }
@@ -54,40 +55,44 @@ describe('initializeDeck', () => {
     deck = initializeDeck();
   });
 
-  it('creates exactly 52 cards', () => {
-    expect(deck).toHaveLength(52);
+  it('creates exactly 54 cards', () => {
+    expect(deck).toHaveLength(54);
   });
 
   it('has unique card IDs', () => {
     const ids = deck.map((c) => c.id);
-    expect(new Set(ids).size).toBe(52);
+    expect(new Set(ids).size).toBe(54);
   });
 
-  it('has 4 suits with 13 cards each', () => {
+  it('has 4 suits — ♥ and ♦ have 14 cards each, ♠ and ♣ have 13 cards each', () => {
     const suitCounts: Record<string, number> = {};
     for (const card of deck) {
       suitCounts[card.suit] = (suitCounts[card.suit] ?? 0) + 1;
     }
     expect(Object.keys(suitCounts)).toHaveLength(4);
-    for (const count of Object.values(suitCounts)) {
-      expect(count).toBe(13);
-    }
+    expect(suitCounts['♥']).toBe(14);
+    expect(suitCounts['♦']).toBe(14);
+    expect(suitCounts['♠']).toBe(13);
+    expect(suitCounts['♣']).toBe(13);
   });
 
-  it('has 13 ranks with 4 cards each', () => {
+  it('has 13 ranks — rank 10 has 6 cards, all others have 4 cards each', () => {
     const rankCounts: Record<string, number> = {};
     for (const card of deck) {
       rankCounts[card.rank] = (rankCounts[card.rank] ?? 0) + 1;
     }
     expect(Object.keys(rankCounts)).toHaveLength(13);
-    for (const count of Object.values(rankCounts)) {
-      expect(count).toBe(4);
+    expect(rankCounts['10']).toBe(6);
+    for (const [rank, count] of Object.entries(rankCounts)) {
+      if (rank !== '10') {
+        expect(count).toBe(4);
+      }
     }
   });
 
   it('assigns red 10s (♥10, ♦10) a value of 0', () => {
     const redTens = deck.filter((c) => c.rank === '10' && (c.suit === '♥' || c.suit === '♦'));
-    expect(redTens).toHaveLength(2);
+    expect(redTens).toHaveLength(4);
     for (const card of redTens) {
       expect(card.value).toBe(0);
     }
@@ -157,7 +162,7 @@ describe('shuffleDeck', () => {
     expect(result).toBe(deck);
   });
 
-  it('preserves all 52 cards', () => {
+  it('preserves all 54 cards', () => {
     const deck = initializeDeck();
     const originalIds = deck.map((c) => c.id).sort();
     shuffleDeck(deck);
@@ -390,14 +395,14 @@ describe('reshuffleDiscard', () => {
 // ============================================================
 
 describe('createShuffledDeck', () => {
-  it('returns 52 cards', () => {
+  it('returns 54 cards', () => {
     const deck = createShuffledDeck();
-    expect(deck).toHaveLength(52);
+    expect(deck).toHaveLength(54);
   });
 
   it('contains all unique card IDs', () => {
     const deck = createShuffledDeck();
     const ids = deck.map((c) => c.id);
-    expect(new Set(ids).size).toBe(52);
+    expect(new Set(ids).size).toBe(54);
   });
 });

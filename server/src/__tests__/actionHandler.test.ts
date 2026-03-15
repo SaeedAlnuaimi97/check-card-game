@@ -62,6 +62,7 @@ function createTestGameState(overrides: Partial<GameState> = {}): GameState {
     pausedBy: null,
     pausedAt: null,
     turnTimeRemainingMs: null,
+    targetScore: 70,
     ...overrides,
   };
 }

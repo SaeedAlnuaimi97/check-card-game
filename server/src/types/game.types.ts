@@ -30,6 +30,12 @@ export interface HandSlot {
 }
 
 // ============================================================
+// Bot Types (F-300/F-301)
+// ============================================================
+
+export type BotDifficulty = 'easy' | 'expert';
+
+// ============================================================
 // Player State (F-011)
 // ============================================================
 
@@ -39,6 +45,10 @@ export interface PlayerState {
   hand: HandSlot[];
   peekedSlots: SlotLabel[];
   totalScore: number;
+  /** True if this player is a bot (F-300) */
+  isBot?: boolean;
+  /** Bot difficulty level (F-301) */
+  botDifficulty?: BotDifficulty;
 }
 
 // ============================================================
@@ -85,6 +95,8 @@ export interface GameState {
   pausedAt: number | null;
   /** Remaining turn time (ms) when paused — for accurate timer resume (F-270) */
   turnTimeRemainingMs: number | null;
+  /** Custom score threshold at which the game ends (F-310). Defaults to 70. */
+  targetScore: number;
 }
 
 // ============================================================
@@ -97,6 +109,10 @@ export interface RoomPlayer {
   id: string;
   username: string;
   guestId?: string;
+  /** True if this player is a bot (F-300) */
+  isBot?: boolean;
+  /** Bot difficulty level (F-301) */
+  botDifficulty?: BotDifficulty;
 }
 
 export interface Room {
@@ -125,6 +141,8 @@ export interface ClientPlayerState {
   hand: ClientHandSlot[];
   cardCount: number;
   totalScore: number;
+  /** True if this player is a bot */
+  isBot?: boolean;
 }
 
 /** Sanitized game state sent to clients (F-014). */
@@ -143,6 +161,8 @@ export interface ClientGameState {
   paused: boolean;
   /** Player ID of who triggered the pause (F-271) */
   pausedBy: string | null;
+  /** Custom score threshold at which the game ends (F-310). Defaults to 70. */
+  targetScore: number;
 }
 
 // ============================================================

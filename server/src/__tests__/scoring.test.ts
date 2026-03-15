@@ -241,6 +241,45 @@ describe('computeRoundResult', () => {
     expect(result.updatedScores[gs.players[1].playerId]).toBe(70);
   });
 
+  it('uses custom targetScore (F-310) instead of default 70', () => {
+    const gs = createPlayingGameState(2);
+    gs.targetScore = 50; // Lower threshold
+    gs.checkCalledBy = gs.players[0].playerId;
+    gs.scores = {
+      [gs.players[0].playerId]: 0,
+      [gs.players[1].playerId]: 40,
+    };
+
+    setPlayerHand(gs, 0, [makeCard('A', '♥', 1)]);
+    // Player 1 adds 10 → total 50 → should trigger game end at threshold 50
+    setPlayerHand(gs, 1, [makeCard('10', '♠', 10)]);
+
+    const result = computeRoundResult(gs);
+
+    expect(result.gameEnded).toBe(true);
+    expect(gs.phase).toBe('gameEnd');
+    expect(result.updatedScores[gs.players[1].playerId]).toBe(50);
+  });
+
+  it('does not end game when score equals default 70 but custom targetScore is 100', () => {
+    const gs = createPlayingGameState(2);
+    gs.targetScore = 100; // Higher threshold
+    gs.checkCalledBy = gs.players[0].playerId;
+    gs.scores = {
+      [gs.players[0].playerId]: 0,
+      [gs.players[1].playerId]: 60,
+    };
+
+    setPlayerHand(gs, 0, [makeCard('A', '♥', 1)]);
+    // Player 1 adds 10 → total 70 — would end with default, but not with threshold 100
+    setPlayerHand(gs, 1, [makeCard('10', '♠', 10)]);
+
+    const result = computeRoundResult(gs);
+
+    expect(result.gameEnded).toBe(false);
+    expect(gs.phase).toBe('roundEnd');
+  });
+
   it('includes correct round number and checkCalledBy', () => {
     const gs = createPlayingGameState(2);
     gs.roundNumber = 3;

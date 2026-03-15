@@ -36,6 +36,8 @@ const PlayerStateSchema = new Schema<PlayerState>(
     hand: { type: [HandSlotSchema], required: true, default: [] },
     peekedSlots: { type: [String], required: true, default: [] },
     totalScore: { type: Number, required: true, default: 0 },
+    isBot: { type: Boolean, default: undefined },
+    botDifficulty: { type: String, enum: ['easy', 'expert'], default: undefined },
   },
   { _id: false },
 );
@@ -75,6 +77,7 @@ const GameStateSchema = new Schema<GameState>(
     pausedBy: { type: String, default: null },
     pausedAt: { type: Number, default: null },
     turnTimeRemainingMs: { type: Number, default: null },
+    targetScore: { type: Number, required: true, default: 70 },
   },
   { _id: false },
 );
@@ -88,6 +91,8 @@ const RoomPlayerSchema = new Schema(
     id: { type: String, required: true },
     username: { type: String, required: true },
     guestId: { type: String, default: undefined },
+    isBot: { type: Boolean, default: undefined },
+    botDifficulty: { type: String, enum: ['easy', 'expert'], default: undefined },
   },
   { _id: false },
 );
@@ -95,7 +100,13 @@ const RoomPlayerSchema = new Schema(
 export interface RoomDocument extends Document {
   roomCode: string;
   host: string;
-  players: { id: string; username: string; guestId?: string }[];
+  players: {
+    id: string;
+    username: string;
+    guestId?: string;
+    isBot?: boolean;
+    botDifficulty?: string;
+  }[];
   gameState: GameState | null;
   status: RoomStatus;
   createdAt: Date;
@@ -126,6 +137,13 @@ const RoomSchema = new Schema<RoomDocument>(
   {
     timestamps: true,
   },
+);
+
+// TTL index: automatically delete finished rooms after 1 hour (F-202/F-305)
+// updatedAt is maintained by { timestamps: true }
+RoomSchema.index(
+  { updatedAt: 1 },
+  { expireAfterSeconds: 3600, partialFilterExpression: { status: 'finished' } },
 );
 
 export const RoomModel = mongoose.model<RoomDocument>('Room', RoomSchema);

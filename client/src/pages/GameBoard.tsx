@@ -67,6 +67,76 @@ const PEEK_DURATION_MS = 8000;
 const PEEK_TICK_MS = 100;
 
 // ============================================================
+// F-309: Confetti overlay for victory animation
+// ============================================================
+
+const CONFETTI_COLORS = [
+  '#FFD700',
+  '#FF6B6B',
+  '#4ECDC4',
+  '#45B7D1',
+  '#96CEB4',
+  '#FFEAA7',
+  '#DDA0DD',
+  '#98FB98',
+  '#F0E68C',
+  '#FF69B4',
+];
+
+const ConfettiOverlay: FC = () => {
+  const pieces = Array.from({ length: 40 }, (_, i) => i);
+  return (
+    <Box
+      position="fixed"
+      top={0}
+      left={0}
+      right={0}
+      bottom={0}
+      pointerEvents="none"
+      zIndex={200}
+      overflow="hidden"
+    >
+      {pieces.map((i) => {
+        const left = Math.random() * 100;
+        const delay = Math.random() * 1.5;
+        const duration = 2 + Math.random() * 2;
+        const color = CONFETTI_COLORS[i % CONFETTI_COLORS.length];
+        const size = 6 + Math.random() * 8;
+        const rotate = Math.random() * 360;
+        return (
+          <motion.div
+            key={i}
+            style={{
+              position: 'absolute',
+              top: '-20px',
+              left: `${left}%`,
+              width: `${size}px`,
+              height: `${size * 0.6}px`,
+              backgroundColor: color,
+              borderRadius: '2px',
+              rotate: `${rotate}deg`,
+            }}
+            animate={{
+              y: ['0vh', '110vh'],
+              x: [0, (Math.random() - 0.5) * 120],
+              rotate: [rotate, rotate + 360 * (Math.random() > 0.5 ? 1 : -1)],
+              opacity: [1, 1, 0],
+            }}
+            transition={{
+              duration,
+              delay,
+              ease: 'easeIn',
+              repeat: Infinity,
+              repeatDelay: Math.random() * 2,
+            }}
+          />
+        );
+      })}
+    </Box>
+  );
+};
+
+// ============================================================
 // Opponent Display
 // ============================================================
 
@@ -88,15 +158,25 @@ const OpponentRow: FC<OpponentProps> = ({
       spacing={1}
       p={2}
       borderRadius="md"
-      bg={isCurrentTurn ? 'whiteAlpha.200' : 'whiteAlpha.50'}
+      bg={isCurrentTurn ? 'whiteAlpha.200' : player.isBot ? 'purple.900' : 'whiteAlpha.50'}
       border="1px solid"
-      borderColor={isCurrentTurn ? 'yellow.400' : 'whiteAlpha.100'}
+      borderColor={isCurrentTurn ? 'yellow.400' : player.isBot ? 'purple.500' : 'whiteAlpha.100'}
       minW={{ base: '100px', md: '140px' }}
     >
       <HStack spacing={1}>
-        <Text fontSize={{ base: 'xs', md: 'sm' }} fontWeight="bold" noOfLines={1}>
+        <Text
+          fontSize={{ base: 'xs', md: 'sm' }}
+          fontWeight="bold"
+          noOfLines={1}
+          color={player.isBot ? 'purple.200' : undefined}
+        >
           {player.username}
         </Text>
+        {player.isBot && (
+          <Badge colorScheme="purple" fontSize="2xs" variant="subtle">
+            BOT
+          </Badge>
+        )}
         {isCurrentTurn && (
           <Badge colorScheme="yellow" fontSize="2xs">
             Turn
@@ -243,6 +323,26 @@ export const GameBoard: FC = () => {
   const discardLongPressTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const discardLongPressStartRef = useRef<number | null>(null);
   const DISCARD_LONG_PRESS_MS = 2000;
+
+  // F-308: Track discard pile top card ID to animate new cards appearing
+  const [discardAnimKey, setDiscardAnimKey] = useState<string>('');
+  useEffect(() => {
+    if (gameState && gameState.discardPile.length > 0) {
+      const topId = gameState.discardPile[gameState.discardPile.length - 1].id;
+      setDiscardAnimKey(topId);
+    }
+  }, [gameState?.discardPile]);
+
+  // F-308: Track drawn card ID to animate it appearing
+  const [drawnCardAnimKey, setDrawnCardAnimKey] = useState<string>('');
+  useEffect(() => {
+    if (drawnCard) {
+      setDrawnCardAnimKey(drawnCard.id);
+    }
+  }, [drawnCard?.id]);
+
+  // F-308: Burn shake animation — slot currently animating
+  const [burningSlot, setBurningSlot] = useState<string | null>(null);
 
   // Trigger red flash when a red face card special effect activates
   useEffect(() => {
@@ -626,6 +726,9 @@ export const GameBoard: FC = () => {
   const handleBurnCard = useCallback(
     async (slot: string) => {
       if (!canAct || hasDrawnCard || !turnData?.availableActions.includes('burn')) return;
+      // F-308: trigger shake animation on the burning slot
+      setBurningSlot(slot);
+      setTimeout(() => setBurningSlot(null), 500);
       const result = await performAction('burn', slot);
       if (!result.success && result.error) {
         toast({ title: result.error, status: 'error', duration: 2000, position: 'top' });
@@ -992,6 +1095,14 @@ export const GameBoard: FC = () => {
               {gameState.roundNumber}
             </Text>
           </Text>
+          {gameState.targetScore !== 70 && (
+            <Text fontSize="sm" color="yellow.400">
+              Target:{' '}
+              <Text as="span" fontWeight="bold">
+                {gameState.targetScore}pts
+              </Text>
+            </Text>
+          )}
         </HStack>
         <HStack spacing={2}>
           {/* Check called banner */}
@@ -1171,37 +1282,44 @@ export const GameBoard: FC = () => {
                 }
                 onClick={handleDrawDeck}
               />
-              <Text fontSize="xs" color="gray.400">
-                Deck ({gameState.deckCount})
-              </Text>
             </VStack>
           </Tooltip>
 
           {/* Drawn Card (floating between deck and discard) */}
-          {hasDrawnCard && drawnCard && (
-            <Tooltip
-              label={
-                drawnFromDiscard
-                  ? 'Click a hand card to swap (must swap)'
-                  : 'Click a hand card to swap, or click discard to keep hand'
-              }
-            >
-              <VStack spacing={2}>
-                <Box
-                  borderRadius="md"
-                  border="2px solid"
-                  borderColor="yellow.400"
-                  shadow="0 0 16px rgba(255, 214, 0, 0.4)"
-                  animation="pulse 1.5s ease-in-out infinite"
-                >
-                  <Card card={drawnCard} size="lg" />
-                </Box>
-                <Text fontSize="xs" color="yellow.300" fontWeight="bold">
-                  {drawnFromDiscard ? 'From Discard' : 'Drawn'}
-                </Text>
-              </VStack>
-            </Tooltip>
-          )}
+          <AnimatePresence mode="wait">
+            {hasDrawnCard && drawnCard && (
+              <Tooltip
+                label={
+                  drawnFromDiscard
+                    ? 'Click a hand card to swap (must swap)'
+                    : 'Click a hand card to swap, or click discard to keep hand'
+                }
+              >
+                <VStack spacing={2}>
+                  <motion.div
+                    key={drawnCardAnimKey}
+                    initial={{ scale: 0.6, opacity: 0, y: -20 }}
+                    animate={{ scale: 1, opacity: 1, y: 0 }}
+                    exit={{ scale: 0.6, opacity: 0, y: 20 }}
+                    transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+                  >
+                    <Box
+                      borderRadius="md"
+                      border="2px solid"
+                      borderColor="yellow.400"
+                      shadow="0 0 16px rgba(255, 214, 0, 0.4)"
+                      animation="pulse 1.5s ease-in-out infinite"
+                    >
+                      <Card card={drawnCard} size="lg" />
+                    </Box>
+                  </motion.div>
+                  <Text fontSize="xs" color="yellow.300" fontWeight="bold">
+                    {drawnFromDiscard ? 'From Discard' : 'Drawn'}
+                  </Text>
+                </VStack>
+              </Tooltip>
+            )}
+          </AnimatePresence>
 
           {/* Discard Pile */}
           <Tooltip
@@ -1253,22 +1371,34 @@ export const GameBoard: FC = () => {
                     userSelect="none"
                     style={{ WebkitUserSelect: 'none', touchAction: 'none' }}
                   >
-                    <Card
-                      card={topDiscard}
-                      size="lg"
-                      isClickable={
-                        hasDrawnCard
-                          ? !drawnFromDiscard
-                          : canAct &&
-                            !topDiscard.isBurned &&
-                            (turnData?.availableActions.includes('takeDiscard') ?? false)
-                      }
-                      onClick={
-                        hasDrawnCard && !drawnFromDiscard
-                          ? () => handleDiscardChoice(null)
-                          : undefined
-                      }
-                    />
+                    {/* F-308: Animate new cards appearing on the discard pile */}
+                    <AnimatePresence mode="wait">
+                      <motion.div
+                        key={discardAnimKey}
+                        initial={{ rotateY: 90, opacity: 0 }}
+                        animate={{ rotateY: 0, opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.25, ease: 'easeOut' }}
+                        style={{ transformStyle: 'preserve-3d' }}
+                      >
+                        <Card
+                          card={topDiscard}
+                          size="lg"
+                          isClickable={
+                            hasDrawnCard
+                              ? !drawnFromDiscard
+                              : canAct &&
+                                !topDiscard.isBurned &&
+                                (turnData?.availableActions.includes('takeDiscard') ?? false)
+                          }
+                          onClick={
+                            hasDrawnCard && !drawnFromDiscard
+                              ? () => handleDiscardChoice(null)
+                              : undefined
+                          }
+                        />
+                      </motion.div>
+                    </AnimatePresence>
                     {/* Long-press progress ring overlay */}
                     {!hasDrawnCard &&
                       !topDiscard.isBurned &&
@@ -1366,7 +1496,7 @@ export const GameBoard: FC = () => {
         </Flex>
 
         {/* Bottom: Player's hand + actions */}
-        <VStack spacing={2} minW={0} overflow="hidden">
+        <VStack spacing={2} minW={0} overflow="visible">
           {/* Turn indicator + Check button */}
           {gameState.phase === 'peeking' ? (
             <Text fontSize="sm" color="yellow.300" fontWeight="bold">
@@ -1429,8 +1559,8 @@ export const GameBoard: FC = () => {
           <Box
             w="100%"
             overflowX="auto"
-            pb={1}
-            pt={3}
+            pb={5}
+            pt={5}
             sx={{
               /* Hide scrollbar but keep scrolling */
               '&::-webkit-scrollbar': { display: 'none' },
@@ -1476,40 +1606,54 @@ export const GameBoard: FC = () => {
 
                 return (
                   <Tooltip key={h.slot} label={tooltipLabel} isDisabled={!isClickable}>
-                    <VStack
-                      spacing={1}
-                      position="relative"
-                      flexShrink={0}
-                      boxShadow={isModified ? '0 0 14px 4px rgba(72, 187, 120, 0.85)' : 'none'}
-                      transition="box-shadow 0.4s ease"
-                      borderRadius="sm"
+                    {/* F-308: Shake animation when burning a card */}
+                    <motion.div
+                      animate={
+                        burningSlot === h.slot
+                          ? {
+                              x: [0, -6, 6, -6, 6, -4, 4, 0],
+                              rotate: [0, -3, 3, -3, 3, -2, 2, 0],
+                            }
+                          : {}
+                      }
+                      transition={{ duration: 0.45, ease: 'easeInOut' }}
+                      style={{ display: 'inline-block' }}
                     >
-                      {showFaceUp && peekedCard ? (
-                        <FlippableCard
-                          card={peekedCard}
-                          isFaceUp={true}
-                          isSelected={true}
-                          isClickable={isClickable}
-                          onClick={handleClick}
-                        />
-                      ) : visibleCard ? (
-                        <Card
-                          card={visibleCard}
-                          isSelected={isPeekedSlot(h.slot)}
-                          isClickable={isClickable}
-                          onClick={handleClick}
-                        />
-                      ) : (
-                        <CardBack
-                          isSelected={isPeekedSlot(h.slot)}
-                          isClickable={isClickable}
-                          onClick={handleClick}
-                        />
-                      )}
-                      <Badge colorScheme={isPeekedSlot(h.slot) ? 'yellow' : 'gray'} fontSize="xs">
-                        {h.slot}
-                      </Badge>
-                    </VStack>
+                      <VStack
+                        spacing={1}
+                        position="relative"
+                        flexShrink={0}
+                        boxShadow={isModified ? '0 0 14px 4px rgba(72, 187, 120, 0.85)' : 'none'}
+                        transition="box-shadow 0.4s ease"
+                        borderRadius="sm"
+                      >
+                        {showFaceUp && peekedCard ? (
+                          <FlippableCard
+                            card={peekedCard}
+                            isFaceUp={true}
+                            isSelected={true}
+                            isClickable={isClickable}
+                            onClick={handleClick}
+                          />
+                        ) : visibleCard ? (
+                          <Card
+                            card={visibleCard}
+                            isSelected={isPeekedSlot(h.slot)}
+                            isClickable={isClickable}
+                            onClick={handleClick}
+                          />
+                        ) : (
+                          <CardBack
+                            isSelected={isPeekedSlot(h.slot)}
+                            isClickable={isClickable}
+                            onClick={handleClick}
+                          />
+                        )}
+                        <Badge colorScheme={isPeekedSlot(h.slot) ? 'yellow' : 'gray'} fontSize="xs">
+                          {h.slot}
+                        </Badge>
+                      </VStack>
+                    </motion.div>
                   </Tooltip>
                 );
               })}
@@ -2130,7 +2274,8 @@ export const GameBoard: FC = () => {
                             isNumeric
                             fontWeight="bold"
                             color={
-                              (roundEndData?.updatedScores[p.playerId] ?? 0) >= 70
+                              (roundEndData?.updatedScores[p.playerId] ?? 0) >=
+                              (gameState.targetScore ?? 70)
                                 ? 'red.400'
                                 : 'gray.100'
                             }
@@ -2170,6 +2315,11 @@ export const GameBoard: FC = () => {
       </Modal>
 
       {/* ============================================================ */}
+      {/* F-309: Victory confetti — shown when current player wins      */}
+      {/* ============================================================ */}
+      {gameEndData !== null && gameEndData.winner.playerId === playerId && <ConfettiOverlay />}
+
+      {/* ============================================================ */}
       {/* Game End Modal (F-075) — Final scores, winner, loser          */}
       {/* ============================================================ */}
       <Modal
@@ -2184,9 +2334,22 @@ export const GameBoard: FC = () => {
         <ModalOverlay bg="blackAlpha.800" />
         <ModalContent bg="gray.800" color="white" maxH="90vh" overflow="auto">
           <ModalHeader textAlign="center">
-            <Heading size="lg" color="yellow.300" mb={2}>
-              Game Over
-            </Heading>
+            {/* F-309: Animated "You Win!" heading for winner */}
+            {gameEndData?.winner.playerId === playerId ? (
+              <motion.div
+                initial={{ scale: 0.5, opacity: 0 }}
+                animate={{ scale: [0.5, 1.15, 1], opacity: 1 }}
+                transition={{ duration: 0.6, ease: 'easeOut' }}
+              >
+                <Heading size="lg" color="yellow.300" mb={2}>
+                  You Win! 🏆
+                </Heading>
+              </motion.div>
+            ) : (
+              <Heading size="lg" color="yellow.300" mb={2}>
+                Game Over
+              </Heading>
+            )}
             <VStack spacing={1}>
               <Text fontSize="md" color="green.300">
                 Winner: {gameEndData?.winner.username}

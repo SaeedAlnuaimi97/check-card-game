@@ -91,8 +91,8 @@ export function computeRoundResult(gameState: GameState): RoundResult {
     player.totalScore = updatedScores[player.playerId] ?? 0;
   }
 
-  // Check if game should end (F-071) — threshold is 70 points
-  const GAME_END_THRESHOLD = 70;
+  // Check if game should end (F-071, F-310) — threshold is configurable (default 70)
+  const GAME_END_THRESHOLD = gameState.targetScore ?? 70;
   const gameEnded = Object.values(updatedScores).some((score) => score >= GAME_END_THRESHOLD);
 
   // Set phase

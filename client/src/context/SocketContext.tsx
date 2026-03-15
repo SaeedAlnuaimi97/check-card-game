@@ -74,11 +74,17 @@ interface SocketContextValue {
   createRoom: (username: string) => Promise<{ success: boolean; error?: string }>;
   joinRoom: (roomCode: string, username: string) => Promise<{ success: boolean; error?: string }>;
   leaveRoom: () => void;
-  startGame: () => Promise<{ success: boolean; error?: string }>;
+  startGame: (targetScore?: number) => Promise<{ success: boolean; error?: string }>;
   /** Host starts the next round after round-end modal */
   startNextRound: () => Promise<{ success: boolean; error?: string }>;
   /** Host ends the game early during round-end phase */
   endGame: () => Promise<{ success: boolean; error?: string }>;
+  /** Host kicks a player from the lobby (F-203/F-306) */
+  kickPlayer: (targetPlayerId: string) => Promise<{ success: boolean; error?: string }>;
+  /** Host adds a bot to the lobby (F-300/F-301) */
+  addBot: (difficulty: 'easy' | 'expert') => Promise<{ success: boolean; error?: string }>;
+  /** Host removes a bot from the lobby (F-300/F-301) */
+  removeBot: (botPlayerId: string) => Promise<{ success: boolean; error?: string }>;
   /** Host pauses the game (F-272) */
   pauseGame: () => Promise<{ success: boolean; error?: string }>;
   /** Host resumes the game (F-273) */
@@ -128,6 +134,8 @@ interface SocketContextValue {
   deleteGuestProfile: () => Promise<{ success: boolean; error?: string }>;
   /** Manually clear the cached storedUsername (e.g. after deletion) */
   clearStoredUsername: () => void;
+  /** Attempt to rejoin a room by room code (used by /game/:roomCode route) */
+  rejoinWithCode: (roomCode: string) => void;
 }
 
 const SocketContext = createContext<SocketContextValue | null>(null);
@@ -197,8 +205,8 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
       );
 
       // Attempt to rejoin room if we have stored session credentials
-      const storedPlayerId = sessionStorage.getItem('playerId');
-      const storedRoomCode = sessionStorage.getItem('roomCode');
+      const storedPlayerId = localStorage.getItem('playerId');
+      const storedRoomCode = localStorage.getItem('roomCode');
       if (storedPlayerId && storedRoomCode) {
         console.log(
           `[reconnect] Attempting rejoin: player=${storedPlayerId} room=${storedRoomCode}`,
@@ -210,17 +218,28 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
             success: boolean;
             room?: RoomData;
             gameState?: ClientGameState;
+            drawnCard?: Card | null;
+            drawnFromDiscard?: boolean;
+            pendingEffect?: WaitingForSpecialEffectPayload | null;
             error?: string;
           }) => {
             if (response.success) {
               console.log('[reconnect] Rejoin successful, room status:', response.room?.status);
               setPlayerId(storedPlayerId);
-              setUsername(sessionStorage.getItem('username') || 'Player');
+              setUsername(localStorage.getItem('username') || 'Player');
               if (response.room) {
                 setRoomData(response.room);
               }
               if (response.gameState) {
                 setGameState(response.gameState);
+                // Restore mid-turn state if the player disconnected during their turn
+                if (response.drawnCard) {
+                  setDrawnCard(response.drawnCard);
+                  setDrawnFromDiscard(response.drawnFromDiscard === true);
+                }
+                if (response.pendingEffect) {
+                  setPendingEffect(response.pendingEffect);
+                }
                 // Navigate to game board for an active game
                 navigateRef.current('/game');
               } else if (response.room?.status === 'lobby') {
@@ -230,9 +249,9 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
             } else {
               console.log('[reconnect] Rejoin failed:', response.error);
               // Clear stale session data so the home page shows normally
-              sessionStorage.removeItem('playerId');
-              sessionStorage.removeItem('roomCode');
-              sessionStorage.removeItem('username');
+              localStorage.removeItem('playerId');
+              localStorage.removeItem('roomCode');
+              localStorage.removeItem('username');
             }
           },
         );
@@ -272,11 +291,11 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
       console.log('Game state updated, phase:', data.phase);
       setGameState(data);
 
-      // Determine if it's still this player's turn based on game state
+      // Determine if it's this player's turn based on game state
       const currentTurnPlayer = data.players[data.currentTurnIndex];
-      const stillMyTurn = currentTurnPlayer?.playerId === playerIdRef.current;
+      const isMyTurnNow = currentTurnPlayer?.playerId === playerIdRef.current;
 
-      if (!stillMyTurn) {
+      if (!isMyTurnNow) {
         // Turn has changed to another player — clear turn state
         setIsMyTurn(false);
         setTurnData(null);
@@ -299,7 +318,10 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
       }
     });
 
-    socket.on('cardDrawn', (data: { card: Card; fromDiscard?: boolean }) => {
+    socket.on('cardDrawn', (data: { card?: Card; fromDiscard?: boolean; playerId?: string }) => {
+      // Ignore bot broadcasts that carry no card (only a playerId).
+      // Only set drawnCard when the server sends an actual card object for us.
+      if (!data.card) return;
       console.log('Card drawn:', data.card, data.fromDiscard ? '(from discard)' : '(from deck)');
       setDrawnCard(data.card);
       setDrawnFromDiscard(data.fromDiscard === true);
@@ -405,6 +427,30 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
       setTimeout(() => setModifiedSlots([]), 2500);
     });
 
+    // F-203/F-306: Host kicked this player from the lobby
+    socket.on('kicked', (_data: { roomCode: string; reason: string }) => {
+      console.log('You were kicked from the room');
+      // Clear all session/state so the player returns to the home page
+      localStorage.removeItem('playerId');
+      localStorage.removeItem('roomCode');
+      localStorage.removeItem('username');
+      setRoomData(null);
+      setPlayerId(null);
+      setUsername(null);
+      setGameState(null);
+      setPeekedCards(null);
+      setDrawnCard(null);
+      setDrawnFromDiscard(false);
+      setPendingEffect(null);
+      setLastBurnResult(null);
+      setCheckCalledData(null);
+      setRoundEndData(null);
+      setGameEndData(null);
+      setIsMyTurn(false);
+      setTurnData(null);
+      navigateRef.current('/');
+    });
+
     return () => {
       socket.off('connect');
       socket.off('disconnect');
@@ -428,6 +474,7 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
       socket.off('gamePaused');
       socket.off('gameResumed');
       socket.off('slotsModified');
+      socket.off('kicked');
       socket.disconnect();
     };
   }, []);
@@ -450,10 +497,10 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
           if (response.success && response.playerId && response.roomCode) {
             setPlayerId(response.playerId);
             setUsername(name);
-            // Persist for reconnection
-            sessionStorage.setItem('playerId', response.playerId);
-            sessionStorage.setItem('roomCode', response.roomCode);
-            sessionStorage.setItem('username', name);
+            // Persist for reconnection (localStorage survives tab close / browser restart)
+            localStorage.setItem('playerId', response.playerId);
+            localStorage.setItem('roomCode', response.roomCode);
+            localStorage.setItem('username', name);
             if (response.room) {
               setRoomData(response.room);
             }
@@ -477,10 +524,10 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
             if (response.success && response.playerId) {
               setPlayerId(response.playerId);
               setUsername(name);
-              // Persist for reconnection
-              sessionStorage.setItem('playerId', response.playerId);
-              sessionStorage.setItem('roomCode', roomCode);
-              sessionStorage.setItem('username', name);
+              // Persist for reconnection (localStorage survives tab close / browser restart)
+              localStorage.setItem('playerId', response.playerId);
+              localStorage.setItem('roomCode', roomCode);
+              localStorage.setItem('username', name);
               if (response.room) {
                 setRoomData(response.room);
               }
@@ -500,10 +547,10 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
     if (roomData && playerId) {
       socket.emit('leaveRoom', { roomCode: roomData.roomCode, playerId });
     }
-    // Clear session storage
-    sessionStorage.removeItem('playerId');
-    sessionStorage.removeItem('roomCode');
-    sessionStorage.removeItem('username');
+    // Clear local storage
+    localStorage.removeItem('playerId');
+    localStorage.removeItem('roomCode');
+    localStorage.removeItem('username');
     setRoomData(null);
     setPlayerId(null);
     setUsername(null);
@@ -523,21 +570,24 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
   // ----------------------------------------------------------
   // Start Game
   // ----------------------------------------------------------
-  const startGame = useCallback((): Promise<{ success: boolean; error?: string }> => {
-    return new Promise((resolve) => {
-      if (!roomData || !playerId) {
-        resolve({ success: false, error: 'Not in a room' });
-        return;
-      }
-      socket.emit(
-        'startGame',
-        { roomCode: roomData.roomCode, playerId },
-        (response: { success: boolean; error?: string }) => {
-          resolve(response);
-        },
-      );
-    });
-  }, [roomData, playerId]);
+  const startGame = useCallback(
+    (targetScore?: number): Promise<{ success: boolean; error?: string }> => {
+      return new Promise((resolve) => {
+        if (!roomData || !playerId) {
+          resolve({ success: false, error: 'Not in a room' });
+          return;
+        }
+        socket.emit(
+          'startGame',
+          { roomCode: roomData.roomCode, playerId, targetScore },
+          (response: { success: boolean; error?: string }) => {
+            resolve(response);
+          },
+        );
+      });
+    },
+    [roomData, playerId],
+  );
 
   // ----------------------------------------------------------
   // Start Next Round — host triggers next round after round-end (F-076)
@@ -576,6 +626,72 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
       );
     });
   }, [roomData, playerId]);
+
+  // ----------------------------------------------------------
+  // Kick Player — host removes player from lobby (F-203/F-306)
+  // ----------------------------------------------------------
+  const kickPlayer = useCallback(
+    (targetPlayerId: string): Promise<{ success: boolean; error?: string }> => {
+      return new Promise((resolve) => {
+        if (!roomData || !playerId) {
+          resolve({ success: false, error: 'Not in a room' });
+          return;
+        }
+        socket.emit(
+          'kickPlayer',
+          { roomCode: roomData.roomCode, hostId: playerId, targetPlayerId },
+          (response: { success: boolean; error?: string }) => {
+            resolve(response);
+          },
+        );
+      });
+    },
+    [roomData, playerId],
+  );
+
+  // ----------------------------------------------------------
+  // Add Bot — host adds a bot to the lobby (F-300/F-301)
+  // ----------------------------------------------------------
+  const addBot = useCallback(
+    (difficulty: 'easy' | 'expert'): Promise<{ success: boolean; error?: string }> => {
+      return new Promise((resolve) => {
+        if (!roomData || !playerId) {
+          resolve({ success: false, error: 'Not in a room' });
+          return;
+        }
+        socket.emit(
+          'addBot',
+          { roomCode: roomData.roomCode, hostId: playerId, difficulty },
+          (response: { success: boolean; error?: string }) => {
+            resolve(response);
+          },
+        );
+      });
+    },
+    [roomData, playerId],
+  );
+
+  // ----------------------------------------------------------
+  // Remove Bot — host removes a bot from the lobby (F-300/F-301)
+  // ----------------------------------------------------------
+  const removeBot = useCallback(
+    (botPlayerId: string): Promise<{ success: boolean; error?: string }> => {
+      return new Promise((resolve) => {
+        if (!roomData || !playerId) {
+          resolve({ success: false, error: 'Not in a room' });
+          return;
+        }
+        socket.emit(
+          'removeBot',
+          { roomCode: roomData.roomCode, hostId: playerId, botPlayerId },
+          (response: { success: boolean; error?: string }) => {
+            resolve(response);
+          },
+        );
+      });
+    },
+    [roomData, playerId],
+  );
 
   // ----------------------------------------------------------
   // Pause Game — host pauses the game (F-272)
@@ -856,6 +972,85 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
   }, []);
 
   // ----------------------------------------------------------
+  // Rejoin With Code — called by /game/:roomCode route (GameRejoin page)
+  // ----------------------------------------------------------
+  const rejoinWithCode = useCallback((roomCode: string) => {
+    const storedPlayerId = localStorage.getItem('playerId');
+    if (!storedPlayerId) {
+      // No stored identity — redirect to lobby join page
+      navigateRef.current(`/lobby/${roomCode}`, { replace: true });
+      return;
+    }
+
+    // Update localStorage so future reconnects use this room code
+    localStorage.setItem('roomCode', roomCode);
+
+    const doRejoin = () => {
+      socket.emit(
+        'rejoinRoom',
+        { playerId: storedPlayerId, roomCode },
+        (response: {
+          success: boolean;
+          room?: RoomData;
+          gameState?: ClientGameState;
+          drawnCard?: Card | null;
+          drawnFromDiscard?: boolean;
+          pendingEffect?: WaitingForSpecialEffectPayload | null;
+          error?: string;
+        }) => {
+          if (response.success) {
+            console.log('[rejoinWithCode] Rejoin successful, status:', response.room?.status);
+            setPlayerId(storedPlayerId);
+            setUsername(localStorage.getItem('username') || 'Player');
+            if (response.room) {
+              setRoomData(response.room);
+            }
+            if (response.gameState) {
+              setGameState(response.gameState);
+              if (response.drawnCard) {
+                setDrawnCard(response.drawnCard);
+                setDrawnFromDiscard(response.drawnFromDiscard === true);
+              }
+              if (response.pendingEffect) {
+                setPendingEffect(response.pendingEffect);
+              }
+              navigateRef.current('/game', { replace: true });
+            } else if (response.room?.status === 'lobby') {
+              navigateRef.current('/room', { replace: true });
+            }
+          } else {
+            console.log('[rejoinWithCode] Rejoin failed:', response.error);
+            localStorage.removeItem('playerId');
+            localStorage.removeItem('roomCode');
+            localStorage.removeItem('username');
+            navigateRef.current(`/lobby/${roomCode}`, { replace: true });
+          }
+        },
+      );
+    };
+
+    if (socket.connected) {
+      doRejoin();
+    } else {
+      // Wait for the socket to connect, then attempt rejoin.
+      // Use a one-time listener that fires after SocketContext's own connect handler.
+      const onConnect = () => {
+        socket.off('connect', onConnect);
+        // Small delay to let SocketContext's main connect handler run first.
+        // If it already handled the rejoin (because localStorage had the right roomCode),
+        // gameState/roomData will be set and the effect in GameRejoin will navigate.
+        setTimeout(() => {
+          // Only attempt if the main connect handler hasn't already restored state
+          if (!roomDataRef.current && !playerIdRef.current) {
+            doRejoin();
+          }
+        }, 150);
+      };
+      socket.on('connect', onConnect);
+    }
+  }, []);
+
+  // ----------------------------------------------------------
   // clearStoredUsername — reset cached identity in context
   // ----------------------------------------------------------
   const clearStoredUsername = useCallback(() => {
@@ -906,6 +1101,9 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
     startGame,
     startNextRound,
     endGame,
+    kickPlayer,
+    addBot,
+    removeBot,
     pauseGame,
     resumeGame,
     endPeek,
@@ -922,6 +1120,7 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
     storedUsername,
     deleteGuestProfile,
     clearStoredUsername,
+    rejoinWithCode,
   };
 
   return <SocketContext.Provider value={value}>{children}</SocketContext.Provider>;
