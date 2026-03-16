@@ -39,6 +39,7 @@ import {
   EyeOutlined,
   FireOutlined,
   CloseOutlined,
+  InfoCircleOutlined,
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { useSocket } from '../context/SocketContext';
@@ -334,6 +335,8 @@ export const GameBoard: FC = () => {
 
   // Game menu modal
   const { isOpen: isMenuOpen, onOpen: onMenuOpen, onClose: onMenuClose } = useDisclosure();
+  // How to play modal
+  const { isOpen: isInfoOpen, onOpen: onInfoOpen, onClose: onInfoClose } = useDisclosure();
 
   // Sound toggle state (synced with localStorage)
   const [soundEnabled, _setSoundEnabled] = useState(isSoundEnabled);
@@ -1025,6 +1028,16 @@ export const GameBoard: FC = () => {
         flexShrink={0}
       >
         <HStack spacing={3}>
+          {/* Info button */}
+          <IconButton
+            aria-label="How to play"
+            size="xs"
+            variant="ghost"
+            color="gray.400"
+            _hover={{ color: 'white', bg: 'whiteAlpha.100' }}
+            onClick={onInfoOpen}
+            icon={<InfoCircleOutlined />}
+          />
           {DEBUG_MODE && (
             <Box
               as="button"
@@ -1198,6 +1211,129 @@ export const GameBoard: FC = () => {
               >
                 Exit Game
               </Button>
+            </VStack>
+          </ModalBody>
+        </ModalContent>
+      </Modal>
+
+      {/* How to Play Info Modal */}
+      <Modal
+        isOpen={isInfoOpen}
+        onClose={onInfoClose}
+        isCentered
+        size={{ base: 'sm', md: 'md' }}
+        scrollBehavior="inside"
+        motionPreset="slideInBottom"
+      >
+        <ModalOverlay bg="blackAlpha.700" />
+        <ModalContent bg="table.border" color="white">
+          <ModalHeader fontSize="md" borderBottom="1px solid" borderColor="surface.tonal30" pb={3}>
+            How to Play
+          </ModalHeader>
+          <ModalCloseButton />
+          <ModalBody py={4} fontSize="sm">
+            <VStack align="stretch" spacing={4}>
+              {/* On Your Turn */}
+              <Box>
+                <Text fontWeight="bold" color="brand.300" mb={2}>
+                  On Your Turn — pick one action:
+                </Text>
+                <VStack align="stretch" spacing={2}>
+                  <Box bg="surface.tonal20" px={3} py={2} borderRadius="md">
+                    <Text fontWeight="semibold" color="white">
+                      1. Draw from Deck
+                    </Text>
+                    <Text color="gray.300" fontSize="xs" mt={1}>
+                      Tap the deck to draw a card. Then tap a hand card to swap it in, or tap the
+                      discard area to discard the drawn card and keep your hand.
+                    </Text>
+                  </Box>
+                  <Box bg="surface.tonal20" px={3} py={2} borderRadius="md">
+                    <Text fontWeight="semibold" color="white">
+                      2. Take from Discard
+                    </Text>
+                    <Text color="gray.300" fontSize="xs" mt={1}>
+                      Tap the top card on the discard pile to take it. You must then tap a hand card
+                      to swap it into that slot. You cannot discard it back.
+                    </Text>
+                  </Box>
+                  <Box bg="surface.tonal20" px={3} py={2} borderRadius="md">
+                    <Text fontWeight="semibold" color="white">
+                      3. Burn a Card
+                    </Text>
+                    <Text color="gray.300" fontSize="xs" mt={1}>
+                      If you think one of your hand cards matches the rank of the top discard, tap
+                      your hand card directly (without drawing first). If the ranks match, the card
+                      is removed from your hand. If wrong, you receive a face-down penalty card.
+                    </Text>
+                  </Box>
+                </VStack>
+              </Box>
+
+              {/* Burn detail */}
+              <Box>
+                <Text fontWeight="bold" color="brand.300" mb={1}>
+                  Burn — Details
+                </Text>
+                <Text color="gray.300" fontSize="xs">
+                  Only the rank matters (e.g. 7 matches 7, K matches K) — suit and color don't
+                  matter. A successful burn shrinks your hand. A failed burn adds a penalty card you
+                  can't see.
+                </Text>
+              </Box>
+
+              {/* Take from discard detail */}
+              <Box>
+                <Text fontWeight="bold" color="brand.300" mb={1}>
+                  Discard Pile — Details
+                </Text>
+                <Text color="gray.300" fontSize="xs">
+                  Taking from the discard pile forces a swap — you must replace one of your hand
+                  cards. No special effects trigger from this action.
+                </Text>
+              </Box>
+
+              {/* Special Effects */}
+              <Box>
+                <Text fontWeight="bold" color="brand.300" mb={1}>
+                  Red Face Card Effects
+                </Text>
+                <Text color="gray.300" fontSize="xs">
+                  When you draw a red J, Q, or K from the deck and choose to discard it, a special
+                  effect triggers:
+                </Text>
+                <VStack align="stretch" spacing={1} mt={1}>
+                  <Text color="gray.300" fontSize="xs">
+                    <Text as="span" color="danger.a10" fontWeight="bold">
+                      Red Jack
+                    </Text>{' '}
+                    — Blind-swap one of your cards with an opponent's.
+                  </Text>
+                  <Text color="gray.300" fontSize="xs">
+                    <Text as="span" color="danger.a10" fontWeight="bold">
+                      Red Queen
+                    </Text>{' '}
+                    — Peek at one of your own face-down cards.
+                  </Text>
+                  <Text color="gray.300" fontSize="xs">
+                    <Text as="span" color="danger.a10" fontWeight="bold">
+                      Red King
+                    </Text>{' '}
+                    — Draw 2 extra cards; keep 0, 1, or 2 (swap into hand).
+                  </Text>
+                </VStack>
+              </Box>
+
+              {/* CHECK */}
+              <Box>
+                <Text fontWeight="bold" color="brand.300" mb={1}>
+                  Calling CHECK
+                </Text>
+                <Text color="gray.300" fontSize="xs">
+                  Before your turn action, tap CHECK if you think you have the lowest hand. Everyone
+                  else gets one final turn. If you're wrong, your score doubles that round.
+                </Text>
+              </Box>
             </VStack>
           </ModalBody>
         </ModalContent>
