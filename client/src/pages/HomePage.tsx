@@ -150,7 +150,7 @@ export const HomePage: FC = () => {
               placeholder="Enter your username"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              maxLength={20}
+              maxLength={10}
               size="lg"
               bg="table.border"
               border="1px solid"

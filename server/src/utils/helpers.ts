@@ -22,12 +22,12 @@ export function generatePlayerId(): string {
 }
 
 /**
- * Validate username: 1-20 characters, non-empty after trim.
+ * Validate username: 1-10 characters, non-empty after trim.
  */
 export function validateUsername(username: unknown): string | null {
   if (typeof username !== 'string') return null;
   const trimmed = username.trim();
-  if (trimmed.length < 1 || trimmed.length > 20) return null;
+  if (trimmed.length < 1 || trimmed.length > 10) return null;
   return trimmed;
 }
 

@@ -76,8 +76,8 @@ describe('validateUsername', () => {
     expect(validateUsername('A')).toBe('A');
   });
 
-  it('accepts 20-character username', () => {
-    const name = 'A'.repeat(20);
+  it('accepts 10-character username', () => {
+    const name = 'A'.repeat(10);
     expect(validateUsername(name)).toBe(name);
   });
 
@@ -89,8 +89,8 @@ describe('validateUsername', () => {
     expect(validateUsername('   ')).toBeNull();
   });
 
-  it('rejects string longer than 20 characters', () => {
-    expect(validateUsername('A'.repeat(21))).toBeNull();
+  it('rejects string longer than 10 characters', () => {
+    expect(validateUsername('A'.repeat(11))).toBeNull();
   });
 
   it('rejects non-string types', () => {
