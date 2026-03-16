@@ -2306,6 +2306,7 @@ export const GameBoard: FC = () => {
                             border="1px solid"
                             borderColor={isWinner ? 'success.a10' : 'gray.500'}
                             bg="white"
+                            position="relative"
                             display="flex"
                             flexDirection="column"
                             alignItems="center"
@@ -2321,6 +2322,18 @@ export const GameBoard: FC = () => {
                             </Text>
                             <Text color={c.isRed ? 'card.red' : 'card.black'} lineHeight={1}>
                               {c.suit}
+                            </Text>
+                            {/* Point value badge — bottom-right corner */}
+                            <Text
+                              position="absolute"
+                              bottom="1px"
+                              right="2px"
+                              fontSize={{ base: '7px', md: '9px' }}
+                              fontWeight="bold"
+                              color={c.value === 0 ? 'green.600' : 'gray.500'}
+                              lineHeight={1}
+                            >
+                              {c.value}
                             </Text>
                           </Box>
                           <Text fontSize="2xs" color="gray.500">
@@ -2553,6 +2566,7 @@ export const GameBoard: FC = () => {
                             border="1px solid"
                             borderColor="gray.500"
                             bg="white"
+                            position="relative"
                             display="flex"
                             flexDirection="column"
                             alignItems="center"
@@ -2568,6 +2582,18 @@ export const GameBoard: FC = () => {
                             </Text>
                             <Text color={c.isRed ? 'card.red' : 'card.black'} lineHeight={1}>
                               {c.suit}
+                            </Text>
+                            {/* Point value badge — bottom-right corner */}
+                            <Text
+                              position="absolute"
+                              bottom="1px"
+                              right="2px"
+                              fontSize="7px"
+                              fontWeight="bold"
+                              color={c.value === 0 ? 'green.600' : 'gray.500'}
+                              lineHeight={1}
+                            >
+                              {c.value}
                             </Text>
                           </Box>
                         ))}
