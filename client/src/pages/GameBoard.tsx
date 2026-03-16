@@ -1232,106 +1232,38 @@ export const GameBoard: FC = () => {
           </ModalHeader>
           <ModalCloseButton />
           <ModalBody py={4} fontSize="sm">
-            <VStack align="stretch" spacing={4}>
-              {/* On Your Turn */}
-              <Box>
-                <Text fontWeight="bold" color="brand.300" mb={2}>
-                  On Your Turn — pick one action:
+            <VStack align="stretch" spacing={2}>
+              <Box bg="surface.tonal20" px={3} py={2} borderRadius="md">
+                <Text fontWeight="semibold" color="white">
+                  Draw from Deck
                 </Text>
-                <VStack align="stretch" spacing={2}>
-                  <Box bg="surface.tonal20" px={3} py={2} borderRadius="md">
-                    <Text fontWeight="semibold" color="white">
-                      1. Draw from Deck
-                    </Text>
-                    <Text color="gray.300" fontSize="xs" mt={1}>
-                      Tap the deck to draw a card. Then tap a hand card to swap it in, or tap the
-                      discard area to discard the drawn card and keep your hand.
-                    </Text>
-                  </Box>
-                  <Box bg="surface.tonal20" px={3} py={2} borderRadius="md">
-                    <Text fontWeight="semibold" color="white">
-                      2. Take from Discard
-                    </Text>
-                    <Text color="gray.300" fontSize="xs" mt={1}>
-                      Tap the top card on the discard pile to take it. You must then tap a hand card
-                      to swap it into that slot. You cannot discard it back.
-                    </Text>
-                  </Box>
-                  <Box bg="surface.tonal20" px={3} py={2} borderRadius="md">
-                    <Text fontWeight="semibold" color="white">
-                      3. Burn a Card
-                    </Text>
-                    <Text color="gray.300" fontSize="xs" mt={1}>
-                      If you think one of your hand cards matches the rank of the top discard, tap
-                      your hand card directly (without drawing first). If the ranks match, the card
-                      is removed from your hand. If wrong, you receive a face-down penalty card.
-                    </Text>
-                  </Box>
-                </VStack>
-              </Box>
-
-              {/* Burn detail */}
-              <Box>
-                <Text fontWeight="bold" color="brand.300" mb={1}>
-                  Burn — Details
-                </Text>
-                <Text color="gray.300" fontSize="xs">
-                  Only the rank matters (e.g. 7 matches 7, K matches K) — suit and color don't
-                  matter. A successful burn shrinks your hand. A failed burn adds a penalty card you
-                  can't see.
+                <Text color="gray.300" fontSize="xs" mt={1}>
+                  Tap the deck → tap a hand card to swap, or tap discard to keep your hand.
                 </Text>
               </Box>
-
-              {/* Take from discard detail */}
-              <Box>
-                <Text fontWeight="bold" color="brand.300" mb={1}>
-                  Discard Pile — Details
+              <Box bg="surface.tonal20" px={3} py={2} borderRadius="md">
+                <Text fontWeight="semibold" color="white">
+                  Take from Discard
                 </Text>
-                <Text color="gray.300" fontSize="xs">
-                  Taking from the discard pile forces a swap — you must replace one of your hand
-                  cards. No special effects trigger from this action.
+                <Text color="gray.300" fontSize="xs" mt={1}>
+                  Tap the discard pile → must tap a hand card to swap.
                 </Text>
               </Box>
-
-              {/* Special Effects */}
-              <Box>
-                <Text fontWeight="bold" color="brand.300" mb={1}>
-                  Red Face Card Effects
+              <Box bg="surface.tonal20" px={3} py={2} borderRadius="md">
+                <Text fontWeight="semibold" color="white">
+                  Burn a Card
                 </Text>
-                <Text color="gray.300" fontSize="xs">
-                  When you draw a red J, Q, or K from the deck and choose to discard it, a special
-                  effect triggers:
+                <Text color="gray.300" fontSize="xs" mt={1}>
+                  Tap a hand card directly (without drawing). If it matches the top discard's rank,
+                  it's removed. If wrong, you get a penalty card.
                 </Text>
-                <VStack align="stretch" spacing={1} mt={1}>
-                  <Text color="gray.300" fontSize="xs">
-                    <Text as="span" color="danger.a10" fontWeight="bold">
-                      Red Jack
-                    </Text>{' '}
-                    — Blind-swap one of your cards with an opponent's.
-                  </Text>
-                  <Text color="gray.300" fontSize="xs">
-                    <Text as="span" color="danger.a10" fontWeight="bold">
-                      Red Queen
-                    </Text>{' '}
-                    — Peek at one of your own face-down cards.
-                  </Text>
-                  <Text color="gray.300" fontSize="xs">
-                    <Text as="span" color="danger.a10" fontWeight="bold">
-                      Red King
-                    </Text>{' '}
-                    — Draw 2 extra cards; keep 0, 1, or 2 (swap into hand).
-                  </Text>
-                </VStack>
               </Box>
-
-              {/* CHECK */}
-              <Box>
-                <Text fontWeight="bold" color="brand.300" mb={1}>
-                  Calling CHECK
+              <Box bg="surface.tonal20" px={3} py={2} borderRadius="md">
+                <Text fontWeight="semibold" color="white">
+                  Call CHECK
                 </Text>
-                <Text color="gray.300" fontSize="xs">
-                  Before your turn action, tap CHECK if you think you have the lowest hand. Everyone
-                  else gets one final turn. If you're wrong, your score doubles that round.
+                <Text color="gray.300" fontSize="xs" mt={1}>
+                  Tap CHECK before your action if you think you have the lowest hand.
                 </Text>
               </Box>
             </VStack>
