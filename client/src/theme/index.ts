@@ -9,26 +9,30 @@ const theme = extendTheme({
   config,
   colors: {
     brand: {
-      50: '#e8f5e9',
-      100: '#c8e6c9',
-      200: '#a5d6a7',
-      300: '#81c784',
-      400: '#66bb6a',
-      500: '#4caf50',
-      600: '#43a047',
-      700: '#388e3c',
-      800: '#2e7d32',
-      900: '#1b5e20',
+      50: '#e3f0ff',
+      100: '#b3d4fc',
+      200: '#82b8f8',
+      300: '#4C8CE4',
+      400: '#4C8CE4',
+      500: '#4C8CE4',
+      600: '#3a72c0',
+      700: '#2a5a9e',
+      800: '#1c437c',
+      900: '#0e2d5a',
+    },
+    accent: {
+      green: '#91D06C',
+      highlight: '#FFF799',
     },
     card: {
       red: '#d32f2f',
       black: '#212121',
       back: '#1565c0',
-      selected: '#ffd600',
+      selected: '#FFF799',
     },
     table: {
-      felt: '#2e7d32',
-      border: '#1b5e20',
+      felt: '#406093',
+      border: '#2e4a73',
     },
   },
   fonts: {
@@ -38,7 +42,7 @@ const theme = extendTheme({
   styles: {
     global: {
       body: {
-        bg: 'gray.900',
+        bg: '#406093',
         color: 'gray.100',
       },
     },

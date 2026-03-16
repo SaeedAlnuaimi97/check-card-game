@@ -14,6 +14,7 @@ import {
   ModalFooter,
   ModalHeader,
   ModalOverlay,
+  Switch,
   Table,
   Tbody,
   Td,
@@ -37,7 +38,6 @@ import {
   LogoutOutlined,
   EyeOutlined,
   FireOutlined,
-  CheckCircleOutlined,
   CloseOutlined,
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
@@ -54,6 +54,8 @@ import {
   playWinSound,
   playTurnSound,
   playGameStartingSound,
+  isSoundEnabled,
+  setSoundEnabled,
 } from '../utils/sound';
 import { vibrateTap, vibrateSuccess, vibrateWarning } from '../utils/haptics';
 import type { Card as CardType } from '../types/card.types';
@@ -194,9 +196,31 @@ const OpponentRow: FC<OpponentProps> = ({
           return (
             <Box
               key={h.slot}
-              boxShadow={isModified ? '0 0 14px 4px rgba(72, 187, 120, 0.85)' : 'none'}
-              transition="box-shadow 0.4s ease"
+              position="relative"
+              overflow="hidden"
               borderRadius="sm"
+              sx={
+                isModified
+                  ? {
+                      '&::before': {
+                        content: '""',
+                        position: 'absolute',
+                        inset: 0,
+                        borderRadius: 'sm',
+                        background:
+                          'linear-gradient(180deg, rgba(72, 187, 120, 0.7) 0%, rgba(72, 187, 120, 0) 60%)',
+                        animation: 'gradientSweep 2s ease-out forwards',
+                        pointerEvents: 'none',
+                        zIndex: 1,
+                      },
+                      '@keyframes gradientSweep': {
+                        '0%': { transform: 'translateY(-100%)' },
+                        '40%': { transform: 'translateY(0%)', opacity: 1 },
+                        '100%': { transform: 'translateY(100%)', opacity: 0 },
+                      },
+                    }
+                  : {}
+              }
             >
               {revealedCard ? (
                 <Box
@@ -311,6 +335,14 @@ export const GameBoard: FC = () => {
   // Game menu modal
   const { isOpen: isMenuOpen, onOpen: onMenuOpen, onClose: onMenuClose } = useDisclosure();
 
+  // Sound toggle state (synced with localStorage)
+  const [soundEnabled, _setSoundEnabled] = useState(isSoundEnabled);
+  const toggleSound = useCallback(() => {
+    const newVal = !soundEnabled;
+    _setSoundEnabled(newVal);
+    setSoundEnabled(newVal);
+  }, [soundEnabled]);
+
   // Turn timer countdown state (seconds remaining)
   const [turnTimeLeft, setTurnTimeLeft] = useState<number | null>(null);
   const TURN_TIMEOUT_SECS = 30;
@@ -321,12 +353,6 @@ export const GameBoard: FC = () => {
   // Round countdown timer state (seconds remaining before next round auto-starts)
   const [roundCountdown, setRoundCountdown] = useState<number | null>(null);
   const roundCountdownSoundPlayedRef = useRef(false);
-
-  // Long-press state for discard pile take (2 second hold required)
-  const [discardLongPressProgress, setDiscardLongPressProgress] = useState(0);
-  const discardLongPressTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const discardLongPressStartRef = useRef<number | null>(null);
-  const DISCARD_LONG_PRESS_MS = 2000;
 
   // F-308: Track discard pile top card ID to animate new cards appearing
   const [discardAnimKey, setDiscardAnimKey] = useState<string>('');
@@ -426,72 +452,49 @@ export const GameBoard: FC = () => {
     }
   }, [gameState, roomData, navigate]);
 
-  // Listen for player-left notifications
+  // Listen for player-left notifications (keep socket listener for gameEnded logic)
   useEffect(() => {
-    const handler = (data: { username: string; gameEnded: boolean }) => {
-      toast({
-        title: data.gameEnded
-          ? `${data.username} left — game ended`
-          : `${data.username} left the game`,
-        status: data.gameEnded ? 'error' : 'warning',
-        duration: 3000,
-        position: 'top',
-      });
+    const handler = (_data: { username: string; gameEnded: boolean }) => {
+      // Toast removed — notifications kept silent
     };
     socket.on('playerLeftGame', handler);
     return () => {
       socket.off('playerLeftGame', handler);
     };
-  }, [toast]);
+  }, []);
 
-  // Listen for turn timeout notifications
+  // Listen for turn timeout (keep socket listener but no toast)
   useEffect(() => {
-    const handler = (data: { playerId: string; username: string }) => {
-      const isMe = data.playerId === playerId;
-      toast({
-        title: isMe ? 'Your turn timed out!' : `${data.username}'s turn timed out`,
-        status: 'warning',
-        duration: 2500,
-        position: 'top',
-      });
+    const handler = (_data: { playerId: string; username: string }) => {
+      // Toast removed — notifications kept silent
     };
     socket.on('turnTimedOut', handler);
     return () => {
       socket.off('turnTimedOut', handler);
     };
-  }, [playerId, toast]);
+  }, []);
 
-  // Listen for game paused toast notification (F-280)
+  // Listen for game paused (keep socket listener but no toast) (F-280)
   useEffect(() => {
-    const handler = (data: { pausedBy: string; username: string }) => {
-      toast({
-        title: `${data.pausedBy === playerId ? 'You' : data.username} paused the game`,
-        status: 'warning',
-        duration: 3000,
-        position: 'top',
-      });
+    const handler = (_data: { pausedBy: string; username: string }) => {
+      // Toast removed — notifications kept silent
     };
     socket.on('gamePaused', handler);
     return () => {
       socket.off('gamePaused', handler);
     };
-  }, [playerId, toast]);
+  }, []);
 
-  // Listen for game resumed toast notification (F-280)
+  // Listen for game resumed (keep socket listener but no toast) (F-280)
   useEffect(() => {
     const handler = () => {
-      toast({
-        title: 'Game resumed',
-        status: 'info',
-        duration: 2000,
-        position: 'top',
-      });
+      // Toast removed — notifications kept silent
     };
     socket.on('gameResumed', handler);
     return () => {
       socket.off('gameResumed', handler);
     };
-  }, [toast]);
+  }, []);
 
   // Turn timer countdown — derived from gameState.turnStartedAt
   // Timer is paused (hidden) during special effect prompts
@@ -526,38 +529,16 @@ export const GameBoard: FC = () => {
     return () => clearInterval(interval);
   }, [gameState?.turnStartedAt, gameState?.phase, gameState?.paused, pendingEffect]);
 
-  // Burn result toast notification (F-044 to F-048)
+  // Burn result — play sound and haptics (toast removed) (F-044 to F-048)
   useEffect(() => {
     if (!lastBurnResult) return;
-    const burnerName =
-      lastBurnResult.playerId === playerId
-        ? 'You'
-        : (gameState?.players.find((p) => p.playerId === lastBurnResult.playerId)?.username ??
-          'Someone');
     playBurnSound();
     if (lastBurnResult.burnSuccess) {
-      const c = lastBurnResult.burnedCard;
       vibrateSuccess();
-      toast({
-        title: `${burnerName === 'You' ? 'Burn success!' : `${burnerName} burned a card!`}`,
-        description: c ? `${c.rank}${c.suit} removed from slot ${lastBurnResult.slot}` : undefined,
-        status: 'success',
-        duration: 2500,
-        position: 'top',
-      });
     } else {
       vibrateWarning();
-      toast({
-        title: `${burnerName === 'You' ? 'Burn failed!' : `${burnerName} failed to burn`}`,
-        description: lastBurnResult.penaltySlot
-          ? `Penalty card added to slot ${lastBurnResult.penaltySlot}`
-          : 'Rank did not match',
-        status: 'error',
-        duration: 3000,
-        position: 'top',
-      });
     }
-  }, [lastBurnResult, playerId, gameState?.players, toast]);
+  }, [lastBurnResult]);
 
   // Red Jack swap toast notification
   useEffect(() => {
@@ -593,19 +574,7 @@ export const GameBoard: FC = () => {
     });
   }, [lastSwapResult, playerId, toast]);
 
-  // Check called toast notification (F-062)
-  useEffect(() => {
-    if (!checkCalledData) return;
-    const callerName = checkCalledData.playerId === playerId ? 'You' : checkCalledData.username;
-    toast({
-      title: `${callerName} called CHECK!`,
-      description: 'Final round — one more turn each.',
-      status: 'warning',
-      duration: 4000,
-      isClosable: true,
-      position: 'top',
-    });
-  }, [checkCalledData, playerId, toast]);
+  // Check called — toast removed (F-062); banner UI still shows
 
   // Handle calling check
   const handleCallCheck = useCallback(async () => {
@@ -720,36 +689,6 @@ export const GameBoard: FC = () => {
     }
   }, [undoTakeDiscard, toast]);
 
-  // Long-press handlers for discard pile take
-  const handleDiscardLongPressStart = useCallback(() => {
-    if (!canAct || hasDrawnCard || !turnData?.availableActions.includes('takeDiscard')) return;
-    discardLongPressStartRef.current = Date.now();
-    discardLongPressTimerRef.current = setInterval(() => {
-      const elapsed = Date.now() - (discardLongPressStartRef.current ?? Date.now());
-      const progress = Math.min((elapsed / DISCARD_LONG_PRESS_MS) * 100, 100);
-      setDiscardLongPressProgress(progress);
-      if (progress >= 100) {
-        // Fire the action
-        if (discardLongPressTimerRef.current) {
-          clearInterval(discardLongPressTimerRef.current);
-          discardLongPressTimerRef.current = null;
-        }
-        discardLongPressStartRef.current = null;
-        setDiscardLongPressProgress(0);
-        handleTakeDiscard();
-      }
-    }, 30);
-  }, [canAct, hasDrawnCard, turnData, handleTakeDiscard]);
-
-  const handleDiscardLongPressEnd = useCallback(() => {
-    if (discardLongPressTimerRef.current) {
-      clearInterval(discardLongPressTimerRef.current);
-      discardLongPressTimerRef.current = null;
-    }
-    discardLongPressStartRef.current = null;
-    setDiscardLongPressProgress(0);
-  }, []);
-
   const handleBurnCard = useCallback(
     async (slot: string) => {
       if (!canAct || hasDrawnCard || !turnData?.availableActions.includes('burn')) return;
@@ -777,12 +716,6 @@ export const GameBoard: FC = () => {
       } else if (result.success) {
         playPickSound();
         vibrateTap();
-        toast({
-          title: slot !== null ? `Swapped card into slot ${slot}` : 'Drawn card discarded',
-          status: 'info',
-          duration: 1500,
-          position: 'top',
-        });
       }
     },
     [canAct, hasDrawnCard, discardChoice, toast],
@@ -943,7 +876,7 @@ export const GameBoard: FC = () => {
   return (
     <Box
       h="100dvh"
-      bg="gray.900"
+      bg="#406093"
       display="flex"
       flexDirection="column"
       position="relative"
@@ -989,7 +922,7 @@ export const GameBoard: FC = () => {
         >
           <VStack
             spacing={4}
-            bg="gray.800"
+            bg="#2e4a73"
             px={8}
             py={6}
             borderRadius="lg"
@@ -1054,7 +987,7 @@ export const GameBoard: FC = () => {
         >
           <VStack
             spacing={2}
-            bg="gray.800"
+            bg="#2e4a73"
             px={6}
             py={4}
             borderRadius="lg"
@@ -1084,9 +1017,9 @@ export const GameBoard: FC = () => {
       <Flex
         px={4}
         py={2}
-        bg="gray.800"
+        bg="#35507a"
         borderBottom="1px solid"
-        borderColor="gray.700"
+        borderColor="#2e4a73"
         justify="space-between"
         align="center"
         flexShrink={0}
@@ -1111,12 +1044,6 @@ export const GameBoard: FC = () => {
             </Box>
           )}
           <Text fontSize="sm" color="gray.400">
-            Room:{' '}
-            <Text as="span" color="gray.100" fontWeight="bold">
-              {roomData?.roomCode}
-            </Text>
-          </Text>
-          <Text fontSize="sm" color="gray.400">
             Round:{' '}
             <Text as="span" color="gray.100" fontWeight="bold">
               {gameState.roundNumber}
@@ -1140,16 +1067,9 @@ export const GameBoard: FC = () => {
           )}
           {/* CHECK button — only visible on player's turn when check is available */}
           {turnData?.canCheck && !hasDrawnCard && !pendingEffect && (
-            <Tooltip label="Call CHECK" placement="bottom">
-              <IconButton
-                aria-label="Call check"
-                size="xs"
-                colorScheme="red"
-                variant="solid"
-                onClick={handleCallCheck}
-                icon={<CheckCircleOutlined />}
-              />
-            </Tooltip>
+            <Button size="xs" colorScheme="red" variant="solid" onClick={handleCallCheck}>
+              CHECK
+            </Button>
           )}
           {/* Menu button */}
           <IconButton
@@ -1167,7 +1087,7 @@ export const GameBoard: FC = () => {
       {/* Game Menu Modal */}
       <Modal isOpen={isMenuOpen} onClose={onMenuClose} isCentered size="xs">
         <ModalOverlay bg="blackAlpha.700" />
-        <ModalContent bg="gray.800" color="white">
+        <ModalContent bg="#2e4a73" color="white">
           <ModalHeader fontSize="md" borderBottom="1px solid" borderColor="gray.700" pb={3}>
             Menu
           </ModalHeader>
@@ -1249,6 +1169,21 @@ export const GameBoard: FC = () => {
                     <Divider borderColor="gray.700" />
                   </>
                 )}
+
+              {/* Sound toggle */}
+              <HStack justify="space-between" px={2} py={1}>
+                <Text fontSize="sm" color="gray.200">
+                  Sound
+                </Text>
+                <Switch
+                  size="sm"
+                  isChecked={soundEnabled}
+                  onChange={toggleSound}
+                  colorScheme="green"
+                />
+              </HStack>
+
+              <Divider borderColor="gray.700" />
 
               {/* Exit */}
               <Button
@@ -1391,7 +1326,7 @@ export const GameBoard: FC = () => {
                   : topDiscard?.isBurned
                     ? 'Burned card — cannot pick up'
                     : canAct && turnData?.availableActions.includes('takeDiscard')
-                      ? 'Hold 2 seconds to take from discard'
+                      ? 'Tap to take from discard'
                       : !canAct
                         ? 'Not your turn'
                         : ''
@@ -1401,36 +1336,7 @@ export const GameBoard: FC = () => {
             <VStack spacing={2}>
               {topDiscard ? (
                 <Box position="relative">
-                  <Box
-                    position="relative"
-                    onMouseDown={
-                      !hasDrawnCard && !topDiscard.isBurned
-                        ? handleDiscardLongPressStart
-                        : undefined
-                    }
-                    onMouseUp={
-                      !hasDrawnCard && !topDiscard.isBurned ? handleDiscardLongPressEnd : undefined
-                    }
-                    onMouseLeave={
-                      !hasDrawnCard && !topDiscard.isBurned ? handleDiscardLongPressEnd : undefined
-                    }
-                    onTouchStart={
-                      !hasDrawnCard && !topDiscard.isBurned
-                        ? (e) => {
-                            e.preventDefault();
-                            handleDiscardLongPressStart();
-                          }
-                        : undefined
-                    }
-                    onTouchEnd={
-                      !hasDrawnCard && !topDiscard.isBurned ? handleDiscardLongPressEnd : undefined
-                    }
-                    onTouchCancel={
-                      !hasDrawnCard && !topDiscard.isBurned ? handleDiscardLongPressEnd : undefined
-                    }
-                    userSelect="none"
-                    style={{ WebkitUserSelect: 'none', touchAction: 'none' }}
-                  >
+                  <Box position="relative">
                     {/* F-308: Animate new cards appearing on the discard pile */}
                     <AnimatePresence mode="wait">
                       <motion.div
@@ -1454,51 +1360,16 @@ export const GameBoard: FC = () => {
                           onClick={
                             hasDrawnCard && !drawnFromDiscard
                               ? () => handleDiscardChoice(null)
-                              : undefined
+                              : !hasDrawnCard &&
+                                  canAct &&
+                                  !topDiscard.isBurned &&
+                                  turnData?.availableActions.includes('takeDiscard')
+                                ? handleTakeDiscard
+                                : undefined
                           }
                         />
                       </motion.div>
                     </AnimatePresence>
-                    {/* Long-press progress ring overlay */}
-                    {!hasDrawnCard &&
-                      !topDiscard.isBurned &&
-                      canAct &&
-                      (turnData?.availableActions.includes('takeDiscard') ?? false) && (
-                        <Box
-                          position="absolute"
-                          inset={0}
-                          borderRadius="md"
-                          pointerEvents="none"
-                          display="flex"
-                          alignItems="center"
-                          justifyContent="center"
-                        >
-                          {discardLongPressProgress > 0 && (
-                            <Box
-                              position="absolute"
-                              inset={0}
-                              borderRadius="md"
-                              border="3px solid"
-                              borderColor="yellow.300"
-                              opacity={discardLongPressProgress / 100}
-                              bg="blackAlpha.400"
-                            />
-                          )}
-                          {discardLongPressProgress === 0 && (
-                            <Text
-                              fontSize="2xs"
-                              color="yellow.300"
-                              fontWeight="bold"
-                              bg="blackAlpha.600"
-                              px={1}
-                              borderRadius="sm"
-                              textAlign="center"
-                            >
-                              Hold
-                            </Text>
-                          )}
-                        </Box>
-                      )}
                   </Box>
                   {topDiscard.isBurned && (
                     <Box
@@ -1683,9 +1554,30 @@ export const GameBoard: FC = () => {
                         spacing={1}
                         position="relative"
                         flexShrink={0}
-                        boxShadow={isModified ? '0 0 14px 4px rgba(72, 187, 120, 0.85)' : 'none'}
-                        transition="box-shadow 0.4s ease"
+                        overflow="hidden"
                         borderRadius="sm"
+                        sx={
+                          isModified
+                            ? {
+                                '&::before': {
+                                  content: '""',
+                                  position: 'absolute',
+                                  inset: 0,
+                                  borderRadius: 'sm',
+                                  background:
+                                    'linear-gradient(180deg, rgba(72, 187, 120, 0.7) 0%, rgba(72, 187, 120, 0) 60%)',
+                                  animation: 'gradientSweep 2s ease-out forwards',
+                                  pointerEvents: 'none',
+                                  zIndex: 1,
+                                },
+                                '@keyframes gradientSweep': {
+                                  '0%': { transform: 'translateY(-100%)' },
+                                  '40%': { transform: 'translateY(0%)', opacity: 1 },
+                                  '100%': { transform: 'translateY(100%)', opacity: 0 },
+                                },
+                              }
+                            : {}
+                        }
                       >
                         {showFaceUp && peekedCard ? (
                           <FlippableCard
@@ -1738,7 +1630,7 @@ export const GameBoard: FC = () => {
         motionPreset="slideInBottom"
       >
         <ModalOverlay bg="blackAlpha.600" />
-        <ModalContent bg="gray.800" color="white">
+        <ModalContent bg="#2e4a73" color="white">
           <ModalHeader fontSize="md" pb={2}>
             Burn card?
           </ModalHeader>
@@ -1781,7 +1673,7 @@ export const GameBoard: FC = () => {
         motionPreset="slideInBottom"
       >
         <ModalOverlay bg="blackAlpha.700" />
-        <ModalContent bg="gray.800" color="white">
+        <ModalContent bg="#2e4a73" color="white">
           <ModalHeader>
             <HStack>
               <Text>{'\u2666'}</Text>
@@ -1895,7 +1787,7 @@ export const GameBoard: FC = () => {
         motionPreset="slideInBottom"
       >
         <ModalOverlay bg="blackAlpha.700" />
-        <ModalContent bg="gray.800" color="white">
+        <ModalContent bg="#2e4a73" color="white">
           <ModalHeader>
             <HStack>
               <Text>{'\u2665'}</Text>
@@ -1959,7 +1851,7 @@ export const GameBoard: FC = () => {
         motionPreset="slideInBottom"
       >
         <ModalOverlay bg="blackAlpha.700" />
-        <ModalContent bg="gray.800" color="white">
+        <ModalContent bg="#2e4a73" color="white">
           <ModalHeader>
             <HStack>
               <Text>{'\u2666'}</Text>
@@ -2141,7 +2033,7 @@ export const GameBoard: FC = () => {
         motionPreset="slideInBottom"
       >
         <ModalOverlay bg="blackAlpha.800" />
-        <ModalContent bg="gray.800" color="white" maxH="90vh" overflow="auto">
+        <ModalContent bg="#2e4a73" color="white" maxH="90vh" overflow="auto">
           <ModalHeader textAlign="center">
             <Heading size="md" color="orange.300">
               Round {roundEndData?.roundNumber} Complete
@@ -2297,26 +2189,38 @@ export const GameBoard: FC = () => {
             {roundEndData?.nextRoundStarting ? (
               <VStack spacing={2}>
                 {roundCountdown != null && roundCountdown > 0 ? (
-                  <Text fontSize="md" fontWeight="bold" color="brand.300">
-                    Next round in {roundCountdown}s...
-                  </Text>
+                  <>
+                    <Text fontSize="md" fontWeight="bold" color="brand.300">
+                      Next round in {roundCountdown}s...
+                    </Text>
+                    {roomData?.host === playerId && (
+                      <Button
+                        colorScheme="red"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => endGame()}
+                      >
+                        End Game
+                      </Button>
+                    )}
+                  </>
                 ) : roundCountdown === 0 ? (
                   <Text fontSize="md" fontWeight="bold" color="green.300">
                     Starting...
                   </Text>
                 ) : roomData?.host === playerId ? (
-                  <Button colorScheme="green" size="sm" onClick={() => startNextRound()}>
-                    Next Round
-                  </Button>
+                  <HStack spacing={3}>
+                    <Button colorScheme="red" variant="outline" size="sm" onClick={() => endGame()}>
+                      End Game
+                    </Button>
+                    <Button colorScheme="green" size="sm" onClick={() => startNextRound()}>
+                      Start Next Round
+                    </Button>
+                  </HStack>
                 ) : (
                   <Text fontSize="sm" color="gray.400">
                     Waiting for host to start next round...
                   </Text>
-                )}
-                {roomData?.host === playerId && roundCountdown != null && roundCountdown > 0 && (
-                  <Button colorScheme="red" variant="outline" size="sm" onClick={() => endGame()}>
-                    End Game
-                  </Button>
                 )}
               </VStack>
             ) : (
@@ -2346,7 +2250,7 @@ export const GameBoard: FC = () => {
         motionPreset="slideInBottom"
       >
         <ModalOverlay bg="blackAlpha.800" />
-        <ModalContent bg="gray.800" color="white" maxH="90vh" overflow="auto">
+        <ModalContent bg="#2e4a73" color="white" maxH="90vh" overflow="auto">
           <ModalHeader textAlign="center">
             {/* F-309: Animated "You Win!" heading for winner */}
             {gameEndData?.winner.playerId === playerId ? (

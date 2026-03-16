@@ -1,7 +1,10 @@
 /**
  * Simple sound effect utility.
  * Preloads sounds and provides functions to play them.
+ * Respects a localStorage toggle (`checkgame_sound_enabled`).
  */
+
+const SOUND_STORAGE_KEY = 'checkgame_sound_enabled';
 
 const pickAudio = new Audio('/pick.mp3');
 pickAudio.preload = 'auto';
@@ -22,10 +25,27 @@ const gameStartingAudio = new Audio('/game-starting.mp3');
 gameStartingAudio.preload = 'auto';
 
 /**
+ * Check if sound is enabled (defaults to true if not set).
+ */
+export function isSoundEnabled(): boolean {
+  const stored = localStorage.getItem(SOUND_STORAGE_KEY);
+  return stored !== 'false';
+}
+
+/**
+ * Set sound enabled/disabled and persist to localStorage.
+ */
+export function setSoundEnabled(enabled: boolean): void {
+  localStorage.setItem(SOUND_STORAGE_KEY, String(enabled));
+}
+
+/**
  * Play a cloned audio node at given volume.
  * Non-blocking — errors are silently ignored (e.g. browser autoplay policy).
+ * Respects the sound toggle.
  */
 function playClone(source: HTMLAudioElement, volume = 0.5): void {
+  if (!isSoundEnabled()) return;
   const clone = source.cloneNode() as HTMLAudioElement;
   clone.volume = volume;
   clone.play().catch(() => {

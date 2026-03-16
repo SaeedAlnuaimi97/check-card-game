@@ -246,6 +246,14 @@ Derived from PLAN.md. Features are grouped by domain and ordered by implementati
 
 - [x] **UI-007**: Modal slide-in animations via `motionPreset="slideInBottom"` on all game modals
 - [x] **UI-008**: Card flip animation (CSS 3D rotateY) for initial peek and Red Queen peek reveals
+- [x] **UI-009**: Replace green boxShadow glow with CSS animated gradient sweep (top→bottom, ~2s) on card swap for opponent and own hand
+- [x] **UI-010**: Remove hold-to-take from discard pile — simple tap/click to take instead of 2-second long press
+- [x] **UI-011**: Remove all in-game toast notifications except Red Jack swap notification and error toasts
+- [x] **UI-012**: Show both "End Game" and "Start Next Round" buttons immediately for host in round-end modal
+- [x] **UI-013**: Replace CHECK IconButton with text `<Button size="xs">CHECK</Button>` in header
+- [x] **UI-014**: Remove "Room: XXXXX" from game header
+- [x] **UI-015**: Add sound toggle — localStorage-persisted (`checkgame_sound_enabled`), Switch control in hamburger menu
+- [x] **UI-016**: New theme colors — background `#406093`, primary `#4C8CE4`, secondary `#91D06C`, highlights `#FFF799`
 
 ---
 

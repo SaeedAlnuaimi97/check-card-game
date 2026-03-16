@@ -115,7 +115,7 @@ export const RoomLobby: FC = () => {
         display="flex"
         alignItems="center"
         justifyContent="center"
-        bg="gray.900"
+        bg="#406093"
         color="white"
         p={4}
       >
@@ -145,7 +145,7 @@ export const RoomLobby: FC = () => {
               onChange={(e) => setUsername(e.target.value)}
               maxLength={20}
               size="lg"
-              bg="gray.800"
+              bg="#2e4a73"
               border="1px solid"
               borderColor="gray.600"
               _hover={{ borderColor: 'gray.500' }}
@@ -306,7 +306,7 @@ export const RoomLobby: FC = () => {
       display="flex"
       alignItems="center"
       justifyContent="center"
-      bg="gray.900"
+      bg="#406093"
       color="white"
       p={4}
     >
