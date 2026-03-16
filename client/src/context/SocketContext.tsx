@@ -10,7 +10,6 @@ import {
 } from 'react';
 import { useNavigate } from 'react-router-dom';
 import socket from '../services/socket';
-import { getOrCreateGuestId, clearGuestId } from '../utils/fingerprint';
 import type { Card } from '../types/card.types';
 import type {
   ClientGameState,
@@ -129,15 +128,6 @@ interface SocketContextValue {
   clearRoundEndData: () => void;
   /** Clear game end data (used by UI after showing modal) */
   clearGameEndData: () => void;
-  /** Username retrieved from the server for a returning guest (via identifyGuest socket event) */
-  storedUsername: string | null;
-  /**
-   * Delete this guest's profile + scoreboard data from the server, clear the
-   * local guestId, and reset storedUsername so the user is treated as new.
-   */
-  deleteGuestProfile: () => Promise<{ success: boolean; error?: string }>;
-  /** Manually clear the cached storedUsername (e.g. after deletion) */
-  clearStoredUsername: () => void;
   /** Attempt to rejoin a room by room code (used by /game/:roomCode route) */
   rejoinWithCode: (roomCode: string) => void;
 }
@@ -171,7 +161,6 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
   const [checkCalledData, setCheckCalledData] = useState<CheckCalledPayload | null>(null);
   const [roundEndData, setRoundEndData] = useState<RoundEndedPayload | null>(null);
   const [gameEndData, setGameEndData] = useState<GameEndedPayload | null>(null);
-  const [storedUsername, setStoredUsername] = useState<string | null>(null);
   const [nextRoundStartsAt, setNextRoundStartsAt] = useState<number | null>(null);
 
   // Use a ref for navigate to avoid re-registering socket listeners
@@ -196,18 +185,6 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
     socket.on('connect', () => {
       console.log('Socket connected:', socket.id);
       setIsConnected(true);
-
-      // Identify this client's guestId to the server and retrieve stored username
-      socket.emit(
-        'identifyGuest',
-        { guestId: getOrCreateGuestId() },
-        (response: { username?: string }) => {
-          if (response?.username) {
-            console.log('[identifyGuest] Returning user recognized:', response.username);
-            setStoredUsername(response.username);
-          }
-        },
-      );
 
       // Attempt to rejoin room if we have stored session credentials
       const storedPlayerId = localStorage.getItem('playerId');
@@ -505,7 +482,7 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
     return new Promise((resolve) => {
       socket.emit(
         'createRoom',
-        { username: name, guestId: getOrCreateGuestId() },
+        { username: name },
         (response: {
           success: boolean;
           roomCode?: string;
@@ -538,7 +515,7 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
       return new Promise((resolve) => {
         socket.emit(
           'joinRoom',
-          { roomCode, username: name, guestId: getOrCreateGuestId() },
+          { roomCode, username: name },
           (response: {
             success: boolean;
             playerId?: string;
@@ -1116,33 +1093,6 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
     }
   }, []);
 
-  // ----------------------------------------------------------
-  // clearStoredUsername — reset cached identity in context
-  // ----------------------------------------------------------
-  const clearStoredUsername = useCallback(() => {
-    setStoredUsername(null);
-  }, []);
-
-  // ----------------------------------------------------------
-  // deleteGuestProfile — wipe server profile + local guestId
-  // ----------------------------------------------------------
-  const deleteGuestProfile = useCallback((): Promise<{ success: boolean; error?: string }> => {
-    const guestId = getOrCreateGuestId();
-    return new Promise((resolve) => {
-      socket.emit(
-        'deleteGuestProfile',
-        { guestId },
-        (response: { success: boolean; error?: string }) => {
-          if (response.success) {
-            clearGuestId();
-            setStoredUsername(null);
-          }
-          resolve(response);
-        },
-      );
-    });
-  }, []);
-
   const value: SocketContextValue = {
     isConnected,
     playerId,
@@ -1185,9 +1135,6 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
     debugPeek,
     clearRoundEndData,
     clearGameEndData,
-    storedUsername,
-    deleteGuestProfile,
-    clearStoredUsername,
     rejoinWithCode,
   };
 

@@ -11,8 +11,6 @@ import { Server as SocketIOServer } from 'socket.io';
 import { connectDB, registerShutdownHandlers } from './utils/database';
 import { startRoomExpiryJob } from './utils/roomExpiry';
 import healthRouter from './routes/health';
-import leaderboardRouter from './routes/leaderboard';
-import guestRouter from './routes/guest';
 import { registerSocketHandlers } from './socket';
 import { logger } from './utils/logger';
 
@@ -52,8 +50,6 @@ app.use('/api', apiLimiter);
 
 // REST routes
 app.use('/api', healthRouter);
-app.use('/api', leaderboardRouter);
-app.use('/api', guestRouter);
 
 // ============================================================
 // Global error handler (F-264)

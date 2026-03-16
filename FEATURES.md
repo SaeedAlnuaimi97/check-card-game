@@ -206,10 +206,6 @@ Derived from PLAN.md. Features are grouped by domain and ordered by implementati
 
 - [x] **E-008**: Pick sound effect plays on card draw, take, burn, and swap
 
-### 26. In-Game Leaderboard
-
-- [x] **E-009**: Trophy button in header opens leaderboard modal with current scores
-
 ### 27. Turn Timer
 
 - [x] **E-010**: 30-second turn timer (server-side) — auto-skips turn on timeout
@@ -263,20 +259,6 @@ Derived from PLAN.md. Features are grouped by domain and ordered by implementati
 - [x] **F-203**: Host can kick players
 - [ ] **F-204**: Spectator mode
 
-### Game History & Leaderboard
-
-- [x] **F-230**: Client-side stable guest ID generation and persistence
-- [x] **F-231**: Server-side guestId validation and storage on room join
-- [x] **F-232**: GameResult Mongoose model with indexes
-- [x] **F-233**: Save game result on game end
-- [x] **F-234**: Add gameStartedAt timestamp to GameState
-- [x] **F-235**: GET /api/leaderboard endpoint with aggregation
-- [x] **F-236**: GET /api/stats/:guestId endpoint with recent games
-- [x] **F-237**: Leaderboard page with top 50 table
-- [x] **F-238**: Personal stats view with recent games
-- [x] **F-239**: Game end modal — leaderboard link and save confirmation
-- [x] **F-240**: Home page — leaderboard navigation link
-
 ### Cloud Deployment
 
 - [x] **F-250**: Cosmos DB compatible database connection
@@ -325,8 +307,7 @@ Derived from PLAN.md. Features are grouped by domain and ordered by implementati
 - [x] **F-300**: Bot players — basic AI strategy, fill empty slots
 - [x] **F-301**: Bot difficulty levels
 - [ ] **F-302**: User accounts — email/password registration
-- [ ] **F-303**: Guest-to-registered account migration
-- [x] **F-304**: Player profiles and avatar selection — avatar picker on home page, persist in GuestProfile, display in lobby/game/leaderboard
+- [x] **F-304**: Player profiles and avatar selection — avatar picker on home page, display in lobby/game
 - [x] **F-305**: Room expiration (24 hours)
 - [x] **F-306**: Host can kick players
 - [x] **F-308**: Card draw/discard/flip animations
@@ -379,8 +360,8 @@ Derived from PLAN.md. Features are grouped by domain and ordered by implementati
 
 ### Player Profiles & Social
 
-- [x] **F-304**: Player profiles and avatar selection — avatar picker on home page, persist in GuestProfile, display in lobby/game/leaderboard
-- [x] **F-363**: Country flag from IP — detect player country via IP geolocation on connect, store in GuestProfile, display flag emoji in lobby/game/leaderboard
+- [x] **F-304**: Player profiles and avatar selection — avatar picker on home page, display in lobby/game
+- [x] **F-363**: Country flag from IP — detect player country via IP geolocation on connect, display flag emoji in lobby/game
 
 ### Mid-Game Join & Host Management
 

@@ -1,12 +1,6 @@
-import { useState, useEffect, useRef, FC } from 'react';
+import { useState, FC } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  AlertDialog,
-  AlertDialogBody,
-  AlertDialogContent,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogOverlay,
   Box,
   Button,
   HStack,
@@ -56,11 +50,8 @@ export const HomePage: FC = () => {
   const [roomCode, setRoomCode] = useState('');
   const [isCreating, setIsCreating] = useState(false);
   const [isJoining, setIsJoining] = useState(false);
-  const [showLogoutDialog, setShowLogoutDialog] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
-  const cancelRef = useRef<HTMLButtonElement>(null);
 
-  const { isConnected, createRoom, joinRoom, storedUsername, deleteGuestProfile } = useSocket();
+  const { isConnected, createRoom, joinRoom } = useSocket();
   const navigate = useNavigate();
   const toast = useToast();
   const {
@@ -68,14 +59,6 @@ export const HomePage: FC = () => {
     onOpen: onHowToPlayOpen,
     onClose: onHowToPlayClose,
   } = useDisclosure();
-
-  // When the socket returns a stored username for a returning guest, pre-fill and skip to step 2
-  useEffect(() => {
-    if (storedUsername && !usernameConfirmed) {
-      setUsername(storedUsername);
-      setUsernameConfirmed(true);
-    }
-  }, [storedUsername, usernameConfirmed]);
 
   const handleConfirmUsername = () => {
     if (!username.trim()) {
@@ -86,21 +69,6 @@ export const HomePage: FC = () => {
   };
 
   const handleChangeClick = () => {
-    if (storedUsername) {
-      // Returning user — warn about data loss before changing
-      setShowLogoutDialog(true);
-    } else {
-      // New user — just go back to name entry
-      setUsernameConfirmed(false);
-    }
-  };
-
-  const handleConfirmLogout = async () => {
-    setIsDeleting(true);
-    await deleteGuestProfile();
-    setIsDeleting(false);
-    setShowLogoutDialog(false);
-    setUsername('');
     setUsernameConfirmed(false);
   };
 
@@ -288,17 +256,6 @@ export const HomePage: FC = () => {
           </VStack>
         )}
 
-        {/* Leaderboard link (F-240) */}
-        <Button
-          variant="ghost"
-          color="gray.400"
-          size="sm"
-          onClick={() => navigate('/leaderboard')}
-          _hover={{ color: 'gray.200' }}
-        >
-          View Leaderboard
-        </Button>
-
         {/* How to Play button */}
         <Button
           variant="ghost"
@@ -469,37 +426,6 @@ export const HomePage: FC = () => {
           </ModalBody>
         </ModalContent>
       </Modal>
-
-      {/* Logout / change identity confirmation */}
-      <AlertDialog
-        isOpen={showLogoutDialog}
-        leastDestructiveRef={cancelRef}
-        onClose={() => setShowLogoutDialog(false)}
-        isCentered
-      >
-        <AlertDialogOverlay>
-          <AlertDialogContent bg="gray.800" color="white">
-            <AlertDialogHeader fontSize="lg" fontWeight="bold">
-              Change username
-            </AlertDialogHeader>
-            <AlertDialogBody>
-              Logging out will delete all your scoreboard data for{' '}
-              <Text as="span" fontWeight="bold" color="brand.300">
-                {storedUsername}
-              </Text>
-              .
-            </AlertDialogBody>
-            <AlertDialogFooter gap={3}>
-              <Button ref={cancelRef} variant="ghost" onClick={() => setShowLogoutDialog(false)}>
-                Cancel
-              </Button>
-              <Button colorScheme="red" onClick={handleConfirmLogout} isLoading={isDeleting}>
-                Confirm
-              </Button>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialogOverlay>
-      </AlertDialog>
     </Box>
   );
 };

@@ -1,6 +1,5 @@
 import { Server as SocketIOServer, Socket } from 'socket.io';
 import { RoomModel } from '../models/Room';
-import { saveGameResult } from '../utils/saveGameResult';
 import { sanitizeGameState, initializeGameState } from '../game/GameSetup';
 import {
   validatePlayerTurn,
@@ -356,9 +355,6 @@ async function advanceTurnAndCheckRoundEnd(
       }
     }
 
-    // F-233: Save game result to database
-    await saveGameResult(room, gameState, gameEndResult);
-
     console.log(
       `Room ${roomCode}: GAME ENDED — Winner: ${gameEndResult.winner.username} (${gameEndResult.winner.score}), Loser: ${gameEndResult.loser.username} (${gameEndResult.loser.score})`,
     );
@@ -663,9 +659,6 @@ export function registerGameHandlers(io: SocketIOServer, socket: Socket): void {
                   io.to(sid).emit('gameEnded', gameEndResult);
                 }
               }
-
-              // F-233: Save game result to database
-              await saveGameResult(room, gameState, gameEndResult);
 
               console.log(
                 `Room ${data.roomCode}: GAME ENDED — Winner: ${gameEndResult.winner.username} (${gameEndResult.winner.score}), Loser: ${gameEndResult.loser.username} (${gameEndResult.loser.score})`,
@@ -1474,9 +1467,6 @@ export function registerGameHandlers(io: SocketIOServer, socket: Socket): void {
             io.to(sid).emit('gameEnded', gameEndResult);
           }
         }
-
-        // Save game result to database
-        await saveGameResult(room, gameState, gameEndResult);
 
         console.log(
           `Room ${data.roomCode}: Host manually ended game — Winner: ${gameEndResult.winner.username} (${gameEndResult.winner.score}), Loser: ${gameEndResult.loser.username} (${gameEndResult.loser.score})`,

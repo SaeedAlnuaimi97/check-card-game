@@ -22,7 +22,6 @@ import { computeRoundResult, computeGameEndResult } from '../game/Scoring';
 import { sanitizeGameState } from '../game/GameSetup';
 import { clearTurnTimer, startTurnTimer } from '../game/TurnTimer';
 import { getSocketByPlayer } from '../socket/playerMapping';
-import { saveGameResult } from '../utils/saveGameResult';
 import type { GameState, BotDifficulty, Card } from '../types/game.types';
 
 // ============================================================
@@ -195,9 +194,6 @@ async function botAdvanceTurnAndCheckRoundEnd(
         io.to(sid).emit('gameEnded', gameEndResult);
       }
     }
-
-    // Save game result — exclude bot stats (non-fatal)
-    await saveGameResult(room, gameState, gameEndResult);
   }
 
   return true;

@@ -90,7 +90,6 @@ const RoomPlayerSchema = new Schema(
   {
     id: { type: String, required: true },
     username: { type: String, required: true },
-    guestId: { type: String, default: undefined },
     isBot: { type: Boolean, default: undefined },
     botDifficulty: { type: String, enum: ['easy', 'expert'], default: undefined },
     isReady: { type: Boolean, default: undefined },
@@ -104,7 +103,6 @@ export interface RoomDocument extends Document {
   players: {
     id: string;
     username: string;
-    guestId?: string;
     isBot?: boolean;
     botDifficulty?: string;
     isReady?: boolean;

@@ -108,7 +108,6 @@ export type RoomStatus = 'lobby' | 'playing' | 'finished';
 export interface RoomPlayer {
   id: string;
   username: string;
-  guestId?: string;
   /** True if this player is a bot (F-300) */
   isBot?: boolean;
   /** Bot difficulty level (F-301) */

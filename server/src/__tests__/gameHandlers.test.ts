@@ -10,7 +10,7 @@ import { initializeGameState } from '../game/GameSetup';
 interface MockRoom {
   roomCode: string;
   host: string;
-  players: { id: string; username: string; guestId?: string }[];
+  players: { id: string; username: string }[];
   status: string;
   gameState: GameState | null;
   createdAt?: Date;
@@ -26,26 +26,6 @@ vi.mock('../models/Room', () => {
       findOne: async ({ roomCode }: { roomCode: string }) => {
         return rooms[roomCode] ?? null;
       },
-    },
-  };
-});
-
-// ============================================================
-// Mock GameResultModel (F-233)
-// ============================================================
-
-const { mockGameResultSave } = vi.hoisted(() => ({
-  mockGameResultSave: vi.fn().mockResolvedValue(undefined),
-}));
-
-vi.mock('../models/GameResult', () => {
-  return {
-    GameResultModel: class MockGameResult {
-      data: Record<string, unknown>;
-      constructor(data: Record<string, unknown>) {
-        this.data = data;
-      }
-      save = mockGameResultSave;
     },
   };
 });
@@ -678,157 +658,6 @@ describe('gameHandlers — empty-hand burn ends round', () => {
 });
 
 // ============================================================
-// saveGameResult — called on game end (F-233)
-// ============================================================
-
-describe('gameHandlers — saveGameResult on game end', () => {
-  let mockSocket: ReturnType<typeof createMockSocket>;
-  let mockIO: ReturnType<typeof createMockIO>;
-
-  const p1Id = 'player-1';
-  const p2Id = 'player-2';
-  const playersList = [
-    { id: p1Id, username: 'Alice' },
-    { id: p2Id, username: 'Bob' },
-  ];
-  const playersWithGuest = [
-    { id: p1Id, username: 'Alice', guestId: 'guest-aaa' },
-    { id: p2Id, username: 'Bob', guestId: 'guest-bbb' },
-  ];
-
-  beforeEach(() => {
-    rooms = {};
-    Object.keys(playerSocketMap).forEach((k) => delete playerSocketMap[k]);
-    playerSocketMap[p1Id] = 'socket-p1';
-    playerSocketMap[p2Id] = 'socket-p2';
-
-    mockSocket = createMockSocket('socket-p1');
-    mockIO = createMockIO();
-    mockGameResultSave.mockClear();
-
-    registerGameHandlers(mockIO as never, mockSocket as never);
-  });
-
-  function emitEvent(event: string, ...args: unknown[]) {
-    const handler = mockSocket._handlers[event];
-    if (!handler) throw new Error(`No handler registered for event: ${event}`);
-    return handler(...args);
-  }
-
-  /**
-   * Creates a room where burning player-1's last card will end
-   * the round AND the game (player-2 already has a high score).
-   */
-  function createGameEndBurnRoom(): MockRoom {
-    const gameState = initializeGameState(playersList);
-    gameState.phase = 'playing';
-    gameState.currentTurnIndex = 0; // p1's turn
-    gameState.gameStartedAt = '2026-03-10T10:00:00.000Z';
-
-    // Give p1 exactly 1 card matching discard top → burn will succeed → empty hand → round end
-    const burnCard = { id: 'c1', suit: '♥' as const, rank: '7' as const, value: 7, isRed: true };
-    gameState.players[0].hand = [{ slot: 'A', card: burnCard }];
-    gameState.players[0].totalScore = 0;
-
-    // Give p2 cards that will push their score past 100
-    const highCard = { id: 'c3', suit: '♠' as const, rank: 'K' as const, value: 13, isRed: false };
-    gameState.players[1].hand = [
-      { slot: 'A', card: highCard },
-      { slot: 'B', card: { ...highCard, id: 'c4' } },
-      { slot: 'C', card: { ...highCard, id: 'c5' } },
-      { slot: 'D', card: { ...highCard, id: 'c6' } },
-    ];
-    gameState.players[1].totalScore = 80;
-
-    // Set scores so p2 is at 80 already; hand sum of 52 will push them to 132
-    gameState.scores = { [p1Id]: 0, [p2Id]: 80 };
-
-    // Discard pile top has matching rank for the burn
-    gameState.discardPile = [
-      { id: 'c2', suit: '♠' as const, rank: '7' as const, value: 7, isRed: false },
-    ];
-
-    const room: MockRoom = {
-      roomCode: 'GEND',
-      host: p1Id,
-      players: playersWithGuest,
-      status: 'playing',
-      gameState,
-      createdAt: new Date('2026-03-10T10:00:00Z'),
-      save: vi.fn(async () => {
-        rooms['GEND'] = room;
-      }),
-      markModified: vi.fn(),
-    };
-
-    rooms['GEND'] = room;
-    return room;
-  }
-
-  it('calls GameResultModel.save() when game ends via burn-all-cards', async () => {
-    createGameEndBurnRoom();
-    const callback = vi.fn();
-
-    await emitEvent(
-      'playerAction',
-      {
-        roomCode: 'GEND',
-        playerId: p1Id,
-        action: { type: 'burn', slot: 'A' },
-      },
-      callback,
-    );
-
-    expect(callback).toHaveBeenCalledWith({ success: true });
-
-    // Verify gameEnded was emitted
-    const gameEndedEvents = mockIO._emittedEvents.filter((e) => e.event === 'gameEnded');
-    expect(gameEndedEvents.length).toBeGreaterThanOrEqual(1);
-
-    // Verify GameResult.save() was called
-    expect(mockGameResultSave).toHaveBeenCalled();
-  });
-
-  it('does NOT call GameResultModel.save() when round ends but game continues', async () => {
-    const room = createGameEndBurnRoom();
-    const gs = room.gameState as GameState;
-
-    // Lower p2's score so game doesn't end after this round
-    gs.scores[p2Id] = 10;
-    gs.players[1].totalScore = 10;
-    // Also give p2 lower-value cards so sum won't reach 100
-    const lowCard = { id: 'c3', suit: '♠' as const, rank: '2' as const, value: 2, isRed: false };
-    gs.players[1].hand = [
-      { slot: 'A', card: lowCard },
-      { slot: 'B', card: { ...lowCard, id: 'c4' } },
-    ];
-
-    const callback = vi.fn();
-    await emitEvent(
-      'playerAction',
-      {
-        roomCode: 'GEND',
-        playerId: p1Id,
-        action: { type: 'burn', slot: 'A' },
-      },
-      callback,
-    );
-
-    expect(callback).toHaveBeenCalledWith({ success: true });
-
-    // Round should end but game should NOT end
-    const roundEndedEvents = mockIO._emittedEvents.filter((e) => e.event === 'roundEnded');
-    expect(roundEndedEvents.length).toBeGreaterThanOrEqual(1);
-
-    const gameEndedEvents = mockIO._emittedEvents.filter((e) => e.event === 'gameEnded');
-    expect(gameEndedEvents).toHaveLength(0);
-
-    // GameResult should NOT be saved
-    expect(mockGameResultSave).not.toHaveBeenCalled();
-  });
-});
-
-// ============================================================
 // pauseGame handler tests (F-272)
 // ============================================================
 
@@ -1353,7 +1182,6 @@ describe('gameHandlers — endGame', () => {
 
     mockSocket = createMockSocket('socket-host-end');
     mockIO = createMockIO();
-    mockGameResultSave.mockClear();
 
     registerGameHandlers(mockIO as never, mockSocket as never);
   });
@@ -1371,11 +1199,6 @@ describe('gameHandlers — endGame', () => {
       [hostId]: 20,
       [player2Id]: 50,
     };
-    // Add guestIds so GameResult is saved
-    room.players = [
-      { id: hostId, username: 'Alice', guestId: 'guest-host' },
-      { id: player2Id, username: 'Bob', guestId: 'guest-p2' },
-    ];
     room.createdAt = new Date();
     return room;
   }
@@ -1430,15 +1253,6 @@ describe('gameHandlers — endGame', () => {
     expect(payload.loser.score).toBe(50);
   });
 
-  it('saves a GameResult to the database', async () => {
-    createRoundEndRoomForEndGame();
-    const callback = vi.fn();
-
-    await emitEvent('endGame', { roomCode: 'ENDG', playerId: hostId }, callback);
-
-    expect(mockGameResultSave).toHaveBeenCalled();
-  });
-
   it('rejects if caller is not the host', async () => {
     createRoundEndRoomForEndGame();
     const callback = vi.fn();
@@ -1487,21 +1301,6 @@ describe('gameHandlers — endGame', () => {
       error: 'Can only end game between rounds',
     });
   });
-
-  it('does not save GameResult when players have no guestId', async () => {
-    const room = createRoundEndRoomForEndGame();
-    room.players = players.map((p) => ({ id: p.id, username: p.username }));
-    const callback = vi.fn();
-
-    await emitEvent('endGame', { roomCode: 'ENDG', playerId: hostId }, callback);
-
-    expect(callback).toHaveBeenCalledWith({ success: true });
-    // Game still ends
-    const gameEndedEvents = mockIO._emittedEvents.filter((e) => e.event === 'gameEnded');
-    expect(gameEndedEvents.length).toBeGreaterThanOrEqual(1);
-    // But no GameResult saved
-    expect(mockGameResultSave).not.toHaveBeenCalled();
-  });
 });
 
 // ============================================================
@@ -1528,7 +1327,6 @@ describe('gameHandlers — round countdown timer', () => {
 
     mockSocket = createMockSocket('socket-cd-1');
     mockIO = createMockIO();
-    mockGameResultSave.mockClear();
 
     registerGameHandlers(mockIO as never, mockSocket as never);
   });
@@ -1609,8 +1407,8 @@ describe('gameHandlers — round countdown timer', () => {
     const room = createRoundEndRoom('CDWN', p1Id, playersList);
     room.gameState!.scores = { [p1Id]: 20, [p2Id]: 50 };
     room.players = [
-      { id: p1Id, username: 'Alice', guestId: 'guest-1' },
-      { id: p2Id, username: 'Bob', guestId: 'guest-2' },
+      { id: p1Id, username: 'Alice' },
+      { id: p2Id, username: 'Bob' },
     ];
     room.createdAt = new Date();
 
@@ -1682,8 +1480,8 @@ describe('gameHandlers — round countdown timer', () => {
       roomCode: 'CDWN',
       host: p1Id,
       players: [
-        { id: p1Id, username: 'Alice', guestId: 'guest-1' },
-        { id: p2Id, username: 'Bob', guestId: 'guest-2' },
+        { id: p1Id, username: 'Alice' },
+        { id: p2Id, username: 'Bob' },
       ],
       status: 'playing',
       gameState,

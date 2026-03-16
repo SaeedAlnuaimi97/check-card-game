@@ -34,7 +34,6 @@ import {
   MenuOutlined,
   PauseCircleOutlined,
   PlayCircleOutlined,
-  TrophyOutlined,
   LogoutOutlined,
   EyeOutlined,
   FireOutlined,
@@ -308,9 +307,6 @@ export const GameBoard: FC = () => {
 
   // Burn confirmation modal state
   const [pendingBurnSlot, setPendingBurnSlot] = useState<string | null>(null);
-
-  // Leaderboard modal state
-  const [showLeaderboard, setShowLeaderboard] = useState(false);
 
   // Game menu modal
   const { isOpen: isMenuOpen, onOpen: onMenuOpen, onClose: onMenuClose } = useDisclosure();
@@ -1206,21 +1202,6 @@ export const GameBoard: FC = () => {
 
               <Divider borderColor="gray.700" />
 
-              {/* Scoreboard */}
-              <Button
-                variant="ghost"
-                justifyContent="flex-start"
-                leftIcon={<TrophyOutlined />}
-                onClick={() => {
-                  onMenuClose();
-                  setShowLeaderboard(true);
-                }}
-              >
-                Scoreboard
-              </Button>
-
-              <Divider borderColor="gray.700" />
-
               {/* Manage Players — host-only, in-game kick (F-365) */}
               {roomData?.host === playerId &&
                 gameState.players.filter((p) => p.playerId !== playerId).length > 0 && (
@@ -1745,62 +1726,6 @@ export const GameBoard: FC = () => {
           </Text>
         </VStack>
       </Grid>
-
-      {/* ============================================================ */}
-      {/* Leaderboard Modal                                             */}
-      {/* ============================================================ */}
-      <Modal
-        isOpen={showLeaderboard}
-        onClose={() => setShowLeaderboard(false)}
-        isCentered
-        size="sm"
-        motionPreset="slideInBottom"
-      >
-        <ModalOverlay bg="blackAlpha.600" />
-        <ModalContent bg="gray.800" color="white">
-          <ModalHeader fontSize="md" pb={2}>
-            <TrophyOutlined style={{ marginRight: 8 }} /> Leaderboard — Round{' '}
-            {gameState.roundNumber}
-          </ModalHeader>
-          <ModalBody>
-            <Table size="sm" variant="simple">
-              <Thead>
-                <Tr>
-                  <Th color="gray.400">#</Th>
-                  <Th color="gray.400">Player</Th>
-                  <Th color="gray.400" isNumeric>
-                    Score
-                  </Th>
-                </Tr>
-              </Thead>
-              <Tbody>
-                {[...gameState.players]
-                  .sort((a, b) => a.totalScore - b.totalScore)
-                  .map((p, i) => (
-                    <Tr
-                      key={p.playerId}
-                      bg={p.playerId === playerId ? 'whiteAlpha.100' : undefined}
-                    >
-                      <Td>{i + 1}</Td>
-                      <Td>
-                        {p.username}
-                        {p.playerId === playerId ? ' (You)' : ''}
-                      </Td>
-                      <Td isNumeric fontWeight="bold">
-                        {p.totalScore}
-                      </Td>
-                    </Tr>
-                  ))}
-              </Tbody>
-            </Table>
-          </ModalBody>
-          <ModalFooter>
-            <Button size="sm" variant="ghost" onClick={() => setShowLeaderboard(false)}>
-              Close
-            </Button>
-          </ModalFooter>
-        </ModalContent>
-      </Modal>
 
       {/* ============================================================ */}
       {/* Burn Confirmation Modal                                       */}
@@ -2553,26 +2478,10 @@ export const GameBoard: FC = () => {
               )}
             </VStack>
           </ModalBody>
-          <ModalFooter justifyContent="center" flexDirection="column" gap={3}>
-            <Text fontSize="xs" color="green.400">
-              Game saved to leaderboard!
-            </Text>
-            <HStack spacing={3}>
-              <Button colorScheme="blue" size="md" onClick={handleReturnToLobby}>
-                Return to Home
-              </Button>
-              <Button
-                variant="outline"
-                colorScheme="yellow"
-                size="md"
-                onClick={() => {
-                  clearGameEndData();
-                  navigate('/leaderboard');
-                }}
-              >
-                View Leaderboard
-              </Button>
-            </HStack>
+          <ModalFooter justifyContent="center">
+            <Button colorScheme="blue" size="md" onClick={handleReturnToLobby}>
+              Return to Home
+            </Button>
           </ModalFooter>
         </ModalContent>
       </Modal>
