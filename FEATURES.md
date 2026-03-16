@@ -255,6 +255,22 @@ Derived from PLAN.md. Features are grouped by domain and ordered by implementati
 - [x] **UI-015**: Add sound toggle — localStorage-persisted (`checkgame_sound_enabled`), Switch control in hamburger menu
 - [x] **UI-016**: New theme colors — purple/dark tonal palette with primary `#6c55c9`, surface tonal `#1b1922`, success `#47d5a6`, warning `#d7ac61`, danger `#d94a4a`
 
+### 35. Desktop Layout Improvements
+
+- [x] **UI-017**: Desktop opponent display — clean layout without bordered box, larger opponent cards
+- [x] **UI-018**: Desktop player hand cards — `lg` size (100x140) on desktop, `md` (80x112) on mobile
+- [x] **UI-019**: Desktop header — inline pause/sound/exit icon buttons alongside menu button
+- [x] **UI-020**: Move How to Play from header icon into the game menu modal
+- [x] **UI-021**: Use `thumbnail.png` as browser tab favicon
+- [x] **UI-022**: Fix homepage vertical scroll — `h="100dvh"` + `overflow="hidden"`
+
+### 36. CardBack Compact Sizes & Header Polish
+
+- [x] **UI-023**: Add `2xs` (20x28) and `xs` (36x50) sizes to CardBack with compact rendering (no inner frame/center diamond)
+- [x] **UI-024**: Use CardBack components for opponent face-down cards — `xs` on desktop, `2xs` on mobile
+- [x] **UI-025**: Enlarge desktop header — increased padding, font sizes, icon button sizes, and spacing
+- [x] **UI-026**: Replace fullscreen pause overlay with inline PAUSED header badge — menu stays open when toggling pause/resume
+
 ---
 
 ## Phase 2: Post-MVP
@@ -390,7 +406,7 @@ Derived from PLAN.md. Features are grouped by domain and ordered by implementati
 
 **Total MVP Features:** 112  
 **Total Phase 2 Features:** 54  
-**UX Improvements:** 6  
+**UX Improvements:** 16  
 **Bot, Bug Fixes & Stability:** 22  
 **Notifications:** 2  
 **Tablet Optimization:** 3  
@@ -398,5 +414,5 @@ Derived from PLAN.md. Features are grouped by domain and ordered by implementati
 **Mid-Game & Host Management:** 2  
 **Lobby Ready Toggle:** 2  
 **Round Transition Timer:** 2  
-**Document Version:** 1.9  
-**Last Updated:** 2026-03-15
+**Document Version:** 1.10  
+**Last Updated:** 2026-03-16
