@@ -261,4 +261,83 @@ describe('playerMapping', () => {
       expect(getPlayerBySocket('new-socket')).toBeUndefined();
     });
   });
+
+  // ============================================================
+  // Multi-tab / duplicate socket tests
+  // ============================================================
+
+  describe('multi-tab handling', () => {
+    it('registerPlayer cleans up old socket when same playerId re-registers', () => {
+      register('socket-tab1', 'player-1', 'ROOM01', 'Alice');
+      expect(getSocketByPlayer('player-1')).toBe('socket-tab1');
+      expect(getPlayerBySocket('socket-tab1')).toBeDefined();
+
+      // Second tab registers with the same playerId
+      register('socket-tab2', 'player-1', 'ROOM01', 'Alice');
+
+      // playerToSocket should point to the new socket
+      expect(getSocketByPlayer('player-1')).toBe('socket-tab2');
+      // Old socket's orphan entry should be cleaned up
+      expect(getPlayerBySocket('socket-tab1')).toBeUndefined();
+      // New socket should be mapped correctly
+      expect(getPlayerBySocket('socket-tab2')).toEqual({
+        playerId: 'player-1',
+        roomCode: 'ROOM01',
+        username: 'Alice',
+      });
+    });
+
+    it('unregisterPlayer does not remove playerToSocket when a newer tab owns the mapping', () => {
+      register('socket-tab1', 'player-1', 'ROOM01', 'Alice');
+      register('socket-tab2', 'player-1', 'ROOM01', 'Alice');
+
+      // Old tab disconnects — unregister its socket
+      // (registerPlayer already cleaned up socket-tab1 from socketToPlayer,
+      //  so this should return undefined and be a no-op)
+      const result = unregisterPlayer('socket-tab1');
+      expect(result).toBeUndefined();
+
+      // The active tab's mapping should remain intact
+      expect(getSocketByPlayer('player-1')).toBe('socket-tab2');
+      expect(getPlayerBySocket('socket-tab2')).toBeDefined();
+      expect(isPlayerConnected('player-1')).toBe(true);
+    });
+
+    it('closing the active tab still triggers proper disconnect', () => {
+      register('socket-tab1', 'player-1', 'ROOM01', 'Alice');
+      register('socket-tab2', 'player-1', 'ROOM01', 'Alice');
+
+      // Active tab disconnects
+      const result = unregisterPlayer('socket-tab2');
+      expect(result).toEqual({
+        playerId: 'player-1',
+        roomCode: 'ROOM01',
+        username: 'Alice',
+      });
+
+      expect(getSocketByPlayer('player-1')).toBeUndefined();
+      expect(isPlayerConnected('player-1')).toBe(false);
+    });
+
+    it('three tabs — only the latest survives', () => {
+      register('socket-a', 'player-1', 'ROOM01', 'Alice');
+      register('socket-b', 'player-1', 'ROOM01', 'Alice');
+      register('socket-c', 'player-1', 'ROOM01', 'Alice');
+
+      // Only socket-c should be active
+      expect(getSocketByPlayer('player-1')).toBe('socket-c');
+      expect(getPlayerBySocket('socket-a')).toBeUndefined();
+      expect(getPlayerBySocket('socket-b')).toBeUndefined();
+      expect(getPlayerBySocket('socket-c')).toBeDefined();
+
+      // Closing old tabs is a no-op
+      expect(unregisterPlayer('socket-a')).toBeUndefined();
+      expect(unregisterPlayer('socket-b')).toBeUndefined();
+      expect(isPlayerConnected('player-1')).toBe(true);
+
+      // Closing the active tab properly disconnects
+      expect(unregisterPlayer('socket-c')).toBeDefined();
+      expect(isPlayerConnected('player-1')).toBe(false);
+    });
+  });
 });
