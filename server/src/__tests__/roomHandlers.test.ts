@@ -1,7 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { registerRoomHandlers } from '../socket/roomHandlers';
 import { GameState } from '../types/game.types';
-import { unregisterPlayer, cancelGracePeriod, hasPendingDisconnect } from '../socket/playerMapping';
+import {
+  unregisterPlayer,
+  cancelGracePeriod,
+  hasPendingDisconnect,
+  getPendingDisconnect,
+} from '../socket/playerMapping';
 
 // ============================================================
 // Mock RoomModel
@@ -1030,6 +1035,283 @@ describe('roomHandlers', () => {
           error: 'Missing player ID',
         }),
       );
+    });
+
+    it('restores peekedCards on rejoin during peeking phase', async () => {
+      // Set up in-game state in the peeking phase
+      rooms[roomCode].status = 'playing';
+      rooms[roomCode].players.push({ id: 'player-2', username: 'Bob' });
+      rooms[roomCode].gameState = {
+        phase: 'peeking',
+        players: [
+          {
+            playerId: hostId,
+            username: 'Host',
+            hand: [
+              { slot: 'A', card: { id: 'c1', rank: '5', suit: '♥', value: 5, isRed: true } },
+              { slot: 'B', card: { id: 'c2', rank: '3', suit: '♠', value: 3, isRed: false } },
+              { slot: 'C', card: { id: 'c3', rank: 'K', suit: '♦', value: 10, isRed: true } },
+              { slot: 'D', card: { id: 'c4', rank: '7', suit: '♣', value: 7, isRed: false } },
+            ],
+            peekedSlots: ['C', 'D'],
+          },
+          {
+            playerId: 'player-2',
+            username: 'Bob',
+            hand: [
+              { slot: 'A', card: { id: 'c5', rank: '2', suit: '♥', value: 2, isRed: true } },
+              { slot: 'B', card: { id: 'c6', rank: '8', suit: '♠', value: 8, isRed: false } },
+              { slot: 'C', card: { id: 'c7', rank: '4', suit: '♦', value: 4, isRed: true } },
+              { slot: 'D', card: { id: 'c8', rank: '9', suit: '♣', value: 9, isRed: false } },
+            ],
+            peekedSlots: ['C', 'D'],
+          },
+        ],
+        deck: [],
+        discardPile: [],
+        currentTurnIndex: 0,
+        checkCalledBy: null,
+        roundNumber: 1,
+        scores: { [hostId]: 0, 'player-2': 0 },
+        turnStartedAt: null,
+      } as unknown as GameState;
+
+      // Simulate disconnect (starts grace period)
+      await emitEvent('disconnect');
+      expect(hasPendingDisconnect(hostId)).toBe(true);
+      vi.clearAllMocks();
+
+      // Rejoin with a new socket
+      const newSocket = createMockSocket('socket-peek');
+      const newIO = createMockIO();
+      registerRoomHandlers(newIO as never, newSocket as never);
+
+      const callback = vi.fn();
+      await newSocket._handlers['rejoinRoom']({ playerId: hostId, roomCode }, callback);
+
+      expect(callback).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: true,
+          peekedCards: expect.arrayContaining([
+            expect.objectContaining({
+              slot: 'C',
+              card: expect.objectContaining({ rank: 'K', suit: '♦' }),
+            }),
+            expect.objectContaining({
+              slot: 'D',
+              card: expect.objectContaining({ rank: '7', suit: '♣' }),
+            }),
+          ]),
+        }),
+      );
+      expect(callback.mock.calls[0][0].peekedCards).toHaveLength(2);
+
+      unregisterPlayer('socket-peek');
+    });
+
+    it('does not include peekedCards on rejoin during playing phase', async () => {
+      // Set up in-game state in the playing phase (not peeking)
+      rooms[roomCode].status = 'playing';
+      rooms[roomCode].players.push({ id: 'player-2', username: 'Bob' });
+      rooms[roomCode].gameState = {
+        phase: 'playing',
+        players: [
+          {
+            playerId: hostId,
+            username: 'Host',
+            hand: [{ slot: 'A', card: { id: 'c1', rank: '5', suit: '♥', value: 5, isRed: true } }],
+            peekedSlots: ['C', 'D'],
+          },
+          {
+            playerId: 'player-2',
+            username: 'Bob',
+            hand: [{ slot: 'A', card: { id: 'c2', rank: '3', suit: '♠', value: 3, isRed: false } }],
+            peekedSlots: ['C', 'D'],
+          },
+        ],
+        deck: [],
+        discardPile: [],
+        currentTurnIndex: 1,
+        checkCalledBy: null,
+        roundNumber: 1,
+        scores: { [hostId]: 0, 'player-2': 0 },
+        turnStartedAt: null,
+      } as unknown as GameState;
+
+      // Simulate disconnect (starts grace period)
+      await emitEvent('disconnect');
+      vi.clearAllMocks();
+
+      const newSocket = createMockSocket('socket-nopk');
+      const newIO = createMockIO();
+      registerRoomHandlers(newIO as never, newSocket as never);
+
+      const callback = vi.fn();
+      await newSocket._handlers['rejoinRoom']({ playerId: hostId, roomCode }, callback);
+
+      expect(callback).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
+      // peekedCards should be undefined when not in peeking phase
+      expect(callback.mock.calls[0][0].peekedCards).toBeUndefined();
+
+      unregisterPlayer('socket-nopk');
+    });
+  });
+
+  // ----------------------------------------------------------
+  // Host reassignment on disconnect + restoration on rejoin
+  // ----------------------------------------------------------
+  describe('host reassignment on disconnect', () => {
+    let hostId: string;
+    let guestId: string;
+    let roomCode: string;
+
+    beforeEach(async () => {
+      vi.useFakeTimers();
+      const createCb = vi.fn();
+      await emitEvent('createRoom', { username: 'Host' }, createCb);
+      roomCode = createCb.mock.calls[0][0].roomCode;
+      hostId = createCb.mock.calls[0][0].playerId;
+
+      // Add a second human player
+      const joinSocket = createMockSocket('socket-2');
+      const joinIO = createMockIO();
+      registerRoomHandlers(joinIO as never, joinSocket as never);
+      const joinCb = vi.fn();
+      await joinSocket._handlers['joinRoom']({ roomCode, username: 'Guest' }, joinCb);
+      guestId = joinCb.mock.calls[0][0].playerId;
+      vi.clearAllMocks();
+    });
+
+    afterEach(() => {
+      cancelGracePeriod(hostId);
+      cancelGracePeriod(guestId);
+      vi.useRealTimers();
+    });
+
+    it('immediately reassigns host to next human player when host disconnects', async () => {
+      expect(rooms[roomCode].host).toBe(hostId);
+
+      await emitEvent('disconnect');
+
+      // Host should be reassigned immediately
+      expect(rooms[roomCode].host).toBe(guestId);
+
+      // Should broadcast roomUpdated with new host
+      expect(mockIO.to).toHaveBeenCalledWith(roomCode);
+      expect(mockIO._toEmit).toHaveBeenCalledWith(
+        'roomUpdated',
+        expect.objectContaining({
+          roomCode,
+          host: guestId,
+        }),
+      );
+    });
+
+    it('stores wasHost flag in pending disconnect entry', async () => {
+      await emitEvent('disconnect');
+
+      const pending = getPendingDisconnect(hostId);
+      expect(pending).toBeDefined();
+      expect(pending!.wasHost).toBe(true);
+    });
+
+    it('does not set wasHost flag when non-host disconnects', async () => {
+      // Make the guest disconnect instead
+      const guestSocket = createMockSocket('socket-guest');
+      const guestIO = createMockIO();
+      registerRoomHandlers(guestIO as never, guestSocket as never);
+
+      // Set up in-game state so guest has a mapping
+      rooms[roomCode].status = 'playing';
+      rooms[roomCode].gameState = {
+        phase: 'playing',
+        players: [
+          { playerId: hostId, username: 'Host', hand: [], peekedSlots: [] },
+          { playerId: guestId, username: 'Guest', hand: [], peekedSlots: [] },
+        ],
+        deck: [],
+        discardPile: [],
+        currentTurnIndex: 0,
+        checkCalledBy: null,
+        roundNumber: 1,
+        scores: {},
+        turnStartedAt: null,
+      } as unknown as GameState;
+
+      // Register guest with the new socket so disconnect handler finds them
+      const { registerPlayer } = await import('../socket/playerMapping');
+      registerPlayer('socket-guest', guestId, roomCode, 'Guest');
+
+      // Disconnect the guest socket
+      await guestSocket._handlers['disconnect']();
+
+      const pending = getPendingDisconnect(guestId);
+      expect(pending).toBeDefined();
+      expect(pending!.wasHost).toBe(false);
+    });
+
+    it('restores host to original player when they rejoin', async () => {
+      // Host disconnects — gets temporarily reassigned to guest
+      await emitEvent('disconnect');
+      expect(rooms[roomCode].host).toBe(guestId);
+      vi.clearAllMocks();
+
+      // Host rejoins with a new socket
+      const newSocket = createMockSocket('socket-host-new');
+      const newIO = createMockIO();
+      registerRoomHandlers(newIO as never, newSocket as never);
+
+      const callback = vi.fn();
+      await newSocket._handlers['rejoinRoom']({ playerId: hostId, roomCode }, callback);
+
+      expect(callback).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
+
+      // Host should be restored to the original player
+      expect(rooms[roomCode].host).toBe(hostId);
+
+      // Should broadcast roomUpdated with restored host
+      expect(newIO.to).toHaveBeenCalledWith(roomCode);
+      expect(newIO._toEmit).toHaveBeenCalledWith(
+        'roomUpdated',
+        expect.objectContaining({
+          roomCode,
+          host: hostId,
+        }),
+      );
+
+      unregisterPlayer('socket-host-new');
+    });
+
+    it('does not reassign host when non-host disconnects', async () => {
+      // Set up in-game state
+      rooms[roomCode].status = 'playing';
+      rooms[roomCode].gameState = {
+        phase: 'playing',
+        players: [
+          { playerId: hostId, username: 'Host', hand: [], peekedSlots: [] },
+          { playerId: guestId, username: 'Guest', hand: [], peekedSlots: [] },
+        ],
+        deck: [],
+        discardPile: [],
+        currentTurnIndex: 0,
+        checkCalledBy: null,
+        roundNumber: 1,
+        scores: {},
+        turnStartedAt: null,
+      } as unknown as GameState;
+
+      // Register guest with a socket so disconnect handler finds them
+      const { registerPlayer } = await import('../socket/playerMapping');
+      registerPlayer('socket-guest-dc', guestId, roomCode, 'Guest');
+
+      const guestSocket = createMockSocket('socket-guest-dc');
+      const guestIO = createMockIO();
+      registerRoomHandlers(guestIO as never, guestSocket as never);
+
+      await guestSocket._handlers['disconnect']();
+
+      // Host should remain unchanged
+      expect(rooms[roomCode].host).toBe(hostId);
     });
   });
 

@@ -543,11 +543,31 @@ export function registerRoomHandlers(io: SocketIOServer, socket: Socket): void {
         `Starting ${isInGame ? 'game' : 'lobby'} grace period (${gracePeriodMs / 1000}s) for ${mapping.username} (${mapping.playerId}) in room ${mapping.roomCode}`,
       );
 
+      // If disconnecting player is the host, immediately reassign to next
+      // human player so host-only actions (start round, kick, pause) are
+      // not blocked during the entire grace period.
+      const wasHost = room.host === mapping.playerId;
+      if (wasHost) {
+        const nextHuman = room.players.find((p) => p.id !== mapping.playerId && !p.isBot);
+        if (nextHuman) {
+          room.host = nextHuman.id;
+          await room.save();
+          console.log(
+            `Host temporarily reassigned from ${mapping.username} to ${nextHuman.username} in room ${mapping.roomCode}`,
+          );
+        }
+      }
+
       // Notify other players that this player disconnected (but hasn't left yet)
       io.to(mapping.roomCode).emit('playerDisconnected', {
         playerId: mapping.playerId,
         username: mapping.username,
       });
+
+      // Broadcast updated room (includes new host if reassigned)
+      if (wasHost) {
+        await broadcastRoomUpdate(io, mapping.roomCode);
+      }
 
       startGracePeriod(
         mapping,
@@ -566,6 +586,7 @@ export function registerRoomHandlers(io: SocketIOServer, socket: Socket): void {
           }
         },
         gracePeriodMs,
+        wasHost,
       );
     } catch (error) {
       console.error('Error in disconnect handler:', error);
@@ -773,6 +794,16 @@ export function registerRoomHandlers(io: SocketIOServer, socket: Socket): void {
             playerId: data.playerId,
             username: pending.mapping.username,
           });
+
+          // Restore host role if the player was host when they disconnected
+          if (pending.wasHost) {
+            room.host = data.playerId;
+            await room.save();
+            await broadcastRoomUpdate(io, roomCode);
+            console.log(
+              `Host restored to ${pending.mapping.username} (${data.playerId}) in room ${roomCode}`,
+            );
+          }
         } else {
           // Lobby / fresh-tab path: player is still in DB but has no in-memory
           // mapping (e.g. they refreshed or had a brief disconnect not in a game).
@@ -811,6 +842,15 @@ export function registerRoomHandlers(io: SocketIOServer, socket: Socket): void {
             };
           }
 
+          // Restore peeked cards if still in the peeking phase
+          let peekedCards: ReturnType<typeof getPeekedCards> | undefined;
+          if (gameState.phase === 'peeking') {
+            const player = gameState.players.find((p) => p.playerId === data.playerId);
+            if (player) {
+              peekedCards = getPeekedCards(player);
+            }
+          }
+
           callback?.({
             success: true,
             room: {
@@ -820,6 +860,7 @@ export function registerRoomHandlers(io: SocketIOServer, socket: Socket): void {
               status: room.status,
             },
             gameState: clientState,
+            peekedCards,
             drawnCard,
             drawnFromDiscard,
             pendingEffect,

@@ -407,6 +407,12 @@ Derived from PLAN.md. Features are grouped by domain and ordered by implementati
 
 - [x] **UI-027**: Card point values on round-end/game-end cards — small score label in bottom-right corner of each card; red 10s (0 pts) highlighted in green
 
+### Rejoin Stabilization
+
+- [x] **F-380**: Peek phase restoration on rejoin — peekedCards returned in rejoinRoom callback when game is in peeking phase, client restores them in both rejoin paths
+- [x] **F-381**: Double rejoin deduplication — rejoinInFlightRef prevents duplicate rejoinRoom emissions when main connect handler and rejoinWithCode fire concurrently
+- [x] **F-382**: Faster host reassignment on disconnect — host immediately reassigned to next human player on disconnect (not blocked for entire grace period); restored to original player on rejoin
+
 ---
 
 **Total MVP Features:** 112  
@@ -420,5 +426,6 @@ Derived from PLAN.md. Features are grouped by domain and ordered by implementati
 **Lobby Ready Toggle:** 2  
 **Round Transition Timer:** 2  
 **Round-End UI Polish:** 1  
-**Document Version:** 1.11  
+**Rejoin Stabilization:** 3  
+**Document Version:** 1.12  
 **Last Updated:** 2026-03-16
