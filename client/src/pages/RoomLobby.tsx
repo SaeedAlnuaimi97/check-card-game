@@ -1,5 +1,5 @@
 import { FC, useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import {
   Badge,
   Box,
@@ -7,6 +7,7 @@ import {
   Heading,
   HStack,
   IconButton,
+  Input,
   Slider,
   SliderFilledTrack,
   SliderThumb,
@@ -29,23 +30,164 @@ const MIN_PLAYERS = 2;
 const MAX_PLAYERS = 6;
 
 export const RoomLobby: FC = () => {
-  const { playerId, roomData, leaveRoom, startGame, kickPlayer, addBot, removeBot, toggleReady } =
-    useSocket();
+  const { code } = useParams<{ code: string }>();
+  const {
+    playerId,
+    roomData,
+    joinRoom,
+    leaveRoom,
+    startGame,
+    kickPlayer,
+    addBot,
+    removeBot,
+    toggleReady,
+  } = useSocket();
   const navigate = useNavigate();
   const toast = useToast();
-  const { onCopy, hasCopied } = useClipboard(roomData?.roomCode ?? '');
+  const { onCopy, hasCopied } = useClipboard(roomData?.roomCode ?? code ?? '');
   const [targetScore, setTargetScore] = useState(70);
   const [botDifficulty, setBotDifficulty] = useState<'easy' | 'expert'>('easy');
 
-  // Redirect to home if not in a room
+  // Join-by-link state — shown when user arrives via shared link without being in a room
+  const [username, setUsername] = useState('');
+  const [isJoining, setIsJoining] = useState(false);
+
+  const roomCode = (code ?? '').toUpperCase();
+
+  // Redirect to home if no room code in URL
   useEffect(() => {
-    if (!roomData) {
+    if (!roomCode) {
       navigate('/');
     }
-  }, [roomData, navigate]);
+  }, [roomCode, navigate]);
 
-  if (!roomData || !playerId) return null;
+  if (!roomCode) return null;
 
+  // ----------------------------------------------------------
+  // Join-by-link: user arrived via shared URL without being in a room
+  // ----------------------------------------------------------
+  const isInRoom = roomData && playerId;
+
+  const handleJoin = async () => {
+    const trimmedUsername = username.trim();
+    if (!trimmedUsername) {
+      toast({ title: 'Enter a username', status: 'warning', duration: 2000, position: 'top' });
+      return;
+    }
+
+    setIsJoining(true);
+    const result = await joinRoom(roomCode, trimmedUsername);
+    setIsJoining(false);
+
+    if (!result.success) {
+      let title = 'Failed to join room';
+      let description = result.error;
+
+      if (result.error === 'Room not found') {
+        title = 'Room not found';
+        description = `No room with code ${roomCode} exists.`;
+      } else if (result.error === 'Game already started') {
+        title = 'Game already started';
+        description = 'This game is already in progress.';
+      } else if (result.error === 'Room is full') {
+        title = 'Room is full';
+        description = 'This room has reached the maximum number of players.';
+      }
+
+      toast({
+        title,
+        description,
+        status: 'error',
+        duration: 4000,
+        position: 'top',
+      });
+    }
+    // On success, roomData will be set via SocketContext and we'll show the lobby
+  };
+
+  // ----------------------------------------------------------
+  // Join-by-link view
+  // ----------------------------------------------------------
+  if (!isInRoom) {
+    return (
+      <Box
+        minH="100vh"
+        display="flex"
+        alignItems="center"
+        justifyContent="center"
+        bg="gray.900"
+        color="white"
+        p={4}
+      >
+        <VStack spacing={8} w={{ base: '100%', sm: '400px' }}>
+          <VStack spacing={2}>
+            <Heading size="lg">Join Room</Heading>
+            <HStack spacing={2}>
+              <Text fontSize="sm" color="gray.400">
+                Room code:
+              </Text>
+              <Text
+                fontSize="sm"
+                fontWeight="bold"
+                color="brand.300"
+                letterSpacing="wider"
+                fontFamily="mono"
+              >
+                {roomCode}
+              </Text>
+            </HStack>
+          </VStack>
+
+          <VStack spacing={4} w="100%">
+            <Input
+              placeholder="Enter your username"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              maxLength={20}
+              size="lg"
+              bg="gray.800"
+              border="1px solid"
+              borderColor="gray.600"
+              _hover={{ borderColor: 'gray.500' }}
+              _focus={{
+                borderColor: 'brand.400',
+                boxShadow: '0 0 0 1px var(--chakra-colors-brand-400)',
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleJoin();
+              }}
+              autoFocus
+            />
+
+            <Button
+              colorScheme="blue"
+              size="lg"
+              w="100%"
+              onClick={handleJoin}
+              isLoading={isJoining}
+              isDisabled={!username.trim()}
+            >
+              Join Room
+            </Button>
+
+            <Button
+              variant="ghost"
+              color="gray.500"
+              size="sm"
+              onClick={() => navigate('/')}
+              _hover={{ color: 'gray.300' }}
+            >
+              Back to Home
+            </Button>
+          </VStack>
+        </VStack>
+      </Box>
+    );
+  }
+
+  // ----------------------------------------------------------
+  // Normal lobby view (user is already in the room)
+  // ----------------------------------------------------------
   const isHost = roomData.host === playerId;
   const allPlayersReady = roomData.players.every(
     (p) => p.isBot || p.id === roomData.host || p.isReady,

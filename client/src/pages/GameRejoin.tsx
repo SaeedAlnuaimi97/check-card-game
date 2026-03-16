@@ -32,7 +32,7 @@ export const GameRejoin: FC = () => {
     if (gameState) {
       navigate('/game', { replace: true });
     } else if (roomData?.status === 'lobby') {
-      navigate('/room', { replace: true });
+      navigate(`/lobby/${roomData.roomCode}`, { replace: true });
     }
   }, [gameState, roomData, navigate]);
 

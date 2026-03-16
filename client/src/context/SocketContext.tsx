@@ -72,7 +72,9 @@ interface SocketContextValue {
   lastSwapResult: SpecialEffectResolvedPayload | null;
   /** Slots that were recently modified (swap, burn penalty, red king placement) — cleared after 2.5s */
   modifiedSlots: { playerId: string; slot: string }[];
-  createRoom: (username: string) => Promise<{ success: boolean; error?: string }>;
+  createRoom: (
+    username: string,
+  ) => Promise<{ success: boolean; roomCode?: string; error?: string }>;
   joinRoom: (roomCode: string, username: string) => Promise<{ success: boolean; error?: string }>;
   leaveRoom: () => void;
   startGame: (targetScore?: number) => Promise<{ success: boolean; error?: string }>;
@@ -226,7 +228,7 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
                 navigateRef.current('/game');
               } else if (response.room?.status === 'lobby') {
                 // Navigate back to lobby (e.g. player refreshed while waiting)
-                navigateRef.current('/room');
+                navigateRef.current(`/lobby/${storedRoomCode}`);
               }
             } else {
               console.log('[reconnect] Rejoin failed:', response.error);
@@ -478,34 +480,41 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
   // ----------------------------------------------------------
   // Create Room
   // ----------------------------------------------------------
-  const createRoom = useCallback((name: string): Promise<{ success: boolean; error?: string }> => {
-    return new Promise((resolve) => {
-      socket.emit(
-        'createRoom',
-        { username: name },
-        (response: {
-          success: boolean;
-          roomCode?: string;
-          playerId?: string;
-          room?: RoomData;
-          error?: string;
-        }) => {
-          if (response.success && response.playerId && response.roomCode) {
-            setPlayerId(response.playerId);
-            setUsername(name);
-            // Persist for reconnection (localStorage survives tab close / browser restart)
-            localStorage.setItem('playerId', response.playerId);
-            localStorage.setItem('roomCode', response.roomCode);
-            localStorage.setItem('username', name);
-            if (response.room) {
-              setRoomData(response.room);
+  const createRoom = useCallback(
+    (name: string): Promise<{ success: boolean; roomCode?: string; error?: string }> => {
+      return new Promise((resolve) => {
+        socket.emit(
+          'createRoom',
+          { username: name },
+          (response: {
+            success: boolean;
+            roomCode?: string;
+            playerId?: string;
+            room?: RoomData;
+            error?: string;
+          }) => {
+            if (response.success && response.playerId && response.roomCode) {
+              setPlayerId(response.playerId);
+              setUsername(name);
+              // Persist for reconnection (localStorage survives tab close / browser restart)
+              localStorage.setItem('playerId', response.playerId);
+              localStorage.setItem('roomCode', response.roomCode);
+              localStorage.setItem('username', name);
+              if (response.room) {
+                setRoomData(response.room);
+              }
             }
-          }
-          resolve({ success: response.success, error: response.error });
-        },
-      );
-    });
-  }, []);
+            resolve({
+              success: response.success,
+              roomCode: response.roomCode,
+              error: response.error,
+            });
+          },
+        );
+      });
+    },
+    [],
+  );
 
   // ----------------------------------------------------------
   // Join Room
@@ -1059,7 +1068,7 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
               }
               navigateRef.current('/game', { replace: true });
             } else if (response.room?.status === 'lobby') {
-              navigateRef.current('/room', { replace: true });
+              navigateRef.current(`/lobby/${roomCode}`, { replace: true });
             }
           } else {
             console.log('[rejoinWithCode] Rejoin failed:', response.error);

@@ -77,8 +77,8 @@ export const HomePage: FC = () => {
     const result = await createRoom(username.trim());
     setIsCreating(false);
 
-    if (result.success) {
-      navigate('/room');
+    if (result.success && result.roomCode) {
+      navigate(`/lobby/${result.roomCode}`);
     } else {
       toast({
         title: 'Failed to create room',
@@ -102,7 +102,7 @@ export const HomePage: FC = () => {
     setIsJoining(false);
 
     if (result.success) {
-      navigate('/room');
+      navigate(`/lobby/${trimmedCode}`);
     } else {
       toast({
         title: 'Failed to join room',
