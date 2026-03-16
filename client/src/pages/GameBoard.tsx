@@ -28,6 +28,7 @@ import {
   Heading,
   Progress,
   Tooltip,
+  useBreakpointValue,
   useDisclosure,
   useToast,
 } from '@chakra-ui/react';
@@ -40,6 +41,7 @@ import {
   FireOutlined,
   CloseOutlined,
   InfoCircleOutlined,
+  SoundOutlined,
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { useSocket } from '../context/SocketContext';
@@ -149,6 +151,7 @@ interface OpponentProps {
   isCurrentTurn: boolean;
   debugRevealed?: Record<string, CardType>;
   modifiedSlots?: { playerId: string; slot: string }[];
+  isDesktop?: boolean;
 }
 
 const OpponentRow: FC<OpponentProps> = ({
@@ -156,7 +159,116 @@ const OpponentRow: FC<OpponentProps> = ({
   isCurrentTurn,
   debugRevealed,
   modifiedSlots,
+  isDesktop,
 }) => {
+  // Desktop/tablet: clean layout — just cards + info below, no bordered box
+  if (isDesktop) {
+    return (
+      <VStack spacing={1} px={2}>
+        <HStack spacing={1}>
+          {player.hand.map((h: ClientHandSlot) => {
+            const key = `${player.playerId}:${h.slot}`;
+            const revealedCard = debugRevealed?.[key];
+            const isModified =
+              modifiedSlots?.some((m) => m.playerId === player.playerId && m.slot === h.slot) ??
+              false;
+            return (
+              <Box
+                key={h.slot}
+                position="relative"
+                overflow="hidden"
+                borderRadius="sm"
+                sx={
+                  isModified
+                    ? {
+                        '&::before': {
+                          content: '""',
+                          position: 'absolute',
+                          inset: 0,
+                          borderRadius: 'sm',
+                          background:
+                            'linear-gradient(180deg, rgba(71, 213, 166, 0.9) 0%, rgba(71, 213, 166, 0) 60%)',
+                          animation: 'gradientSweep 3.5s ease-out forwards',
+                          pointerEvents: 'none',
+                          zIndex: 1,
+                        },
+                        '@keyframes gradientSweep': {
+                          '0%': { transform: 'translateY(-100%)' },
+                          '50%': { transform: 'translateY(0%)', opacity: 1 },
+                          '100%': { transform: 'translateY(100%)', opacity: 0 },
+                        },
+                      }
+                    : {}
+                }
+              >
+                {revealedCard ? (
+                  <Box
+                    w="52px"
+                    h="74px"
+                    borderRadius="sm"
+                    border="1px solid"
+                    borderColor="purple.400"
+                    bg="white"
+                    display="flex"
+                    flexDirection="column"
+                    alignItems="center"
+                    justifyContent="center"
+                    fontSize="xs"
+                  >
+                    <Text
+                      color={revealedCard.isRed ? 'red.500' : 'gray.800'}
+                      fontWeight="bold"
+                      lineHeight={1}
+                    >
+                      {revealedCard.rank}
+                    </Text>
+                    <Text color={revealedCard.isRed ? 'red.500' : 'gray.800'} lineHeight={1}>
+                      {revealedCard.suit}
+                    </Text>
+                  </Box>
+                ) : (
+                  <Box
+                    w="36px"
+                    h="50px"
+                    borderRadius="sm"
+                    bg="card.back"
+                    border="1px solid"
+                    borderColor="gray.600"
+                    opacity={h.card === null ? 0.3 : 1}
+                  />
+                )}
+              </Box>
+            );
+          })}
+        </HStack>
+        <HStack spacing={1} justify="center">
+          <Text
+            fontSize="xs"
+            fontWeight="bold"
+            noOfLines={1}
+            color={player.isBot ? 'purple.200' : 'gray.300'}
+          >
+            {player.username}
+          </Text>
+          {player.isBot && (
+            <Badge colorScheme="purple" fontSize="2xs" variant="subtle">
+              BOT
+            </Badge>
+          )}
+          {isCurrentTurn && (
+            <Badge colorScheme="yellow" fontSize="2xs">
+              Turn
+            </Badge>
+          )}
+        </HStack>
+        <Text fontSize="2xs" color="gray.500">
+          Score: {player.totalScore}
+        </Text>
+      </VStack>
+    );
+  }
+
+  // Mobile: original bordered box layout
   return (
     <VStack
       spacing={1}
@@ -337,6 +449,9 @@ export const GameBoard: FC = () => {
   const { isOpen: isMenuOpen, onOpen: onMenuOpen, onClose: onMenuClose } = useDisclosure();
   // How to play modal
   const { isOpen: isInfoOpen, onOpen: onInfoOpen, onClose: onInfoClose } = useDisclosure();
+
+  // Responsive: tablet/desktop detection
+  const isDesktop = useBreakpointValue({ base: false, md: true }, { ssr: false }) ?? false;
 
   // Sound toggle state (synced with localStorage)
   const [soundEnabled, _setSoundEnabled] = useState(isSoundEnabled);
@@ -1028,16 +1143,6 @@ export const GameBoard: FC = () => {
         flexShrink={0}
       >
         <HStack spacing={3}>
-          {/* Info button */}
-          <IconButton
-            aria-label="How to play"
-            size="xs"
-            variant="ghost"
-            color="gray.400"
-            _hover={{ color: 'white', bg: 'whiteAlpha.100' }}
-            onClick={onInfoOpen}
-            icon={<InfoCircleOutlined />}
-          />
           {DEBUG_MODE && (
             <Box
               as="button"
@@ -1084,16 +1189,84 @@ export const GameBoard: FC = () => {
               CHECK
             </Button>
           )}
-          {/* Menu button */}
-          <IconButton
-            aria-label="Game menu"
-            size="xs"
-            variant="ghost"
-            color="gray.400"
-            _hover={{ color: 'white', bg: 'whiteAlpha.100' }}
-            onClick={onMenuOpen}
-            icon={<MenuOutlined />}
-          />
+
+          {isDesktop ? (
+            <>
+              {/* Desktop: inline menu options */}
+              <Tooltip label={gameState.paused ? 'Resume Game' : 'Pause Game'}>
+                <IconButton
+                  aria-label={gameState.paused ? 'Resume game' : 'Pause game'}
+                  size="xs"
+                  variant="ghost"
+                  color={gameState.paused ? 'warning.a10' : 'gray.400'}
+                  _hover={{ color: 'white', bg: 'whiteAlpha.100' }}
+                  isDisabled={
+                    gameState.phase === 'roundEnd' ||
+                    gameState.phase === 'gameEnd' ||
+                    gameState.phase === 'dealing'
+                  }
+                  onClick={async () => {
+                    const result = gameState.paused ? await resumeGame() : await pauseGame();
+                    if (!result.success && result.error) {
+                      toast({
+                        title: result.error,
+                        status: 'error',
+                        duration: 2000,
+                        position: 'top',
+                      });
+                    }
+                  }}
+                  icon={gameState.paused ? <PlayCircleOutlined /> : <PauseCircleOutlined />}
+                />
+              </Tooltip>
+
+              <Tooltip label={soundEnabled ? 'Mute sound' : 'Unmute sound'}>
+                <IconButton
+                  aria-label="Toggle sound"
+                  size="xs"
+                  variant="ghost"
+                  color={soundEnabled ? 'gray.400' : 'gray.600'}
+                  _hover={{ color: 'white', bg: 'whiteAlpha.100' }}
+                  onClick={toggleSound}
+                  icon={<SoundOutlined />}
+                />
+              </Tooltip>
+
+              <Tooltip label="Exit game">
+                <IconButton
+                  aria-label="Exit game"
+                  size="xs"
+                  variant="ghost"
+                  color="gray.400"
+                  _hover={{ color: 'danger.a10', bg: 'whiteAlpha.100' }}
+                  onClick={handleExitGame}
+                  icon={<LogoutOutlined />}
+                />
+              </Tooltip>
+
+              {/* Menu button for host player management / How to Play */}
+              <IconButton
+                aria-label="Game menu"
+                size="xs"
+                variant="ghost"
+                color="gray.400"
+                _hover={{ color: 'white', bg: 'whiteAlpha.100' }}
+                onClick={onMenuOpen}
+                icon={<MenuOutlined />}
+              />
+            </>
+          ) : (
+            /* Mobile: single menu button */
+            <IconButton
+              aria-label="Game menu"
+              size="xs"
+              variant="ghost"
+              color="gray.400"
+              _hover={{ color: 'white', bg: 'whiteAlpha.100' }}
+              onClick={onMenuOpen}
+              icon={<MenuOutlined />}
+            />
+          )}
         </HStack>
       </Flex>
 
@@ -1107,6 +1280,21 @@ export const GameBoard: FC = () => {
           <ModalCloseButton />
           <ModalBody py={4}>
             <VStack spacing={3} align="stretch">
+              {/* How to Play */}
+              <Button
+                variant="ghost"
+                justifyContent="flex-start"
+                leftIcon={<InfoCircleOutlined />}
+                onClick={() => {
+                  onMenuClose();
+                  onInfoOpen();
+                }}
+              >
+                How to Play
+              </Button>
+
+              <Divider borderColor="surface.tonal30" />
+
               {/* Pause / Resume */}
               <Button
                 variant="ghost"
@@ -1300,7 +1488,7 @@ export const GameBoard: FC = () => {
         templateRows="auto 1fr auto"
         p={{ base: 2, md: 4 }}
         gap={{ base: 2, md: 3 }}
-        maxW="900px"
+        maxW={{ base: '900px', lg: '1100px' }}
         mx="auto"
         w="100%"
         overflow="hidden"
@@ -1316,6 +1504,7 @@ export const GameBoard: FC = () => {
               }
               debugRevealed={debugRevealed}
               modifiedSlots={modifiedSlots}
+              isDesktop={isDesktop}
             />
           ))}
         </Flex>
@@ -1653,6 +1842,7 @@ export const GameBoard: FC = () => {
                               isSelected={true}
                               isClickable={isClickable}
                               onClick={handleClick}
+                              size={isDesktop ? 'lg' : 'md'}
                             />
                           ) : visibleCard ? (
                             <Card
@@ -1660,12 +1850,14 @@ export const GameBoard: FC = () => {
                               isSelected={isPeekedSlot(h.slot)}
                               isClickable={isClickable}
                               onClick={handleClick}
+                              size={isDesktop ? 'lg' : 'md'}
                             />
                           ) : (
                             <CardBack
                               isSelected={isPeekedSlot(h.slot)}
                               isClickable={isClickable}
                               onClick={handleClick}
+                              size={isDesktop ? 'lg' : 'md'}
                             />
                           )}
                         </Box>
