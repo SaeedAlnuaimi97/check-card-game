@@ -227,15 +227,7 @@ const OpponentRow: FC<OpponentProps> = ({
                     </Text>
                   </Box>
                 ) : (
-                  <Box
-                    w="36px"
-                    h="50px"
-                    borderRadius="sm"
-                    bg="card.back"
-                    border="1px solid"
-                    borderColor="gray.600"
-                    opacity={h.card === null ? 0.3 : 1}
-                  />
+                  <CardBack size="xs" />
                 )}
               </Box>
             );
@@ -361,15 +353,7 @@ const OpponentRow: FC<OpponentProps> = ({
                   </Text>
                 </Box>
               ) : (
-                <Box
-                  w={{ base: '20px', md: '28px' }}
-                  h={{ base: '28px', md: '39px' }}
-                  borderRadius="sm"
-                  bg="card.back"
-                  border="1px solid"
-                  borderColor="gray.600"
-                  opacity={h.card === null ? 0.3 : 1}
-                />
+                <CardBack size="2xs" />
               )}
             </Box>
           );
@@ -1024,70 +1008,7 @@ export const GameBoard: FC = () => {
         )}
       </AnimatePresence>
 
-      {/* Pause overlay (F-278) */}
-      {gameState.paused && (
-        <Box
-          position="fixed"
-          top={0}
-          left={0}
-          right={0}
-          bottom={0}
-          zIndex={40}
-          display="flex"
-          alignItems="center"
-          justifyContent="center"
-          bg="blackAlpha.700"
-        >
-          <VStack
-            spacing={4}
-            bg="table.border"
-            px={8}
-            py={6}
-            borderRadius="lg"
-            border="1px solid"
-            borderColor="warning.a10"
-            shadow="dark-lg"
-            textAlign="center"
-          >
-            <Heading size="lg" color="warning.a10">
-              Game Paused
-            </Heading>
-            {gameState.pausedBy && (
-              <Text fontSize="sm" color="gray.400">
-                Paused by{' '}
-                {gameState.pausedBy === playerId
-                  ? 'you'
-                  : (gameState.players.find((p) => p.playerId === gameState.pausedBy)?.username ??
-                    'host')}
-              </Text>
-            )}
-            {roomData?.host === playerId ? (
-              <Button
-                colorScheme="green"
-                size="md"
-                onClick={async () => {
-                  const result = await resumeGame();
-                  if (!result.success && result.error) {
-                    toast({
-                      title: result.error,
-                      status: 'error',
-                      duration: 2000,
-                      position: 'top',
-                    });
-                  }
-                }}
-                leftIcon={<PlayCircleOutlined />}
-              >
-                Resume
-              </Button>
-            ) : (
-              <Text fontSize="sm" color="gray.500">
-                Waiting for host to resume...
-              </Text>
-            )}
-          </VStack>
-        </Box>
-      )}
+      {/* Pause overlay removed — pause/resume handled via menu modal & header badge */}
 
       {/* Peek overlay / countdown */}
       {isPeeking && peekedCards && peekedCards.length > 0 && (
@@ -1133,8 +1054,8 @@ export const GameBoard: FC = () => {
 
       {/* Score / Round info */}
       <Flex
-        px={4}
-        py={2}
+        px={{ base: 4, md: 5 }}
+        py={{ base: 2, md: 3 }}
         bg="surface.tonal20"
         borderBottom="1px solid"
         borderColor="table.border"
@@ -1161,14 +1082,14 @@ export const GameBoard: FC = () => {
               <EyeOutlined style={{ fontSize: '14px', color: 'white' }} />
             </Box>
           )}
-          <Text fontSize="sm" color="gray.400">
+          <Text fontSize={{ base: 'sm', md: 'md' }} color="gray.400">
             Round:{' '}
             <Text as="span" color="gray.100" fontWeight="bold">
               {gameState.roundNumber}
             </Text>
           </Text>
           {gameState.targetScore !== 70 && (
-            <Text fontSize="sm" color="warning.a10">
+            <Text fontSize={{ base: 'sm', md: 'md' }} color="warning.a10">
               Target:{' '}
               <Text as="span" fontWeight="bold">
                 {gameState.targetScore}pts
@@ -1176,16 +1097,30 @@ export const GameBoard: FC = () => {
             </Text>
           )}
         </HStack>
-        <HStack spacing={2}>
+        <HStack spacing={{ base: 2, md: 3 }}>
+          {/* Paused badge */}
+          {gameState.paused && (
+            <Badge colorScheme="yellow" fontSize={{ base: 'xs', md: 'sm' }} px={2} py={1}>
+              PAUSED
+              {gameState.pausedBy
+                ? ` (${gameState.pausedBy === playerId ? 'You' : (gameState.players.find((p) => p.playerId === gameState.pausedBy)?.username ?? 'Host')})`
+                : ''}
+            </Badge>
+          )}
           {/* Check called banner */}
           {checkCalledData && (
-            <Badge colorScheme="red" fontSize="xs" px={2} py={1}>
+            <Badge colorScheme="red" fontSize={{ base: 'xs', md: 'sm' }} px={2} py={1}>
               CHECK ({checkCalledData.playerId === playerId ? 'You' : checkCalledData.username})
             </Badge>
           )}
           {/* CHECK button — only visible on player's turn when check is available */}
           {turnData?.canCheck && !hasDrawnCard && !pendingEffect && (
-            <Button size="xs" colorScheme="red" variant="solid" onClick={handleCallCheck}>
+            <Button
+              size={{ base: 'xs', md: 'sm' }}
+              colorScheme="red"
+              variant="solid"
+              onClick={handleCallCheck}
+            >
               CHECK
             </Button>
           )}
@@ -1196,7 +1131,7 @@ export const GameBoard: FC = () => {
               <Tooltip label={gameState.paused ? 'Resume Game' : 'Pause Game'}>
                 <IconButton
                   aria-label={gameState.paused ? 'Resume game' : 'Pause game'}
-                  size="xs"
+                  size="sm"
                   variant="ghost"
                   color={gameState.paused ? 'warning.a10' : 'gray.400'}
                   _hover={{ color: 'white', bg: 'whiteAlpha.100' }}
@@ -1223,7 +1158,7 @@ export const GameBoard: FC = () => {
               <Tooltip label={soundEnabled ? 'Mute sound' : 'Unmute sound'}>
                 <IconButton
                   aria-label="Toggle sound"
-                  size="xs"
+                  size="sm"
                   variant="ghost"
                   color={soundEnabled ? 'gray.400' : 'gray.600'}
                   _hover={{ color: 'white', bg: 'whiteAlpha.100' }}
@@ -1235,7 +1170,7 @@ export const GameBoard: FC = () => {
               <Tooltip label="Exit game">
                 <IconButton
                   aria-label="Exit game"
-                  size="xs"
+                  size="sm"
                   variant="ghost"
                   color="gray.400"
                   _hover={{ color: 'danger.a10', bg: 'whiteAlpha.100' }}
@@ -1247,7 +1182,7 @@ export const GameBoard: FC = () => {
               {/* Menu button for host player management / How to Play */}
               <IconButton
                 aria-label="Game menu"
-                size="xs"
+                size="sm"
                 variant="ghost"
                 color="gray.400"
                 _hover={{ color: 'white', bg: 'whiteAlpha.100' }}
@@ -1306,7 +1241,6 @@ export const GameBoard: FC = () => {
                   gameState.phase === 'dealing'
                 }
                 onClick={async () => {
-                  onMenuClose();
                   const result = gameState.paused ? await resumeGame() : await pauseGame();
                   if (!result.success && result.error) {
                     toast({
