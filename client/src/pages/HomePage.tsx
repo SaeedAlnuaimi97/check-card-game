@@ -116,13 +116,14 @@ export const HomePage: FC = () => {
 
   return (
     <Box
-      minH="100vh"
+      h="100dvh"
       display="flex"
       alignItems="center"
       justifyContent="center"
       bg="table.felt"
       color="white"
       p={4}
+      overflow="hidden"
     >
       <VStack spacing={8} w={{ base: '100%', sm: '400px' }}>
         {/* Logo */}
