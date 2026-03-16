@@ -120,7 +120,7 @@ export const HomePage: FC = () => {
       display="flex"
       alignItems="center"
       justifyContent="center"
-      bg="#406093"
+      bg="table.felt"
       color="white"
       p={4}
     >
@@ -131,7 +131,7 @@ export const HomePage: FC = () => {
           alt="Check Card Game Logo"
           w={{ base: '220px', sm: '280px', md: '320px' }}
           objectFit="contain"
-          filter="drop-shadow(0 0 24px rgba(99, 179, 237, 0.3))"
+          filter="drop-shadow(0 0 24px rgba(108, 85, 201, 0.3))"
         />
 
         {/* Connection status */}
@@ -151,7 +151,7 @@ export const HomePage: FC = () => {
               onChange={(e) => setUsername(e.target.value)}
               maxLength={20}
               size="lg"
-              bg="#2e4a73"
+              bg="table.border"
               border="1px solid"
               borderColor="gray.600"
               _hover={{ borderColor: 'gray.500' }}
@@ -225,7 +225,7 @@ export const HomePage: FC = () => {
                 onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
                 maxLength={6}
                 size="lg"
-                bg="#2e4a73"
+                bg="table.border"
                 border="1px solid"
                 borderColor="gray.600"
                 textTransform="uppercase"
@@ -243,7 +243,7 @@ export const HomePage: FC = () => {
                 autoFocus
               />
               <Button
-                colorScheme="blue"
+                colorScheme="purple"
                 size="lg"
                 w="100%"
                 onClick={handleJoinRoom}
@@ -277,8 +277,8 @@ export const HomePage: FC = () => {
         motionPreset="slideInBottom"
       >
         <ModalOverlay bg="blackAlpha.800" />
-        <ModalContent bg="#2e4a73" color="white" mx={4}>
-          <ModalHeader borderBottom="1px solid" borderColor="gray.700" fontSize="lg">
+        <ModalContent bg="table.border" color="white" mx={4}>
+          <ModalHeader borderBottom="1px solid" borderColor="surface.tonal30" fontSize="lg">
             How to Play — Check Card Game
           </ModalHeader>
           <ModalCloseButton />
@@ -313,10 +313,10 @@ export const HomePage: FC = () => {
                 <Table size="sm" variant="simple">
                   <Thead>
                     <Tr>
-                      <Th color="gray.400" borderColor="gray.600">
+                      <Th color="gray.400" borderColor="surface.tonal30">
                         Card
                       </Th>
-                      <Th color="gray.400" borderColor="gray.600" isNumeric>
+                      <Th color="gray.400" borderColor="surface.tonal30" isNumeric>
                         Points
                       </Th>
                     </Tr>
@@ -330,10 +330,10 @@ export const HomePage: FC = () => {
                       ['J, Q, K (red)', '10 + special effect'],
                     ].map(([card, pts]) => (
                       <Tr key={card}>
-                        <Td color="gray.300" borderColor="gray.700">
+                        <Td color="gray.300" borderColor="surface.tonal30">
                           {card}
                         </Td>
-                        <Td color="yellow.300" borderColor="gray.700" isNumeric>
+                        <Td color="warning.a10" borderColor="surface.tonal30" isNumeric>
                           {pts}
                         </Td>
                       </Tr>
@@ -359,7 +359,7 @@ export const HomePage: FC = () => {
                       'Play a hand card matching the top discard. Match = card removed. Miss = penalty card added.',
                     ],
                   ].map(([title, desc]) => (
-                    <Box key={title} bg="gray.700" px={3} py={2} borderRadius="md">
+                    <Box key={title} bg="surface.tonal20" px={3} py={2} borderRadius="md">
                       <Text fontWeight="semibold" color="white" display="inline">
                         {title} —{' '}
                       </Text>
@@ -378,7 +378,7 @@ export const HomePage: FC = () => {
                 </Text>
                 <VStack align="stretch" spacing={2}>
                   {FACE_CARDS.map(({ rank, effect }) => (
-                    <Box key={rank} bg="gray.700" px={3} py={2} borderRadius="md">
+                    <Box key={rank} bg="surface.tonal20" px={3} py={2} borderRadius="md">
                       <HStack spacing={2} align="center" flexWrap="wrap">
                         {SUITS.map(({ suit, isRed }) => {
                           const cardObj: CardType = {

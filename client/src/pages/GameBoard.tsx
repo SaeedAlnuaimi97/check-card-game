@@ -163,7 +163,7 @@ const OpponentRow: FC<OpponentProps> = ({
       borderRadius="md"
       bg={isCurrentTurn ? 'whiteAlpha.200' : player.isBot ? 'purple.900' : 'whiteAlpha.50'}
       border="1px solid"
-      borderColor={isCurrentTurn ? 'yellow.400' : player.isBot ? 'purple.500' : 'whiteAlpha.100'}
+      borderColor={isCurrentTurn ? 'warning.a10' : player.isBot ? 'purple.500' : 'whiteAlpha.100'}
       minW={{ base: '100px', md: '140px' }}
     >
       <HStack spacing={1}>
@@ -208,14 +208,14 @@ const OpponentRow: FC<OpponentProps> = ({
                         inset: 0,
                         borderRadius: 'sm',
                         background:
-                          'linear-gradient(180deg, rgba(72, 187, 120, 0.7) 0%, rgba(72, 187, 120, 0) 60%)',
-                        animation: 'gradientSweep 2s ease-out forwards',
+                          'linear-gradient(180deg, rgba(71, 213, 166, 0.9) 0%, rgba(71, 213, 166, 0) 60%)',
+                        animation: 'gradientSweep 3.5s ease-out forwards',
                         pointerEvents: 'none',
                         zIndex: 1,
                       },
                       '@keyframes gradientSweep': {
                         '0%': { transform: 'translateY(-100%)' },
-                        '40%': { transform: 'translateY(0%)', opacity: 1 },
+                        '50%': { transform: 'translateY(0%)', opacity: 1 },
                         '100%': { transform: 'translateY(100%)', opacity: 0 },
                       },
                     }
@@ -876,7 +876,7 @@ export const GameBoard: FC = () => {
   return (
     <Box
       h="100dvh"
-      bg="#406093"
+      bg="table.felt"
       display="flex"
       flexDirection="column"
       position="relative"
@@ -898,7 +898,7 @@ export const GameBoard: FC = () => {
               left: 0,
               right: 0,
               bottom: 0,
-              backgroundColor: '#E53E3E',
+              backgroundColor: '#d94a4a',
               pointerEvents: 'none',
               zIndex: 50,
             }}
@@ -922,16 +922,16 @@ export const GameBoard: FC = () => {
         >
           <VStack
             spacing={4}
-            bg="#2e4a73"
+            bg="table.border"
             px={8}
             py={6}
             borderRadius="lg"
             border="1px solid"
-            borderColor="yellow.400"
+            borderColor="warning.a10"
             shadow="dark-lg"
             textAlign="center"
           >
-            <Heading size="lg" color="yellow.300">
+            <Heading size="lg" color="warning.a10">
               Game Paused
             </Heading>
             {gameState.pausedBy && (
@@ -987,15 +987,15 @@ export const GameBoard: FC = () => {
         >
           <VStack
             spacing={2}
-            bg="#2e4a73"
+            bg="table.border"
             px={6}
             py={4}
             borderRadius="lg"
             border="1px solid"
-            borderColor="yellow.400"
+            borderColor="warning.a10"
             shadow="dark-lg"
           >
-            <Text fontSize="md" color="yellow.300" fontWeight="bold">
+            <Text fontSize="md" color="warning.a10" fontWeight="bold">
               Memorize your cards!
             </Text>
             <Progress
@@ -1004,9 +1004,9 @@ export const GameBoard: FC = () => {
               colorScheme="yellow"
               w="200px"
               borderRadius="full"
-              bg="gray.700"
+              bg="surface.tonal20"
             />
-            <Text fontSize="xs" color="gray.400">
+            <Text fontSize="xs" color="surface.tonal40">
               {Math.ceil((peekProgress / 100) * (PEEK_DURATION_MS / 1000))}s remaining
             </Text>
           </VStack>
@@ -1017,9 +1017,9 @@ export const GameBoard: FC = () => {
       <Flex
         px={4}
         py={2}
-        bg="#35507a"
+        bg="surface.tonal20"
         borderBottom="1px solid"
-        borderColor="#2e4a73"
+        borderColor="table.border"
         justify="space-between"
         align="center"
         flexShrink={0}
@@ -1050,7 +1050,7 @@ export const GameBoard: FC = () => {
             </Text>
           </Text>
           {gameState.targetScore !== 70 && (
-            <Text fontSize="sm" color="yellow.400">
+            <Text fontSize="sm" color="warning.a10">
               Target:{' '}
               <Text as="span" fontWeight="bold">
                 {gameState.targetScore}pts
@@ -1087,8 +1087,8 @@ export const GameBoard: FC = () => {
       {/* Game Menu Modal */}
       <Modal isOpen={isMenuOpen} onClose={onMenuClose} isCentered size="xs">
         <ModalOverlay bg="blackAlpha.700" />
-        <ModalContent bg="#2e4a73" color="white">
-          <ModalHeader fontSize="md" borderBottom="1px solid" borderColor="gray.700" pb={3}>
+        <ModalContent bg="table.border" color="white">
+          <ModalHeader fontSize="md" borderBottom="1px solid" borderColor="surface.tonal30" pb={3}>
             Menu
           </ModalHeader>
           <ModalCloseButton />
@@ -1120,7 +1120,7 @@ export const GameBoard: FC = () => {
                 {gameState.paused ? 'Resume Game' : 'Pause Game'}
               </Button>
 
-              <Divider borderColor="gray.700" />
+              <Divider borderColor="surface.tonal30" />
 
               {/* Manage Players — host-only, in-game kick (F-365) */}
               {roomData?.host === playerId &&
@@ -1166,7 +1166,7 @@ export const GameBoard: FC = () => {
                           </HStack>
                         ))}
                     </VStack>
-                    <Divider borderColor="gray.700" />
+                    <Divider borderColor="surface.tonal30" />
                   </>
                 )}
 
@@ -1183,7 +1183,7 @@ export const GameBoard: FC = () => {
                 />
               </HStack>
 
-              <Divider borderColor="gray.700" />
+              <Divider borderColor="surface.tonal30" />
 
               {/* Exit */}
               <Button
@@ -1206,7 +1206,7 @@ export const GameBoard: FC = () => {
       {/* Final Round banner (UI-005) */}
       {checkCalledData && (
         <Box
-          bg="red.600"
+          bg="danger.a0"
           px={4}
           py={2}
           textAlign="center"
@@ -1301,14 +1301,14 @@ export const GameBoard: FC = () => {
                     <Box
                       borderRadius="md"
                       border="2px solid"
-                      borderColor="yellow.400"
-                      shadow="0 0 16px rgba(255, 214, 0, 0.4)"
+                      borderColor="warning.a10"
+                      shadow="0 0 16px rgba(215, 172, 97, 0.5)"
                       animation="pulse 1.5s ease-in-out infinite"
                     >
                       <Card card={drawnCard} size="lg" />
                     </Box>
                   </motion.div>
-                  <Text fontSize="xs" color="yellow.300" fontWeight="bold">
+                  <Text fontSize="xs" color="warning.a10" fontWeight="bold">
                     {drawnFromDiscard ? 'From Discard' : 'Drawn'}
                   </Text>
                 </VStack>
@@ -1376,7 +1376,7 @@ export const GameBoard: FC = () => {
                       position="absolute"
                       top="-6px"
                       right="-6px"
-                      bg="orange.500"
+                      bg="warning.a0"
                       borderRadius="full"
                       w="24px"
                       h="24px"
@@ -1385,7 +1385,7 @@ export const GameBoard: FC = () => {
                       justifyContent="center"
                       shadow="md"
                       border="2px solid"
-                      borderColor="orange.300"
+                      borderColor="warning.a10"
                     >
                       <FireOutlined style={{ fontSize: '12px', color: 'white' }} />
                     </Box>
@@ -1397,7 +1397,7 @@ export const GameBoard: FC = () => {
                   h="140px"
                   borderRadius="md"
                   border="2px dashed"
-                  borderColor={hasDrawnCard && !drawnFromDiscard ? 'yellow.400' : 'gray.600'}
+                  borderColor={hasDrawnCard && !drawnFromDiscard ? 'warning.a10' : 'gray.600'}
                   display="flex"
                   alignItems="center"
                   justifyContent="center"
@@ -1407,13 +1407,13 @@ export const GameBoard: FC = () => {
                   }
                   _hover={
                     hasDrawnCard && !drawnFromDiscard
-                      ? { borderColor: 'yellow.300', shadow: 'lg' }
+                      ? { borderColor: 'warning.a10', shadow: 'lg' }
                       : {}
                   }
                 >
                   <Text
                     fontSize="xs"
-                    color={hasDrawnCard && !drawnFromDiscard ? 'yellow.300' : 'gray.500'}
+                    color={hasDrawnCard && !drawnFromDiscard ? 'warning.a10' : 'gray.500'}
                   >
                     {hasDrawnCard && !drawnFromDiscard ? 'Discard here' : 'Empty'}
                   </Text>
@@ -1430,16 +1430,16 @@ export const GameBoard: FC = () => {
         <VStack spacing={2} minW={0} overflow="visible">
           {/* Turn indicator + Check button */}
           {gameState.phase === 'peeking' ? (
-            <Text fontSize="sm" color="yellow.300" fontWeight="bold">
+            <Text fontSize="sm" color="warning.a10" fontWeight="bold">
               Memorizing...
             </Text>
           ) : gameState.phase === 'roundEnd' || gameState.phase === 'gameEnd' ? (
-            <Text fontSize="sm" color="orange.300" fontWeight="bold">
+            <Text fontSize="sm" color="warning.a10" fontWeight="bold">
               Round Over
             </Text>
           ) : hasDrawnCard && drawnFromDiscard ? (
             <HStack spacing={3}>
-              <Text fontSize="sm" color="yellow.300" fontWeight="bold">
+              <Text fontSize="sm" color="warning.a10" fontWeight="bold">
                 Click a hand card to swap (must swap)
               </Text>
               <Button
@@ -1452,11 +1452,11 @@ export const GameBoard: FC = () => {
               </Button>
             </HStack>
           ) : hasDrawnCard ? (
-            <Text fontSize="sm" color="yellow.300" fontWeight="bold">
+            <Text fontSize="sm" color="warning.a10" fontWeight="bold">
               Click a hand card to swap, or click discard to keep hand
             </Text>
           ) : gameState.players[gameState.currentTurnIndex]?.playerId === playerId ? (
-            <Heading size="sm" color="yellow.300">
+            <Heading size="sm" color="warning.a10">
               Your Turn
             </Heading>
           ) : (
@@ -1473,11 +1473,11 @@ export const GameBoard: FC = () => {
                 size="xs"
                 colorScheme={turnTimeLeft <= 5 ? 'red' : turnTimeLeft <= 10 ? 'orange' : 'green'}
                 borderRadius="full"
-                bg="gray.700"
+                bg="surface.tonal20"
               />
               <Text
                 fontSize="2xs"
-                color={turnTimeLeft <= 5 ? 'red.300' : 'gray.500'}
+                color={turnTimeLeft <= 5 ? 'danger.a10' : 'gray.500'}
                 textAlign="center"
                 mt={0.5}
               >
@@ -1550,57 +1550,57 @@ export const GameBoard: FC = () => {
                       transition={{ duration: 0.45, ease: 'easeInOut' }}
                       style={{ display: 'inline-block' }}
                     >
-                      <VStack
-                        spacing={1}
-                        position="relative"
-                        flexShrink={0}
-                        overflow="hidden"
-                        borderRadius="sm"
-                        sx={
-                          isModified
-                            ? {
-                                '&::before': {
-                                  content: '""',
-                                  position: 'absolute',
-                                  inset: 0,
-                                  borderRadius: 'sm',
-                                  background:
-                                    'linear-gradient(180deg, rgba(72, 187, 120, 0.7) 0%, rgba(72, 187, 120, 0) 60%)',
-                                  animation: 'gradientSweep 2s ease-out forwards',
-                                  pointerEvents: 'none',
-                                  zIndex: 1,
-                                },
-                                '@keyframes gradientSweep': {
-                                  '0%': { transform: 'translateY(-100%)' },
-                                  '40%': { transform: 'translateY(0%)', opacity: 1 },
-                                  '100%': { transform: 'translateY(100%)', opacity: 0 },
-                                },
-                              }
-                            : {}
-                        }
-                      >
-                        {showFaceUp && peekedCard ? (
-                          <FlippableCard
-                            card={peekedCard}
-                            isFaceUp={true}
-                            isSelected={true}
-                            isClickable={isClickable}
-                            onClick={handleClick}
-                          />
-                        ) : visibleCard ? (
-                          <Card
-                            card={visibleCard}
-                            isSelected={isPeekedSlot(h.slot)}
-                            isClickable={isClickable}
-                            onClick={handleClick}
-                          />
-                        ) : (
-                          <CardBack
-                            isSelected={isPeekedSlot(h.slot)}
-                            isClickable={isClickable}
-                            onClick={handleClick}
-                          />
-                        )}
+                      <VStack spacing={1} position="relative" flexShrink={0}>
+                        <Box
+                          position="relative"
+                          overflow="hidden"
+                          borderRadius="md"
+                          sx={
+                            isModified
+                              ? {
+                                  '&::before': {
+                                    content: '""',
+                                    position: 'absolute',
+                                    inset: 0,
+                                    borderRadius: 'md',
+                                    background:
+                                      'linear-gradient(180deg, rgba(71, 213, 166, 0.9) 0%, rgba(71, 213, 166, 0) 60%)',
+                                    animation: 'gradientSweep 3.5s ease-out forwards',
+                                    pointerEvents: 'none',
+                                    zIndex: 1,
+                                  },
+                                  '@keyframes gradientSweep': {
+                                    '0%': { transform: 'translateY(-100%)' },
+                                    '50%': { transform: 'translateY(0%)', opacity: 1 },
+                                    '100%': { transform: 'translateY(100%)', opacity: 0 },
+                                  },
+                                }
+                              : {}
+                          }
+                        >
+                          {showFaceUp && peekedCard ? (
+                            <FlippableCard
+                              card={peekedCard}
+                              isFaceUp={true}
+                              isSelected={true}
+                              isClickable={isClickable}
+                              onClick={handleClick}
+                            />
+                          ) : visibleCard ? (
+                            <Card
+                              card={visibleCard}
+                              isSelected={isPeekedSlot(h.slot)}
+                              isClickable={isClickable}
+                              onClick={handleClick}
+                            />
+                          ) : (
+                            <CardBack
+                              isSelected={isPeekedSlot(h.slot)}
+                              isClickable={isClickable}
+                              onClick={handleClick}
+                            />
+                          )}
+                        </Box>
                         <Badge colorScheme={isPeekedSlot(h.slot) ? 'yellow' : 'gray'} fontSize="xs">
                           {h.slot}
                         </Badge>
@@ -1630,7 +1630,7 @@ export const GameBoard: FC = () => {
         motionPreset="slideInBottom"
       >
         <ModalOverlay bg="blackAlpha.600" />
-        <ModalContent bg="#2e4a73" color="white">
+        <ModalContent bg="table.border" color="white">
           <ModalHeader fontSize="md" pb={2}>
             Burn card?
           </ModalHeader>
@@ -1673,7 +1673,7 @@ export const GameBoard: FC = () => {
         motionPreset="slideInBottom"
       >
         <ModalOverlay bg="blackAlpha.700" />
-        <ModalContent bg="#2e4a73" color="white">
+        <ModalContent bg="table.border" color="white">
           <ModalHeader>
             <HStack>
               <Text>{'\u2666'}</Text>
@@ -1787,7 +1787,7 @@ export const GameBoard: FC = () => {
         motionPreset="slideInBottom"
       >
         <ModalOverlay bg="blackAlpha.700" />
-        <ModalContent bg="#2e4a73" color="white">
+        <ModalContent bg="table.border" color="white">
           <ModalHeader>
             <HStack>
               <Text>{'\u2665'}</Text>
@@ -1800,7 +1800,7 @@ export const GameBoard: FC = () => {
           <ModalBody>
             {queenPeekedCard ? (
               <VStack spacing={3}>
-                <Text fontSize="sm" color="yellow.300" fontWeight="bold">
+                <Text fontSize="sm" color="warning.a10" fontWeight="bold">
                   Memorize this card! ({queenPeekTimer ? '3s' : '...'})
                 </Text>
                 <Box mx="auto">
@@ -1851,7 +1851,7 @@ export const GameBoard: FC = () => {
         motionPreset="slideInBottom"
       >
         <ModalOverlay bg="blackAlpha.700" />
-        <ModalContent bg="#2e4a73" color="white">
+        <ModalContent bg="table.border" color="white">
           <ModalHeader>
             <HStack>
               <Text>{'\u2666'}</Text>
@@ -1871,7 +1871,7 @@ export const GameBoard: FC = () => {
                       <Box
                         border="2px solid"
                         borderColor={
-                          kingMode === 'keepOne' && kingKeepIndex === i ? 'yellow.400' : 'gray.500'
+                          kingMode === 'keepOne' && kingKeepIndex === i ? 'warning.a10' : 'gray.500'
                         }
                         borderRadius="md"
                         cursor={kingMode === 'keepOne' ? 'pointer' : 'default'}
@@ -1880,7 +1880,7 @@ export const GameBoard: FC = () => {
                         }}
                         shadow={
                           kingMode === 'keepOne' && kingKeepIndex === i
-                            ? '0 0 12px rgba(255, 214, 0, 0.4)'
+                            ? '0 0 12px rgba(215, 172, 97, 0.5)'
                             : 'none'
                         }
                       >
@@ -2033,9 +2033,9 @@ export const GameBoard: FC = () => {
         motionPreset="slideInBottom"
       >
         <ModalOverlay bg="blackAlpha.800" />
-        <ModalContent bg="#2e4a73" color="white" maxH="90vh" overflow="auto">
+        <ModalContent bg="table.border" color="white" maxH="90vh" overflow="auto">
           <ModalHeader textAlign="center">
-            <Heading size="md" color="orange.300">
+            <Heading size="md" color="warning.a10">
               Round {roundEndData?.roundNumber} Complete
             </Heading>
             <Text fontSize="sm" color="gray.400" fontWeight="normal" mt={1}>
@@ -2071,7 +2071,7 @@ export const GameBoard: FC = () => {
                     p={3}
                     borderRadius="md"
                     border="2px solid"
-                    borderColor={isWinner ? 'green.400' : 'gray.600'}
+                    borderColor={isWinner ? 'success.a10' : 'gray.600'}
                     bg={isWinner ? 'whiteAlpha.100' : 'transparent'}
                   >
                     <Flex justify="space-between" align="center" mb={2}>
@@ -2094,7 +2094,7 @@ export const GameBoard: FC = () => {
                       <Text
                         fontWeight="bold"
                         fontSize="sm"
-                        color={isWinner ? 'green.300' : 'red.300'}
+                        color={isWinner ? 'success.a10' : 'danger.a10'}
                       >
                         {isDoubled ? `${hand.handSum} x2 = ${hand.handSum * 2}` : `${hand.handSum}`}{' '}
                         pts
@@ -2108,7 +2108,7 @@ export const GameBoard: FC = () => {
                             h={{ base: '56px', md: '74px' }}
                             borderRadius="sm"
                             border="1px solid"
-                            borderColor={isWinner ? 'green.400' : 'gray.500'}
+                            borderColor={isWinner ? 'success.a10' : 'gray.500'}
                             bg="white"
                             display="flex"
                             flexDirection="column"
@@ -2117,13 +2117,13 @@ export const GameBoard: FC = () => {
                             fontSize={{ base: '2xs', md: 'xs' }}
                           >
                             <Text
-                              color={c.isRed ? 'red.500' : 'gray.800'}
+                              color={c.isRed ? 'card.red' : 'card.black'}
                               fontWeight="bold"
                               lineHeight={1}
                             >
                               {c.rank}
                             </Text>
-                            <Text color={c.isRed ? 'red.500' : 'gray.800'} lineHeight={1}>
+                            <Text color={c.isRed ? 'card.red' : 'card.black'} lineHeight={1}>
                               {c.suit}
                             </Text>
                           </Box>
@@ -2172,7 +2172,7 @@ export const GameBoard: FC = () => {
                             color={
                               (roundEndData?.updatedScores[p.playerId] ?? 0) >=
                               (gameState.targetScore ?? 70)
-                                ? 'red.400'
+                                ? 'danger.a10'
                                 : 'gray.100'
                             }
                           >
@@ -2190,7 +2190,7 @@ export const GameBoard: FC = () => {
               <VStack spacing={2}>
                 {roundCountdown != null && roundCountdown > 0 ? (
                   <>
-                    <Text fontSize="md" fontWeight="bold" color="brand.300">
+                    <Text fontSize="md" fontWeight="bold" color="brand.400">
                       Next round in {roundCountdown}s...
                     </Text>
                     {roomData?.host === playerId && (
@@ -2205,7 +2205,7 @@ export const GameBoard: FC = () => {
                     )}
                   </>
                 ) : roundCountdown === 0 ? (
-                  <Text fontSize="md" fontWeight="bold" color="green.300">
+                  <Text fontSize="md" fontWeight="bold" color="success.a10">
                     Starting...
                   </Text>
                 ) : roomData?.host === playerId ? (
@@ -2250,7 +2250,7 @@ export const GameBoard: FC = () => {
         motionPreset="slideInBottom"
       >
         <ModalOverlay bg="blackAlpha.800" />
-        <ModalContent bg="#2e4a73" color="white" maxH="90vh" overflow="auto">
+        <ModalContent bg="table.border" color="white" maxH="90vh" overflow="auto">
           <ModalHeader textAlign="center">
             {/* F-309: Animated "You Win!" heading for winner */}
             {gameEndData?.winner.playerId === playerId ? (
@@ -2259,22 +2259,22 @@ export const GameBoard: FC = () => {
                 animate={{ scale: [0.5, 1.15, 1], opacity: 1 }}
                 transition={{ duration: 0.6, ease: 'easeOut' }}
               >
-                <Heading size="lg" color="yellow.300" mb={2}>
+                <Heading size="lg" color="warning.a10" mb={2}>
                   You Win! 🏆
                 </Heading>
               </motion.div>
             ) : (
-              <Heading size="lg" color="yellow.300" mb={2}>
+              <Heading size="lg" color="warning.a10" mb={2}>
                 Game Over
               </Heading>
             )}
             <VStack spacing={1}>
-              <Text fontSize="md" color="green.300">
+              <Text fontSize="md" color="success.a10">
                 Winner: {gameEndData?.winner.username}
                 {gameEndData?.winner.playerId === playerId ? ' (You!)' : ''} —{' '}
                 {gameEndData?.winner.score} pts
               </Text>
-              <Text fontSize="md" color="red.300">
+              <Text fontSize="md" color="danger.a10">
                 Loser: {gameEndData?.loser.username}
                 {gameEndData?.loser.playerId === playerId ? ' (You)' : ''} —{' '}
                 {gameEndData?.loser.score} pts
@@ -2324,7 +2324,7 @@ export const GameBoard: FC = () => {
                           <Td
                             isNumeric
                             fontWeight="bold"
-                            color={isWinner ? 'green.300' : isLoser ? 'red.300' : 'gray.100'}
+                            color={isWinner ? 'success.a10' : isLoser ? 'danger.a10' : 'gray.100'}
                           >
                             {score}
                           </Td>
@@ -2364,13 +2364,13 @@ export const GameBoard: FC = () => {
                             fontSize="2xs"
                           >
                             <Text
-                              color={c.isRed ? 'red.500' : 'gray.800'}
+                              color={c.isRed ? 'card.red' : 'card.black'}
                               fontWeight="bold"
                               lineHeight={1}
                             >
                               {c.rank}
                             </Text>
-                            <Text color={c.isRed ? 'red.500' : 'gray.800'} lineHeight={1}>
+                            <Text color={c.isRed ? 'card.red' : 'card.black'} lineHeight={1}>
                               {c.suit}
                             </Text>
                           </Box>
@@ -2383,7 +2383,7 @@ export const GameBoard: FC = () => {
             </VStack>
           </ModalBody>
           <ModalFooter justifyContent="center">
-            <Button colorScheme="blue" size="md" onClick={handleReturnToLobby}>
+            <Button colorScheme="purple" size="md" onClick={handleReturnToLobby}>
               Return to Home
             </Button>
           </ModalFooter>

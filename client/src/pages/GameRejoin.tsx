@@ -54,7 +54,7 @@ export const GameRejoin: FC = () => {
       display="flex"
       alignItems="center"
       justifyContent="center"
-      bg="#406093"
+      bg="table.felt"
       color="white"
     >
       <VStack spacing={4}>

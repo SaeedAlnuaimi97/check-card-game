@@ -56,7 +56,7 @@ export const CardBack: FC<CardBackProps> = ({
       onClick={onClick}
       transition="all 0.2s ease-in-out"
       transform={isSelected ? 'translateY(-12px)' : 'none'}
-      shadow={isSelected ? '0 0 12px rgba(255, 214, 0, 0.5)' : 'sm'}
+      shadow={isSelected ? '0 0 12px rgba(215, 172, 97, 0.5)' : 'sm'}
       _hover={
         isClickable || onClick
           ? { transform: isSelected ? 'translateY(-14px)' : 'translateY(-4px)', shadow: 'lg' }
@@ -75,7 +75,7 @@ export const CardBack: FC<CardBackProps> = ({
         inset="3px"
         borderRadius="sm"
         border="1.5px solid"
-        borderColor="blue.300"
+        borderColor="brand.400"
         opacity={0.25}
       />
 
@@ -95,10 +95,10 @@ export const CardBack: FC<CardBackProps> = ({
         h={`${parseInt(d) + 4}px`}
         transform="rotate(45deg)"
         border="1.5px solid"
-        borderColor="blue.200"
+        borderColor="brand.300"
         opacity={0.35}
         zIndex={1}
-        bg="blue.700"
+        bg="brand.600"
       />
     </Box>
   );

@@ -253,7 +253,7 @@ Derived from PLAN.md. Features are grouped by domain and ordered by implementati
 - [x] **UI-013**: Replace CHECK IconButton with text `<Button size="xs">CHECK</Button>` in header
 - [x] **UI-014**: Remove "Room: XXXXX" from game header
 - [x] **UI-015**: Add sound toggle — localStorage-persisted (`checkgame_sound_enabled`), Switch control in hamburger menu
-- [x] **UI-016**: New theme colors — background `#406093`, primary `#4C8CE4`, secondary `#91D06C`, highlights `#FFF799`
+- [x] **UI-016**: New theme colors — purple/dark tonal palette with primary `#6c55c9`, surface tonal `#1b1922`, success `#47d5a6`, warning `#d7ac61`, danger `#d94a4a`
 
 ---
 

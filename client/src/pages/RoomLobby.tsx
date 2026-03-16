@@ -115,7 +115,7 @@ export const RoomLobby: FC = () => {
         display="flex"
         alignItems="center"
         justifyContent="center"
-        bg="#406093"
+        bg="table.felt"
         color="white"
         p={4}
       >
@@ -145,7 +145,7 @@ export const RoomLobby: FC = () => {
               onChange={(e) => setUsername(e.target.value)}
               maxLength={20}
               size="lg"
-              bg="#2e4a73"
+              bg="table.border"
               border="1px solid"
               borderColor="gray.600"
               _hover={{ borderColor: 'gray.500' }}
@@ -160,7 +160,7 @@ export const RoomLobby: FC = () => {
             />
 
             <Button
-              colorScheme="blue"
+              colorScheme="purple"
               size="lg"
               w="100%"
               onClick={handleJoin}
@@ -340,7 +340,7 @@ export const RoomLobby: FC = () => {
               aria-label="Copy invite link"
               size="sm"
               variant="outline"
-              colorScheme="blue"
+              colorScheme="purple"
               icon={<ShareAltOutlined />}
               onClick={handleShare}
             />
@@ -501,7 +501,7 @@ export const RoomLobby: FC = () => {
                       points
                     </Text>
                     {targetScore !== 70 && (
-                      <Text fontSize="xs" color="yellow.400">
+                      <Text fontSize="xs" color="warning.a10">
                         (default: 70)
                       </Text>
                     )}
@@ -515,7 +515,7 @@ export const RoomLobby: FC = () => {
                   onChange={(val) => setTargetScore(val)}
                   colorScheme="green"
                 >
-                  <SliderTrack bg="gray.700">
+                  <SliderTrack bg="surface.tonal20">
                     <SliderFilledTrack />
                   </SliderTrack>
                   <SliderThumb boxSize={5} />

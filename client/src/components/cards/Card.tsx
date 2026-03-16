@@ -205,7 +205,7 @@ export const Card: FC<CardProps> = ({
       onClick={onClick}
       transition="all 0.2s ease-in-out"
       transform={isSelected ? 'translateY(-12px)' : 'none'}
-      shadow={isSelected ? '0 0 12px rgba(255, 214, 0, 0.5)' : 'sm'}
+      shadow={isSelected ? '0 0 12px rgba(215, 172, 97, 0.5)' : 'sm'}
       _hover={
         isClickable || onClick
           ? { transform: isSelected ? 'translateY(-14px)' : 'translateY(-4px)', shadow: 'lg' }
