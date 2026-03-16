@@ -1425,7 +1425,7 @@ export const GameBoard: FC = () => {
         maxW={{ base: '900px', lg: '1100px' }}
         mx="auto"
         w="100%"
-        overflow="hidden"
+        overflow="visible"
       >
         {/* Top: Opponents */}
         <Flex wrap="wrap" justify="center" gap={{ base: 2, md: 3 }}>
@@ -1681,6 +1681,7 @@ export const GameBoard: FC = () => {
           <Box
             w="100%"
             overflowX="auto"
+            overflowY="visible"
             pb={5}
             pt={5}
             sx={{
@@ -1744,7 +1745,7 @@ export const GameBoard: FC = () => {
                       <VStack spacing={1} position="relative" flexShrink={0}>
                         <Box
                           position="relative"
-                          overflow="hidden"
+                          overflow="visible"
                           borderRadius="md"
                           sx={
                             isModified
@@ -1759,6 +1760,7 @@ export const GameBoard: FC = () => {
                                     animation: 'gradientSweep 3.5s ease-out forwards',
                                     pointerEvents: 'none',
                                     zIndex: 1,
+                                    clipPath: 'inset(0 round 6px)',
                                   },
                                   '@keyframes gradientSweep': {
                                     '0%': { transform: 'translateY(-100%)' },
