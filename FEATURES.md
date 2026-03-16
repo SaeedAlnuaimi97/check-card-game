@@ -354,6 +354,7 @@ Derived from PLAN.md. Features are grouped by domain and ordered by implementati
 - [x] **F-330**: Fix green glow effect clipping on current player's hand cards
 - [x] **F-331**: Fix bot turn timer duplication — emitYourTurn only starts timer for human players; bot turns managed by botScheduler
 - [x] **F-360**: Fix bot stuck after pause/resume — resumeGame handler must call scheduleBotTurnIfNeeded when current turn is a bot
+- [x] **F-361**: Fix multi-tab disconnect — registerPlayer cleans up orphan socket entries; unregisterPlayer guards against removing newer tab's mapping
 
 ### Room & Game Stability
 
