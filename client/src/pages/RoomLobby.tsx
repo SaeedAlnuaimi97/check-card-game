@@ -306,7 +306,7 @@ export const RoomLobby: FC = () => {
       display="flex"
       alignItems="center"
       justifyContent="center"
-      bg="#406093"
+      bg="table.felt"
       color="white"
       p={4}
     >
@@ -363,10 +363,12 @@ export const RoomLobby: FC = () => {
               key={index}
               w="100%"
               p={3}
-              bg={player ? 'gray.800' : 'gray.850'}
+              bg={player ? 'surface.tonal10' : 'surface.tonal0'}
               borderRadius="md"
               border="1px solid"
-              borderColor={player ? (player.isBot ? 'purple.700' : 'gray.600') : 'gray.700'}
+              borderColor={
+                player ? (player.isBot ? 'purple.700' : 'surface.tonal30') : 'surface.tonal20'
+              }
               opacity={player ? 1 : 0.4}
             >
               <HStack justify="space-between">
@@ -380,9 +382,9 @@ export const RoomLobby: FC = () => {
                         ? player.isBot
                           ? 'purple.400'
                           : player.isReady || player.id === roomData.host
-                            ? 'green.400'
-                            : 'yellow.400'
-                        : 'gray.600'
+                            ? 'success.a10'
+                            : 'warning.a10'
+                        : 'surface.tonal30'
                     }
                   />
                   <Text
@@ -414,7 +416,7 @@ export const RoomLobby: FC = () => {
                     </Badge>
                   )}
                   {player && player.id === playerId && (
-                    <Badge colorScheme="blue" fontSize="xs">
+                    <Badge colorScheme="purple" fontSize="xs">
                       You
                     </Badge>
                   )}
