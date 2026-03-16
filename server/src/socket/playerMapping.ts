@@ -37,6 +37,13 @@ export function registerPlayer(
   roomCode: string,
   username: string,
 ): void {
+  // Clean up any previous socket mapping for this player (e.g. second
+  // tab or page refresh) so no orphan entry remains in socketToPlayer.
+  const oldSocketId = playerToSocket.get(playerId);
+  if (oldSocketId && oldSocketId !== socketId) {
+    socketToPlayer.delete(oldSocketId);
+  }
+
   socketToPlayer.set(socketId, { playerId, roomCode, username });
   playerToSocket.set(playerId, socketId);
 }
@@ -45,7 +52,11 @@ export function unregisterPlayer(socketId: string): PlayerMapping | undefined {
   const mapping = socketToPlayer.get(socketId);
   if (mapping) {
     socketToPlayer.delete(socketId);
-    playerToSocket.delete(mapping.playerId);
+    // Only remove the playerToSocket entry if it still points to THIS
+    // socket — a newer tab may have already overwritten it.
+    if (playerToSocket.get(mapping.playerId) === socketId) {
+      playerToSocket.delete(mapping.playerId);
+    }
   }
   return mapping;
 }
