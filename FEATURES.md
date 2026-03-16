@@ -403,11 +403,15 @@ Derived from PLAN.md. Features are grouped by domain and ordered by implementati
 - [x] **F-368**: Host-triggered round countdown — host clicks "Next Round" to start 5-second countdown with audio cue; server auto-starts next round after countdown; non-hosts see "Waiting for host..."
 - [x] **F-369**: Cancel round countdown — endGame handler cancels pending countdown; host can end game during countdown
 
+### Round-End UI Polish
+
+- [x] **UI-027**: Card point values on round-end/game-end cards — small score label in bottom-right corner of each card; red 10s (0 pts) highlighted in green
+
 ---
 
 **Total MVP Features:** 112  
 **Total Phase 2 Features:** 54  
-**UX Improvements:** 16  
+**UX Improvements:** 17  
 **Bot, Bug Fixes & Stability:** 22  
 **Notifications:** 2  
 **Tablet Optimization:** 3  
@@ -415,5 +419,6 @@ Derived from PLAN.md. Features are grouped by domain and ordered by implementati
 **Mid-Game & Host Management:** 2  
 **Lobby Ready Toggle:** 2  
 **Round Transition Timer:** 2  
-**Document Version:** 1.10  
+**Round-End UI Polish:** 1  
+**Document Version:** 1.11  
 **Last Updated:** 2026-03-16
