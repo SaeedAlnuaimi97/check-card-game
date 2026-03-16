@@ -17,6 +17,8 @@ export interface PendingDisconnect {
   mapping: PlayerMapping;
   timer: ReturnType<typeof setTimeout>;
   disconnectedAt: number;
+  /** True if this player was the room host when they disconnected */
+  wasHost?: boolean;
 }
 
 /** Default grace period: 45 seconds */
@@ -85,6 +87,7 @@ export function startGracePeriod(
   mapping: PlayerMapping,
   onExpire: () => void,
   gracePeriodMs: number = DISCONNECT_GRACE_MS,
+  wasHost: boolean = false,
 ): void {
   // Cancel any existing grace period for this player
   cancelGracePeriod(mapping.playerId);
@@ -98,6 +101,7 @@ export function startGracePeriod(
     mapping,
     timer,
     disconnectedAt: Date.now(),
+    wasHost,
   });
 }
 

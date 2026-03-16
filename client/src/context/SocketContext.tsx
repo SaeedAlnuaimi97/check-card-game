@@ -180,6 +180,9 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
   const usernameRef = useRef(username);
   usernameRef.current = username;
 
+  // Flag to prevent duplicate rejoinRoom emissions (e.g. main connect handler + rejoinWithCode)
+  const rejoinInFlightRef = useRef(false);
+
   // Connect socket on mount
   useEffect(() => {
     socket.connect();
@@ -195,6 +198,7 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
         console.log(
           `[reconnect] Attempting rejoin: player=${storedPlayerId} room=${storedRoomCode}`,
         );
+        rejoinInFlightRef.current = true;
         socket.emit(
           'rejoinRoom',
           { playerId: storedPlayerId, roomCode: storedRoomCode },
@@ -202,6 +206,7 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
             success: boolean;
             room?: RoomData;
             gameState?: ClientGameState;
+            peekedCards?: PeekedCard[];
             drawnCard?: Card | null;
             drawnFromDiscard?: boolean;
             pendingEffect?: WaitingForSpecialEffectPayload | null;
@@ -216,6 +221,10 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
               }
               if (response.gameState) {
                 setGameState(response.gameState);
+                // Restore peeked cards if rejoining during peek phase
+                if (response.peekedCards && response.peekedCards.length > 0) {
+                  setPeekedCards(response.peekedCards);
+                }
                 // Restore mid-turn state if the player disconnected during their turn
                 if (response.drawnCard) {
                   setDrawnCard(response.drawnCard);
@@ -230,12 +239,14 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
                 // Navigate back to lobby (e.g. player refreshed while waiting)
                 navigateRef.current(`/lobby/${storedRoomCode}`);
               }
+              rejoinInFlightRef.current = false;
             } else {
               console.log('[reconnect] Rejoin failed:', response.error);
               // Clear stale session data so the home page shows normally
               localStorage.removeItem('playerId');
               localStorage.removeItem('roomCode');
               localStorage.removeItem('username');
+              rejoinInFlightRef.current = false;
             }
           },
         );
@@ -1067,6 +1078,7 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
           success: boolean;
           room?: RoomData;
           gameState?: ClientGameState;
+          peekedCards?: PeekedCard[];
           drawnCard?: Card | null;
           drawnFromDiscard?: boolean;
           pendingEffect?: WaitingForSpecialEffectPayload | null;
@@ -1081,6 +1093,10 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
             }
             if (response.gameState) {
               setGameState(response.gameState);
+              // Restore peeked cards if rejoining during peek phase
+              if (response.peekedCards && response.peekedCards.length > 0) {
+                setPeekedCards(response.peekedCards);
+              }
               if (response.drawnCard) {
                 setDrawnCard(response.drawnCard);
                 setDrawnFromDiscard(response.drawnFromDiscard === true);
@@ -1106,19 +1122,13 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
     if (socket.connected) {
       doRejoin();
     } else {
-      // Wait for the socket to connect, then attempt rejoin.
-      // Use a one-time listener that fires after SocketContext's own connect handler.
+      // Wait for the socket to connect, then attempt rejoin only if the main
+      // connect handler hasn't already started one (prevents duplicate emits).
       const onConnect = () => {
         socket.off('connect', onConnect);
-        // Small delay to let SocketContext's main connect handler run first.
-        // If it already handled the rejoin (because localStorage had the right roomCode),
-        // gameState/roomData will be set and the effect in GameRejoin will navigate.
-        setTimeout(() => {
-          // Only attempt if the main connect handler hasn't already restored state
-          if (!roomDataRef.current && !playerIdRef.current) {
-            doRejoin();
-          }
-        }, 150);
+        if (!rejoinInFlightRef.current) {
+          doRejoin();
+        }
       };
       socket.on('connect', onConnect);
     }
