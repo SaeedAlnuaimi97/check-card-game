@@ -397,7 +397,12 @@ export function registerRoomHandlers(io: SocketIOServer, socket: Socket): void {
     'startGame',
     async (
       data: { roomCode: string; playerId: string; targetScore?: number },
-      callback?: (response: { success: boolean; error?: string }) => void,
+      callback?: (response: {
+        success: boolean;
+        error?: string;
+        gameState?: ClientGameState;
+        peekedCards?: PeekedCard[];
+      }) => void,
     ) => {
       const roomCode = validateRoomCode(data?.roomCode);
       if (!roomCode) {
@@ -475,7 +480,20 @@ export function registerRoomHandlers(io: SocketIOServer, socket: Socket): void {
 
         console.log(`Game started in room ${roomCode} by ${data.playerId}`);
 
-        callback?.({ success: true });
+        // Build the host's own sanitized state + peeked cards so the
+        // callback can carry them — the host doesn't need to rely on
+        // receiving the gameStarted event (avoids stale-socket-mapping race).
+        const hostPlayer = gameState.players.find((p) => p.playerId === data.playerId);
+        const hostClientState = hostPlayer
+          ? sanitizeGameState(gameState, data.playerId)
+          : undefined;
+        const hostPeekedCards = hostPlayer ? getPeekedCards(hostPlayer) : undefined;
+
+        callback?.({
+          success: true,
+          gameState: hostClientState,
+          peekedCards: hostPeekedCards,
+        });
 
         // Emit 'gameStarted' privately to each player with their own
         // sanitized state and peeked cards (F-030)

@@ -609,8 +609,30 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
         socket.emit(
           'startGame',
           { roomCode: roomData.roomCode, playerId, targetScore },
-          (response: { success: boolean; error?: string }) => {
-            resolve(response);
+          (response: {
+            success: boolean;
+            error?: string;
+            gameState?: ClientGameState;
+            peekedCards?: PeekedCard[];
+          }) => {
+            if (response.success && response.gameState) {
+              // Host receives game state directly in callback — navigate
+              // immediately instead of waiting for the gameStarted event.
+              setGameState(response.gameState);
+              setPeekedCards(response.peekedCards ?? []);
+              setIsMyTurn(false);
+              setTurnData(null);
+              setCheckCalledData(null);
+              setRoundEndData(null);
+              setGameEndData(null);
+              setDrawnCard(null);
+              setDrawnFromDiscard(false);
+              setPendingEffect(null);
+              setLastBurnResult(null);
+              setNextRoundStartsAt(null);
+              navigateRef.current('/game');
+            }
+            resolve({ success: response.success, error: response.error });
           },
         );
       });
