@@ -403,7 +403,13 @@ describe('roomHandlers', () => {
       const callback = vi.fn();
       await emitEvent('startGame', { roomCode, playerId: hostId }, callback);
 
-      expect(callback).toHaveBeenCalledWith({ success: true });
+      expect(callback).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: true,
+          gameState: expect.any(Object),
+          peekedCards: expect.any(Array),
+        }),
+      );
       expect(rooms[roomCode].status).toBe('playing');
     });
 
@@ -1370,7 +1376,13 @@ describe('roomHandlers', () => {
       const callback = vi.fn();
       await emitEvent('startGame', { roomCode, playerId: hostId }, callback);
 
-      expect(callback).toHaveBeenCalledWith({ success: true });
+      expect(callback).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: true,
+          gameState: expect.any(Object),
+          peekedCards: expect.any(Array),
+        }),
+      );
       expect(rooms[roomCode].status).toBe('playing');
     });
 
@@ -1387,7 +1399,13 @@ describe('roomHandlers', () => {
       const callback = vi.fn();
       await emitEvent('startGame', { roomCode, playerId: hostId }, callback);
 
-      expect(callback).toHaveBeenCalledWith({ success: true });
+      expect(callback).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: true,
+          gameState: expect.any(Object),
+          peekedCards: expect.any(Array),
+        }),
+      );
     });
 
     it('allows start when host is the only human (no readiness check needed)', async () => {
@@ -1400,7 +1418,13 @@ describe('roomHandlers', () => {
       const callback = vi.fn();
       await emitEvent('startGame', { roomCode, playerId: hostId }, callback);
 
-      expect(callback).toHaveBeenCalledWith({ success: true });
+      expect(callback).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: true,
+          gameState: expect.any(Object),
+          peekedCards: expect.any(Array),
+        }),
+      );
     });
 
     it('rejects when one of multiple human players is not ready', async () => {
