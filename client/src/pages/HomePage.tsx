@@ -280,7 +280,7 @@ export const HomePage: FC = () => {
         <ModalOverlay bg="blackAlpha.800" />
         <ModalContent bg="table.border" color="white" mx={4}>
           <ModalHeader borderBottom="1px solid" borderColor="surface.tonal30" fontSize="lg">
-            How to Play — Check Card Game
+            How to Play — Check - The Card Game
           </ModalHeader>
           <ModalCloseButton />
           <ModalBody pb={6} fontSize="sm">
@@ -291,7 +291,7 @@ export const HomePage: FC = () => {
                   Goal
                 </Text>
                 <Text color="gray.300">
-                  Lowest hand total wins each round. First player to reach 100+ points loses the
+                  Lowest hand total wins each round. First player to reach score target points loses the
                   game.
                 </Text>
               </Box>
