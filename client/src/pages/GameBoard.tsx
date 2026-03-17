@@ -3,27 +3,18 @@ import { AnimatePresence, motion } from 'framer-motion';
 import {
   Box,
   Button,
-  Divider,
   Flex,
   IconButton,
   Modal,
   ModalBody,
   ModalCloseButton,
   ModalContent,
-  ModalFooter,
   ModalHeader,
   ModalOverlay,
-  Table,
-  Tbody,
-  Td,
   Text,
-  Th,
-  Thead,
-  Tr,
   VStack,
   HStack,
   Badge,
-  Heading,
   Progress,
   Tooltip,
   useBreakpointValue,
@@ -1902,7 +1893,8 @@ export const GameBoard: FC = () => {
           justifyContent="center"
           px="14px"
           py="14px"
-          overflow="hidden"
+          overflowX="hidden"
+          overflowY="visible"
         >
           <Box
             bg="#12181a"
@@ -2021,91 +2013,100 @@ export const GameBoard: FC = () => {
               </Box>
             )}
 
-            {/* Pile area — draw + discard */}
+            {/* Pile area — draw pile ⇄ discard pile; drawn card replaces draw pile when held */}
             <Flex justify="center" align="center" gap={{ base: '28px', md: '40px' }}>
-              {/* Draw Pile */}
+              {/* Left slot: draw pile normally, drawn card when held */}
               <VStack spacing="5px">
-                <Tooltip
-                  label={
-                    canAct && !hasDrawnCard && turnData?.availableActions.includes('drawDeck')
-                      ? 'Draw from deck'
-                      : hasDrawnCard
-                        ? 'Card already drawn'
-                        : !canAct
-                          ? 'Not your turn'
-                          : ''
-                  }
-                  isDisabled={!isDesktop || (!canAct && gameState.phase !== 'playing')}
-                >
-                  <Box>
-                    <CardBack
-                      size="lg"
-                      isClickable={
-                        canAct &&
-                        !hasDrawnCard &&
-                        (turnData?.availableActions.includes('drawDeck') ?? false)
-                      }
-                      onClick={handleDrawDeck}
-                    />
-                  </Box>
-                </Tooltip>
-                <Text fontSize="10px" color="#444">
-                  draw pile
-                </Text>
-                {canAct && !hasDrawnCard && turnData?.availableActions.includes('drawDeck') && (
-                  <Text fontSize="10px" color="#333">
-                    tap to draw
-                  </Text>
-                )}
-              </VStack>
-
-              {/* Swap arrow */}
-              <Text color="#2a2a3a" fontSize="20px">
-                ⇄
-              </Text>
-
-              {/* Drawn Card (floating) */}
-              <AnimatePresence mode="wait">
-                {hasDrawnCard && drawnCard && (
-                  <VStack spacing="5px">
+                {hasDrawnCard && drawnCard ? (
+                  /* ── Drawn card replaces draw pile slot ── */
+                  <AnimatePresence mode="wait">
                     <motion.div
                       key={drawnCardAnimKey}
-                      initial={{ scale: 0.6, opacity: 0, y: -20 }}
-                      animate={{ scale: 1, opacity: 1, y: 0 }}
-                      exit={{ scale: 0.6, opacity: 0, y: 20 }}
-                      transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+                      initial={{ rotateY: 90, opacity: 0, y: -8 }}
+                      animate={{ rotateY: 0, opacity: 1, y: 0 }}
+                      exit={{ rotateY: 90, opacity: 0 }}
+                      transition={{ duration: 0.25, ease: 'easeOut' }}
+                      style={{ transformStyle: 'preserve-3d' }}
                     >
-                      <Box
-                        borderRadius="md"
-                        border="2px solid #c9a227"
-                        boxShadow="0 0 16px rgba(215, 172, 97, 0.5)"
-                        animation="pulse 1.5s ease-in-out infinite"
-                      >
-                        <Card card={drawnCard} size="lg" />
-                      </Box>
+                      <VStack spacing="4px">
+                        <Box
+                          px="8px"
+                          py="2px"
+                          borderRadius="8px"
+                          bg="#c9a227"
+                          color="#1a1200"
+                          fontSize="8px"
+                          fontWeight="700"
+                          letterSpacing="0.06em"
+                          textTransform="uppercase"
+                        >
+                          {drawnFromDiscard ? 'from discard' : 'you drew'}
+                        </Box>
+                        <Box
+                          borderRadius="8px"
+                          border="2px solid #c9a227"
+                          boxShadow="0 0 14px rgba(201,162,39,0.45)"
+                        >
+                          <Card card={drawnCard} size="lg" />
+                        </Box>
+                      </VStack>
                     </motion.div>
-                    <Text fontSize="10px" color="#c9a227" fontWeight="600">
-                      {drawnFromDiscard ? 'from discard' : 'drawn'}
-                    </Text>
-                  </VStack>
+                  </AnimatePresence>
+                ) : (
+                  /* ── Normal draw pile ── */
+                  <>
+                    <Tooltip
+                      label={
+                        canAct && turnData?.availableActions.includes('drawDeck')
+                          ? 'Draw from deck'
+                          : !canAct
+                            ? 'Not your turn'
+                            : ''
+                      }
+                      isDisabled={!isDesktop || (!canAct && gameState.phase !== 'playing')}
+                    >
+                      <Box>
+                        <CardBack
+                          size="lg"
+                          isClickable={
+                            canAct &&
+                            !hasDrawnCard &&
+                            (turnData?.availableActions.includes('drawDeck') ?? false)
+                          }
+                          onClick={handleDrawDeck}
+                        />
+                      </Box>
+                    </Tooltip>
+                    {canAct && turnData?.availableActions.includes('drawDeck') && (
+                      <Text fontSize="10px" color="#333">
+                        tap to draw
+                      </Text>
+                    )}
+                  </>
                 )}
-              </AnimatePresence>
+                <Text fontSize="10px" color="#444">
+                  {hasDrawnCard ? 'drawn card' : 'draw pile'}
+                </Text>
+              </VStack>
+
+              {/* Separator arrow */}
+              <Text color="#2a2a3a" fontSize="20px">
+                →
+              </Text>
 
               {/* Discard Pile */}
               <VStack spacing="5px">
                 <Tooltip
                   label={
-                    hasDrawnCard && drawnFromDiscard
-                      ? 'Must swap with a hand card'
-                      : hasDrawnCard
-                        ? 'Discard drawn card'
-                        : topDiscard?.isBurned
-                          ? 'Burned card — cannot pick up'
-                          : canAct && turnData?.availableActions.includes('takeDiscard')
-                            ? 'Tap to take from discard'
-                            : !canAct
-                              ? 'Not your turn'
-                              : ''
+                    hasDrawnCard && !drawnFromDiscard
+                      ? 'Discard drawn card'
+                      : topDiscard?.isBurned
+                        ? 'Burned card — cannot pick up'
+                        : canAct && turnData?.availableActions.includes('takeDiscard')
+                          ? 'Tap to take from discard'
+                          : !canAct
+                            ? 'Not your turn'
+                            : ''
                   }
                   isDisabled={!isDesktop || (!canAct && gameState.phase !== 'playing')}
                 >
@@ -2125,17 +2126,16 @@ export const GameBoard: FC = () => {
                               card={topDiscard}
                               size="lg"
                               isClickable={
-                                hasDrawnCard
+                                canAct &&
+                                (hasDrawnCard
                                   ? !drawnFromDiscard
-                                  : canAct &&
-                                    !topDiscard.isBurned &&
-                                    (turnData?.availableActions.includes('takeDiscard') ?? false)
+                                  : !topDiscard.isBurned &&
+                                    (turnData?.availableActions.includes('takeDiscard') ?? false))
                               }
                               onClick={
-                                hasDrawnCard && !drawnFromDiscard
+                                canAct && hasDrawnCard && !drawnFromDiscard
                                   ? () => handleDiscardChoice(null)
-                                  : !hasDrawnCard &&
-                                      canAct &&
+                                  : canAct &&
                                       !topDiscard.isBurned &&
                                       turnData?.availableActions.includes('takeDiscard')
                                     ? handleTakeDiscard
@@ -2169,34 +2169,26 @@ export const GameBoard: FC = () => {
                         w="58px"
                         h="80px"
                         borderRadius="8px"
-                        border="2px dashed"
-                        borderColor={hasDrawnCard && !drawnFromDiscard ? '#c9a227' : '#2a2a3a'}
+                        border="2px dashed #2a2a3a"
                         display="flex"
                         alignItems="center"
                         justifyContent="center"
-                        cursor={hasDrawnCard && !drawnFromDiscard ? 'pointer' : 'default'}
-                        onClick={
-                          hasDrawnCard && !drawnFromDiscard
-                            ? () => handleDiscardChoice(null)
-                            : undefined
-                        }
                       >
-                        <Text
-                          fontSize="9px"
-                          color={hasDrawnCard && !drawnFromDiscard ? '#c9a227' : '#333'}
-                        >
-                          {hasDrawnCard && !drawnFromDiscard ? 'discard' : 'empty'}
+                        <Text fontSize="9px" color="#333">
+                          empty
                         </Text>
                       </Box>
                     )}
                   </Box>
                 </Tooltip>
-                <Text
-                  fontSize="10px"
-                  color={hasDrawnCard && !drawnFromDiscard && topDiscard ? '#c9a227' : '#444'}
-                >
-                  {hasDrawnCard && !drawnFromDiscard ? 'selected' : 'discard'}
+                <Text fontSize="10px" color="#444">
+                  discard
                 </Text>
+                {canAct && hasDrawnCard && !drawnFromDiscard && (
+                  <Text fontSize="10px" color="#c9a227" fontWeight="500">
+                    tap to discard
+                  </Text>
+                )}
                 {canAct &&
                   !hasDrawnCard &&
                   topDiscard &&
@@ -2256,9 +2248,9 @@ export const GameBoard: FC = () => {
       {!isDesktop && (
         <Box
           bg="#13131a"
-          px="14px"
-          pt="10px"
-          pb="16px"
+          px="10px"
+          pt="20px"
+          pb="10px"
           flexShrink={0}
           borderTop={canAct ? '2px solid #00e5cc' : '2px solid transparent'}
           boxShadow={canAct ? '0 -4px 18px 0 #00e5cc44' : 'none'}
@@ -2272,7 +2264,7 @@ export const GameBoard: FC = () => {
             textTransform="uppercase"
             letterSpacing="0.07em"
             fontWeight="500"
-            mb="8px"
+            mb="16px"
           >
             {hasDrawnCard && drawnFromDiscard
               ? 'pick a slot to replace'
@@ -2283,7 +2275,7 @@ export const GameBoard: FC = () => {
 
           {/* Undo button when discard was taken */}
           {hasDrawnCard && drawnFromDiscard && (
-            <Flex justify="center" mb="8px">
+            <Flex justify="center" mb="4px">
               <Box
                 as="button"
                 px="12px"
@@ -2307,20 +2299,19 @@ export const GameBoard: FC = () => {
             overflowX="auto"
             sx={{
               overflowY: 'visible',
-              clipPath: 'inset(-40px -9999px -9999px -9999px)',
               '&::-webkit-scrollbar': { display: 'none' },
               scrollbarWidth: 'none',
               msOverflowStyle: 'none',
               WebkitOverflowScrolling: 'touch',
             }}
-            pb={3}
+            pb={1}
           >
             <HStack
-              spacing={{ base: '8px', md: '10px' }}
+              spacing={{ base: '6px', md: '10px' }}
               justify={myPlayer.hand.length > 4 ? 'flex-start' : 'center'}
               w={myPlayer.hand.length > 4 ? 'max-content' : '100%'}
               px={myPlayer.hand.length > 4 ? 2 : 0}
-              pt="16px"
+              pt="8px"
             >
               {myPlayer.hand.map((h: ClientHandSlot, cardIdx: number) => {
                 const peekedCard = getPeekedCardForSlot(h.slot);
@@ -2394,7 +2385,7 @@ export const GameBoard: FC = () => {
                               isSelected={true}
                               isClickable={isClickable}
                               onClick={handleClick}
-                              size={isDesktop ? 'lg' : 'md'}
+                              size={isDesktop ? 'lg' : 'sm'}
                             />
                           ) : visibleCard ? (
                             <Card
@@ -2402,7 +2393,7 @@ export const GameBoard: FC = () => {
                               isSelected={isPeekedSlot(h.slot)}
                               isClickable={isClickable}
                               onClick={handleClick}
-                              size={isDesktop ? 'lg' : 'md'}
+                              size={isDesktop ? 'lg' : 'sm'}
                             />
                           ) : (
                             <CardBack
@@ -2410,7 +2401,7 @@ export const GameBoard: FC = () => {
                               isKnown={!isPeeking && knownSlots.has(h.slot)}
                               isClickable={isClickable}
                               onClick={handleClick}
-                              size={isDesktop ? 'lg' : 'md'}
+                              size={isDesktop ? 'lg' : 'sm'}
                             />
                           )}
                           {isModified && (
@@ -2460,9 +2451,9 @@ export const GameBoard: FC = () => {
             {gameState.phase === 'peeking'
               ? 'memorize your cards'
               : hasDrawnCard && drawnFromDiscard
-                ? 'tap a slot to place the discard card · tap discard again to cancel'
+                ? 'tap a slot to swap · tap discard again to cancel'
                 : hasDrawnCard
-                  ? 'tap hand to swap · tap discard to keep hand'
+                  ? 'tap a hand card to swap · tap discard pile to discard'
                   : 'tap draw pile · tap discard then hand · tap hand card to burn'}
           </Text>
         </Box>
@@ -2971,14 +2962,14 @@ export const GameBoard: FC = () => {
                         msOverflowStyle: 'none',
                         WebkitOverflowScrolling: 'touch',
                       }}
-                      pb={3}
+                      pb={1}
                     >
                       <HStack
-                        spacing="10px"
+                        spacing={{ base: '6px', md: '10px' }}
                         justify={myPlayer.hand.length > 4 ? 'flex-start' : 'center'}
                         w={myPlayer.hand.length > 4 ? 'max-content' : '100%'}
                         px={myPlayer.hand.length > 4 ? 2 : 0}
-                        pt="16px"
+                        pt="0px"
                       >
                         {myPlayer.hand.map((h: ClientHandSlot, cardIdx: number) => {
                           const peekedCard = getPeekedCardForSlot(h.slot);
@@ -4568,219 +4559,576 @@ export const GameBoard: FC = () => {
         isCentered
         closeOnOverlayClick={false}
         closeOnEsc={false}
-        size={{ base: 'md', md: 'lg' }}
+        size={{ base: 'full', md: 'lg' }}
         motionPreset="slideInBottom"
       >
-        <ModalOverlay bg="blackAlpha.800" />
-        <ModalContent bg="table.border" color="white" maxH="90vh" overflow="auto">
-          <ModalHeader textAlign="center">
-            <Heading size="md" color="warning.a10">
-              Round {roundEndData?.roundNumber} Complete
-            </Heading>
-            <Text fontSize="sm" color="gray.400" fontWeight="normal" mt={1}>
-              {roundEndData?.checkCalledBy ? (
-                <>
-                  {roundEndData.checkCalledBy === playerId
+        <ModalOverlay bg="blackAlpha.900" />
+        <ModalContent
+          bg="#0f0f16"
+          color="white"
+          maxH={{ base: '100vh', md: '92vh' }}
+          overflow="hidden"
+          display="flex"
+          flexDirection="column"
+          borderRadius={{ base: 0, md: '16px' }}
+          border="1px solid #1e1e2a"
+          m={{ base: 0, md: 4 }}
+        >
+          {/* top bar */}
+          <Box
+            px="14px"
+            py="9px"
+            bg="#13131a"
+            borderBottom="0.5px solid #1e1e2a"
+            flexShrink={0}
+            display="flex"
+            alignItems="center"
+            justifyContent="space-between"
+          >
+            <Text fontSize="11px" color="#aaa" fontWeight="500">
+              Round {roundEndData?.roundNumber} complete
+            </Text>
+          </Box>
+
+          {/* scrollable body */}
+          <Box flex={1} overflowY="auto" px="12px" pt="14px" pb="20px">
+            <VStack spacing="12px" align="stretch">
+              {/* ── hero ── */}
+              {(() => {
+                const iWon = roundEndData?.roundWinners.includes(playerId ?? '');
+                const winnerName =
+                  roundEndData?.allHands.find((h) => roundEndData.roundWinners.includes(h.playerId))
+                    ?.username ?? 'Someone';
+                const checkerName = roundEndData?.checkCalledBy
+                  ? roundEndData.checkCalledBy === playerId
                     ? 'You'
                     : (gameState?.players.find((p) => p.playerId === roundEndData.checkCalledBy)
-                        ?.username ?? 'Someone')}{' '}
-                  called check
-                  {roundEndData.checkerDoubled ? ' (score doubled!)' : ''}
-                </>
-              ) : (
-                <>
-                  {roundEndData?.roundWinners.includes(playerId ?? '')
-                    ? 'You burned all your cards!'
-                    : `${gameState?.players.find((p) => roundEndData?.roundWinners.includes(p.playerId))?.username ?? 'Someone'} burned all their cards!`}
-                </>
-              )}
-            </Text>
-          </ModalHeader>
-          <ModalBody>
-            <VStack spacing={4} align="stretch">
-              {/* All hands revealed */}
-              {roundEndData?.allHands.map((hand: PlayerRoundResult) => {
-                const isWinner = roundEndData.roundWinners.includes(hand.playerId);
-                const isMe = hand.playerId === playerId;
-                const isChecker = hand.playerId === roundEndData.checkCalledBy;
-                const isDoubled = isChecker && roundEndData.checkerDoubled;
+                        ?.username ?? 'Someone')
+                  : null;
                 return (
-                  <Box
-                    key={hand.playerId}
-                    p={3}
-                    borderRadius="md"
-                    border="2px solid"
-                    borderColor={isWinner ? 'success.a10' : 'gray.600'}
-                    bg={isWinner ? 'whiteAlpha.100' : 'transparent'}
-                  >
-                    <Flex justify="space-between" align="center" mb={2}>
-                      <HStack spacing={2}>
-                        <Text fontWeight="bold" fontSize="sm">
-                          {hand.username}
-                          {isMe ? ' (You)' : ''}
-                        </Text>
-                        {isWinner && (
-                          <Badge colorScheme="green" fontSize="2xs">
-                            Winner
-                          </Badge>
-                        )}
-                        {isChecker && (
-                          <Badge colorScheme={isDoubled ? 'red' : 'blue'} fontSize="2xs">
-                            Checker
-                          </Badge>
-                        )}
-                      </HStack>
-                      <Text
-                        fontWeight="bold"
-                        fontSize="sm"
-                        color={isWinner ? 'success.a10' : 'danger.a10'}
-                      >
-                        {isDoubled ? `${hand.handSum} x2 = ${hand.handSum * 2}` : `${hand.handSum}`}{' '}
-                        pts
-                      </Text>
-                    </Flex>
-                    <HStack spacing={2} flexWrap="wrap">
-                      {hand.cards.map((c, i) => (
-                        <VStack key={i} spacing={0}>
-                          <Box
-                            w={{ base: '40px', md: '52px' }}
-                            h={{ base: '56px', md: '74px' }}
-                            borderRadius="sm"
-                            border="1px solid"
-                            borderColor={isWinner ? 'success.a10' : 'gray.500'}
-                            bg="white"
-                            position="relative"
-                            display="flex"
-                            flexDirection="column"
-                            alignItems="center"
-                            justifyContent="center"
-                            fontSize={{ base: '2xs', md: 'xs' }}
-                          >
-                            <Text
-                              color={c.isRed ? 'card.red' : 'card.black'}
-                              fontWeight="bold"
-                              lineHeight={1}
-                            >
-                              {c.rank}
-                            </Text>
-                            <Text color={c.isRed ? 'card.red' : 'card.black'} lineHeight={1}>
-                              {c.suit}
-                            </Text>
-                            {/* Point value badge — bottom-right corner */}
-                            <Text
-                              position="absolute"
-                              bottom="1px"
-                              right="2px"
-                              fontSize={{ base: '7px', md: '9px' }}
-                              fontWeight="bold"
-                              color={c.value === 0 ? 'green.600' : 'gray.500'}
-                              lineHeight={1}
-                            >
-                              {c.value}
-                            </Text>
-                          </Box>
-                          <Text fontSize="2xs" color="gray.500">
-                            {hand.slots[i]}
-                          </Text>
-                        </VStack>
-                      ))}
-                    </HStack>
+                  <Box textAlign="center" pt="6px" pb="2px">
+                    <Text
+                      fontSize="10px"
+                      letterSpacing="0.12em"
+                      textTransform="uppercase"
+                      fontWeight="600"
+                      color="#7a7aee"
+                      mb="4px"
+                    >
+                      Round {roundEndData?.roundNumber}
+                    </Text>
+                    <Text fontSize="24px" fontWeight="800" lineHeight="1.1" color="#eee" mb="4px">
+                      {iWon ? 'You won!' : `${winnerName} won!`}
+                    </Text>
+                    <Text fontSize="12px" color="#555">
+                      {checkerName
+                        ? `${checkerName} called check${roundEndData?.checkerDoubled ? ' · score doubled!' : ''}`
+                        : iWon
+                          ? 'You burned all your cards!'
+                          : `${winnerName} burned all their cards!`}
+                    </Text>
                   </Box>
                 );
-              })}
+              })()}
 
-              {/* Cumulative scores */}
-              <Divider borderColor="gray.600" />
-              <Box>
-                <Text fontWeight="bold" fontSize="sm" mb={2} color="gray.300">
-                  Cumulative Scores
-                </Text>
-                <Table size="sm" variant="simple">
-                  <Thead>
-                    <Tr>
-                      <Th color="gray.400">Player</Th>
-                      <Th color="gray.400" isNumeric>
-                        Total
-                      </Th>
-                    </Tr>
-                  </Thead>
-                  <Tbody>
-                    {gameState?.players
-                      .slice()
-                      .sort(
-                        (a, b) =>
-                          (roundEndData?.updatedScores[a.playerId] ?? 0) -
-                          (roundEndData?.updatedScores[b.playerId] ?? 0),
-                      )
-                      .map((p) => (
-                        <Tr key={p.playerId}>
-                          <Td color="gray.100" fontSize="sm">
-                            {p.username}
-                            {p.playerId === playerId ? ' (You)' : ''}
-                          </Td>
-                          <Td
-                            isNumeric
-                            fontWeight="bold"
-                            color={
-                              (roundEndData?.updatedScores[p.playerId] ?? 0) >=
-                              (gameState.targetScore ?? 70)
-                                ? 'danger.a10'
-                                : 'gray.100'
-                            }
+              {/* ── winner banner ── */}
+              {(() => {
+                const winnerHand = roundEndData?.allHands.find((h) =>
+                  roundEndData.roundWinners.includes(h.playerId),
+                );
+                if (!winnerHand) return null;
+                const isMe = winnerHand.playerId === playerId;
+                const isChecker = winnerHand.playerId === roundEndData?.checkCalledBy;
+                const initials = winnerHand.username.slice(0, 2).toUpperCase();
+                return (
+                  <Box
+                    borderRadius="12px"
+                    px="14px"
+                    py="12px"
+                    bg="#0e2a1a"
+                    border="1px solid #1a5a2a"
+                    display="flex"
+                    alignItems="center"
+                    gap="10px"
+                  >
+                    <Box
+                      w="36px"
+                      h="36px"
+                      borderRadius="full"
+                      flexShrink={0}
+                      bg="#1a1a3a"
+                      color="#7a7aee"
+                      display="flex"
+                      alignItems="center"
+                      justifyContent="center"
+                      fontSize="13px"
+                      fontWeight="700"
+                    >
+                      {initials}
+                    </Box>
+                    <Box flex={1}>
+                      <Text fontSize="14px" fontWeight="700" color="#eee">
+                        {winnerHand.username}
+                        {isMe ? ' (You)' : ''}
+                      </Text>
+                      <HStack spacing="5px" mt="4px" flexWrap="wrap">
+                        <Box
+                          px="7px"
+                          py="2px"
+                          borderRadius="4px"
+                          fontSize="9px"
+                          fontWeight="700"
+                          letterSpacing="0.04em"
+                          textTransform="uppercase"
+                          bg="#1a4a2a"
+                          color="#5ecf5e"
+                          border="0.5px solid #2a6a3a"
+                        >
+                          winner
+                        </Box>
+                        {isChecker && (
+                          <Box
+                            px="7px"
+                            py="2px"
+                            borderRadius="4px"
+                            fontSize="9px"
+                            fontWeight="700"
+                            letterSpacing="0.04em"
+                            textTransform="uppercase"
+                            bg="#1a1a4a"
+                            color="#7a7aee"
+                            border="0.5px solid #2a2a6a"
                           >
-                            {roundEndData?.updatedScores[p.playerId] ?? 0}
-                          </Td>
-                        </Tr>
-                      ))}
-                  </Tbody>
-                </Table>
-              </Box>
-            </VStack>
-          </ModalBody>
-          <ModalFooter justifyContent="center">
-            {roundEndData?.nextRoundStarting ? (
-              <VStack spacing={2}>
-                {roundCountdown != null && roundCountdown > 0 ? (
-                  <>
-                    <Text fontSize="md" fontWeight="bold" color="brand.400">
-                      Next round in {roundCountdown}s...
+                            checker
+                          </Box>
+                        )}
+                      </HStack>
+                    </Box>
+                    <Text fontSize="22px" fontWeight="800" color="#5ecf5e" flexShrink={0}>
+                      {winnerHand.handSum} pts
                     </Text>
-                    {roomData?.host === playerId && (
-                      <Button
-                        colorScheme="red"
-                        variant="outline"
-                        size="sm"
+                  </Box>
+                );
+              })()}
+
+              {/* ── score table ── */}
+              {(() => {
+                const sorted = (gameState?.players ?? [])
+                  .slice()
+                  .sort(
+                    (a, b) =>
+                      (roundEndData?.updatedScores[a.playerId] ?? 0) -
+                      (roundEndData?.updatedScores[b.playerId] ?? 0),
+                  );
+                const prevScores: Record<string, number> = {};
+                sorted.forEach((p) => {
+                  const total = roundEndData?.updatedScores[p.playerId] ?? 0;
+                  const roundPts =
+                    roundEndData?.allHands.find((h) => h.playerId === p.playerId)?.handSum ?? 0;
+                  prevScores[p.playerId] = total - roundPts;
+                });
+                return (
+                  <Box>
+                    <Flex
+                      justify="space-between"
+                      px="2px"
+                      pb="6px"
+                      borderBottom="0.5px solid #1a1a24"
+                      fontSize="9px"
+                      color="#333"
+                      textTransform="uppercase"
+                      letterSpacing="0.08em"
+                      fontWeight="600"
+                    >
+                      <Text>player</Text>
+                      <HStack spacing="20px">
+                        <Text>this round</Text>
+                        <Text>total</Text>
+                      </HStack>
+                    </Flex>
+                    {sorted.map((p, idx) => {
+                      const total = roundEndData?.updatedScores[p.playerId] ?? 0;
+                      const roundPts =
+                        roundEndData?.allHands.find((h) => h.playerId === p.playerId)?.handSum ?? 0;
+                      const isMe = p.playerId === playerId;
+                      const isDanger = total >= (gameState?.targetScore ?? 100);
+                      const isBest = idx === 0;
+                      const initials = p.username.slice(0, 2).toUpperCase();
+                      return (
+                        <Flex
+                          key={p.playerId}
+                          align="center"
+                          gap="8px"
+                          px="2px"
+                          py="8px"
+                          borderBottom="0.5px solid #13131e"
+                          _last={{ borderBottom: 'none' }}
+                        >
+                          <Box
+                            w="18px"
+                            h="18px"
+                            borderRadius="full"
+                            flexShrink={0}
+                            display="flex"
+                            alignItems="center"
+                            justifyContent="center"
+                            fontSize="9px"
+                            fontWeight="700"
+                            bg={idx === 0 ? '#3a2a00' : '#1a1a2a'}
+                            color={idx === 0 ? '#c9a227' : '#555'}
+                          >
+                            {idx + 1}
+                          </Box>
+                          <Box
+                            w="22px"
+                            h="22px"
+                            borderRadius="full"
+                            flexShrink={0}
+                            display="flex"
+                            alignItems="center"
+                            justifyContent="center"
+                            fontSize="9px"
+                            fontWeight="700"
+                            bg="#1a1a3a"
+                            color="#7a7aee"
+                          >
+                            {initials}
+                          </Box>
+                          <Text fontSize="12px" color="#ccc" flex={1} fontWeight="500">
+                            {p.username}
+                            {isMe && (
+                              <Text as="span" fontSize="10px" color="#7a7aee">
+                                {' '}
+                                (You)
+                              </Text>
+                            )}
+                          </Text>
+                          <Text
+                            fontSize="10px"
+                            fontWeight="600"
+                            minW="28px"
+                            textAlign="right"
+                            color={roundPts === 0 ? '#5ecf5e' : '#cf7070'}
+                          >
+                            +{roundPts}
+                          </Text>
+                          <Text
+                            fontSize="13px"
+                            fontWeight="700"
+                            minW="36px"
+                            textAlign="right"
+                            color={isDanger ? '#cf5e5e' : isBest ? '#5ecf5e' : '#aaa'}
+                          >
+                            {total}
+                          </Text>
+                        </Flex>
+                      );
+                    })}
+                  </Box>
+                );
+              })()}
+
+              {/* ── hand reveals ── */}
+              <Box>
+                <Text
+                  fontSize="10px"
+                  color="#333"
+                  textTransform="uppercase"
+                  letterSpacing="0.08em"
+                  fontWeight="600"
+                  mb="8px"
+                >
+                  hands revealed
+                </Text>
+                <VStack spacing="8px" align="stretch">
+                  {roundEndData?.allHands.map((hand: PlayerRoundResult) => {
+                    const isWinner = roundEndData.roundWinners.includes(hand.playerId);
+                    const isMe = hand.playerId === playerId;
+                    const isChecker = hand.playerId === roundEndData.checkCalledBy;
+                    const isDoubled = isChecker && roundEndData.checkerDoubled;
+                    const initials = hand.username.slice(0, 2).toUpperCase();
+                    const displaySum = isDoubled ? hand.handSum * 2 : hand.handSum;
+                    return (
+                      <Box
+                        key={hand.playerId}
+                        bg={isWinner ? '#0e1e16' : '#1a1a26'}
+                        borderRadius="10px"
+                        border="0.5px solid"
+                        borderColor={isWinner ? '#2a5a3a' : isMe ? '#3a3a6a' : '#2a2a3a'}
+                        px="10px"
+                        pt="10px"
+                        pb="8px"
+                      >
+                        <Flex justify="space-between" align="center" mb="8px">
+                          <HStack spacing="6px">
+                            <Box
+                              w="20px"
+                              h="20px"
+                              borderRadius="full"
+                              display="flex"
+                              alignItems="center"
+                              justifyContent="center"
+                              fontSize="8px"
+                              fontWeight="700"
+                              bg="#1a1a3a"
+                              color="#7a7aee"
+                            >
+                              {initials}
+                            </Box>
+                            <Text fontSize="12px" fontWeight="600" color="#ccc">
+                              {hand.username}
+                              {isMe ? ' (You)' : ''}
+                            </Text>
+                            {isWinner && (
+                              <Box
+                                px="7px"
+                                py="2px"
+                                borderRadius="4px"
+                                fontSize="9px"
+                                fontWeight="700"
+                                textTransform="uppercase"
+                                letterSpacing="0.04em"
+                                bg="#1a4a2a"
+                                color="#5ecf5e"
+                                border="0.5px solid #2a6a3a"
+                              >
+                                winner
+                              </Box>
+                            )}
+                            {isChecker && !isWinner && (
+                              <Box
+                                px="7px"
+                                py="2px"
+                                borderRadius="4px"
+                                fontSize="9px"
+                                fontWeight="700"
+                                textTransform="uppercase"
+                                letterSpacing="0.04em"
+                                bg={isDoubled ? '#3a1010' : '#1a1a4a'}
+                                color={isDoubled ? '#cf5e5e' : '#7a7aee'}
+                                border={`0.5px solid ${isDoubled ? '#5a2020' : '#2a2a6a'}`}
+                              >
+                                {isDoubled ? 'doubled' : 'checker'}
+                              </Box>
+                            )}
+                          </HStack>
+                          <Text
+                            fontSize="14px"
+                            fontWeight="800"
+                            color={isWinner ? '#5ecf5e' : displaySum > 15 ? '#cf5e5e' : '#aaa'}
+                          >
+                            {isDoubled ? `${hand.handSum}×2 = ${displaySum}` : `${displaySum}`} pts
+                          </Text>
+                        </Flex>
+                        <Flex gap="5px" flexWrap="wrap">
+                          {hand.cards.map((c, i) => (
+                            <Box
+                              key={i}
+                              display="flex"
+                              flexDirection="column"
+                              alignItems="center"
+                              gap="3px"
+                            >
+                              <Box
+                                w="38px"
+                                h="52px"
+                                borderRadius="5px"
+                                bg="white"
+                                border="1px solid"
+                                borderColor={
+                                  c.value === 0 ? '#5ecf5e' : c.value >= 10 ? '#cf5e5e40' : '#ddd'
+                                }
+                                boxShadow={c.value === 0 ? '0 0 0 1px #5ecf5e30' : 'none'}
+                                position="relative"
+                                display="flex"
+                                alignItems="center"
+                                justifyContent="center"
+                                color={c.isRed ? '#c0392b' : '#222'}
+                                fontSize="13px"
+                                fontWeight="700"
+                              >
+                                <Text
+                                  position="absolute"
+                                  top="2px"
+                                  left="3px"
+                                  fontSize="7px"
+                                  fontWeight="700"
+                                  lineHeight="1.1"
+                                  color={c.isRed ? '#c0392b' : '#222'}
+                                >
+                                  {c.rank}
+                                  <br />
+                                  {c.suit}
+                                </Text>
+                                <Text fontSize="9px">{c.suit}</Text>
+                                <Text
+                                  position="absolute"
+                                  bottom="2px"
+                                  right="3px"
+                                  fontSize="7px"
+                                  fontWeight="700"
+                                  lineHeight="1.1"
+                                  color={c.isRed ? '#c0392b' : '#222'}
+                                  transform="rotate(180deg)"
+                                >
+                                  {c.rank}
+                                  <br />
+                                  {c.suit}
+                                </Text>
+                              </Box>
+                              <Text fontSize="8px" color="#444">
+                                {hand.slots[i]}
+                              </Text>
+                              <Text
+                                fontSize="8px"
+                                color={
+                                  c.value === 0 ? '#5ecf5e' : c.value >= 10 ? '#cf5e5e' : '#555'
+                                }
+                              >
+                                {c.value} pts
+                              </Text>
+                            </Box>
+                          ))}
+                        </Flex>
+                      </Box>
+                    );
+                  })}
+                </VStack>
+              </Box>
+
+              {/* ── score progress bars ── */}
+              {(() => {
+                const target = gameState?.targetScore ?? 100;
+                const sorted = (gameState?.players ?? [])
+                  .slice()
+                  .sort(
+                    (a, b) =>
+                      (roundEndData?.updatedScores[a.playerId] ?? 0) -
+                      (roundEndData?.updatedScores[b.playerId] ?? 0),
+                  );
+                return (
+                  <Box>
+                    <Text
+                      fontSize="10px"
+                      color="#333"
+                      textTransform="uppercase"
+                      letterSpacing="0.08em"
+                      fontWeight="600"
+                      mb="8px"
+                    >
+                      score progress · game ends at {target}
+                    </Text>
+                    <VStack spacing="6px" align="stretch">
+                      {sorted.map((p) => {
+                        const total = roundEndData?.updatedScores[p.playerId] ?? 0;
+                        const pct = Math.min(100, Math.round((total / target) * 100));
+                        const isMe = p.playerId === playerId;
+                        const isDanger = total >= target * 0.75;
+                        const barColor =
+                          total >= target ? '#cf5e5e' : isDanger ? '#cf7070' : '#5ecf5e';
+                        return (
+                          <Box key={p.playerId}>
+                            <Flex justify="space-between" fontSize="10px" mb="3px">
+                              <Text color={isMe ? '#7a7aee' : '#888'}>
+                                {p.username}
+                                {isMe ? ' (You)' : ''}
+                              </Text>
+                              <Text color={isDanger ? '#cf5e5e' : '#5ecf5e'}>
+                                {total} / {target}
+                              </Text>
+                            </Flex>
+                            <Box h="3px" bg="#1a1a24" borderRadius="2px" overflow="hidden">
+                              <Box h="100%" borderRadius="2px" bg={barColor} w={`${pct}%`} />
+                            </Box>
+                          </Box>
+                        );
+                      })}
+                    </VStack>
+                  </Box>
+                );
+              })()}
+
+              {/* ── action buttons ── */}
+              {roundEndData?.nextRoundStarting ? (
+                <Box>
+                  {roundCountdown != null && roundCountdown > 0 ? (
+                    <VStack spacing="8px">
+                      <Text fontSize="13px" fontWeight="700" color="#7a7aee" textAlign="center">
+                        Next round in {roundCountdown}s…
+                      </Text>
+                      {roomData?.host === playerId && (
+                        <Box
+                          as="button"
+                          w="100%"
+                          py="11px"
+                          borderRadius="10px"
+                          fontSize="13px"
+                          fontWeight="700"
+                          cursor="pointer"
+                          textAlign="center"
+                          bg="transparent"
+                          border="1px solid #5a2a2a"
+                          color="#cf7070"
+                          onClick={() => endGame()}
+                          _hover={{ bg: '#1a0808' }}
+                        >
+                          End Game
+                        </Box>
+                      )}
+                    </VStack>
+                  ) : roundCountdown === 0 ? (
+                    <Text fontSize="13px" fontWeight="700" color="#5ecf5e" textAlign="center">
+                      Starting…
+                    </Text>
+                  ) : roomData?.host === playerId ? (
+                    <Flex gap="8px">
+                      <Box
+                        as="button"
+                        flex={1}
+                        py="11px"
+                        borderRadius="10px"
+                        fontSize="13px"
+                        fontWeight="700"
+                        cursor="pointer"
+                        textAlign="center"
+                        bg="transparent"
+                        border="1px solid #5a2a2a"
+                        color="#cf7070"
                         onClick={() => endGame()}
+                        _hover={{ bg: '#1a0808' }}
                       >
                         End Game
-                      </Button>
-                    )}
-                  </>
-                ) : roundCountdown === 0 ? (
-                  <Text fontSize="md" fontWeight="bold" color="success.a10">
-                    Starting...
-                  </Text>
-                ) : roomData?.host === playerId ? (
-                  <HStack spacing={3}>
-                    <Button colorScheme="red" variant="outline" size="sm" onClick={() => endGame()}>
-                      End Game
-                    </Button>
-                    <Button colorScheme="green" size="sm" onClick={() => startNextRound()}>
-                      Start Next Round
-                    </Button>
-                  </HStack>
-                ) : (
-                  <Text fontSize="sm" color="gray.400">
-                    Waiting for host to start next round...
-                  </Text>
-                )}
-              </VStack>
-            ) : (
-              <Text fontSize="xs" color="gray.500">
-                Game over!
-              </Text>
-            )}
-          </ModalFooter>
+                      </Box>
+                      <Box
+                        as="button"
+                        flex={1}
+                        py="11px"
+                        borderRadius="10px"
+                        fontSize="13px"
+                        fontWeight="700"
+                        cursor="pointer"
+                        textAlign="center"
+                        bg="#4a8a5a"
+                        color="#e8f5ec"
+                        onClick={() => startNextRound()}
+                        _hover={{ bg: '#3a7a4a' }}
+                      >
+                        Start Round {(roundEndData?.roundNumber ?? 0) + 1} →
+                      </Box>
+                    </Flex>
+                  ) : (
+                    <Text fontSize="12px" color="#555" textAlign="center">
+                      Waiting for host to start next round…
+                    </Text>
+                  )}
+                </Box>
+              ) : (
+                <Text fontSize="12px" color="#555" textAlign="center">
+                  Game over!
+                </Text>
+              )}
+            </VStack>
+          </Box>
         </ModalContent>
       </Modal>
       {/* ============================================================ */}
@@ -4796,160 +5144,530 @@ export const GameBoard: FC = () => {
         isCentered
         closeOnOverlayClick={false}
         closeOnEsc={false}
-        size={{ base: 'md', md: 'lg' }}
+        size={{ base: 'full', md: 'lg' }}
         motionPreset="slideInBottom"
       >
-        <ModalOverlay bg="blackAlpha.800" />
-        <ModalContent bg="table.border" color="white" maxH="90vh" overflow="auto">
-          <ModalHeader textAlign="center">
-            {/* F-309: Animated "You Win!" heading for winner */}
-            {gameEndData?.winner.playerId === playerId ? (
-              <motion.div
-                initial={{ scale: 0.5, opacity: 0 }}
-                animate={{ scale: [0.5, 1.15, 1], opacity: 1 }}
-                transition={{ duration: 0.6, ease: 'easeOut' }}
-              >
-                <Heading size="lg" color="warning.a10" mb={2}>
-                  You Win! 🏆
-                </Heading>
-              </motion.div>
-            ) : (
-              <Heading size="lg" color="warning.a10" mb={2}>
-                Game Over
-              </Heading>
-            )}
-            <VStack spacing={1}>
-              <Text fontSize="md" color="success.a10">
-                Winner: {gameEndData?.winner.username}
-                {gameEndData?.winner.playerId === playerId ? ' (You!)' : ''} —{' '}
-                {gameEndData?.winner.score} pts
-              </Text>
-              <Text fontSize="md" color="danger.a10">
-                Loser: {gameEndData?.loser.username}
-                {gameEndData?.loser.playerId === playerId ? ' (You)' : ''} —{' '}
-                {gameEndData?.loser.score} pts
-              </Text>
-            </VStack>
-          </ModalHeader>
-          <ModalBody>
-            <VStack spacing={4} align="stretch">
-              {/* Final scores table */}
-              <Table size="sm" variant="simple">
-                <Thead>
-                  <Tr>
-                    <Th color="gray.400">Player</Th>
-                    <Th color="gray.400" isNumeric>
-                      Final Score
-                    </Th>
-                  </Tr>
-                </Thead>
-                <Tbody>
-                  {Object.entries(gameEndData?.finalScores ?? {})
-                    .sort(([, a], [, b]) => a - b)
-                    .map(([pid, score]) => {
-                      const playerName =
-                        gameState?.players.find((p) => p.playerId === pid)?.username ?? pid;
-                      const isWinner = pid === gameEndData?.winner.playerId;
-                      const isLoser = pid === gameEndData?.loser.playerId;
-                      return (
-                        <Tr key={pid}>
-                          <Td fontSize="sm">
-                            <HStack spacing={2}>
-                              <Text color="gray.100">
-                                {playerName}
-                                {pid === playerId ? ' (You)' : ''}
-                              </Text>
-                              {isWinner && (
-                                <Badge colorScheme="green" fontSize="2xs">
-                                  Winner
-                                </Badge>
-                              )}
-                              {isLoser && (
-                                <Badge colorScheme="red" fontSize="2xs">
-                                  Loser
-                                </Badge>
-                              )}
-                            </HStack>
-                          </Td>
-                          <Td
-                            isNumeric
-                            fontWeight="bold"
-                            color={isWinner ? 'success.a10' : isLoser ? 'danger.a10' : 'gray.100'}
-                          >
-                            {score}
-                          </Td>
-                        </Tr>
-                      );
-                    })}
-                </Tbody>
-              </Table>
+        <ModalOverlay bg="blackAlpha.900" />
+        <ModalContent
+          bg="#0f0f16"
+          color="white"
+          maxH={{ base: '100vh', md: '92vh' }}
+          overflow="hidden"
+          display="flex"
+          flexDirection="column"
+          borderRadius={{ base: 0, md: '16px' }}
+          border="1px solid #1e1e2a"
+          m={{ base: 0, md: 4 }}
+        >
+          {/* top bar */}
+          <Box
+            px="14px"
+            py="9px"
+            bg="#13131a"
+            borderBottom="0.5px solid #1e1e2a"
+            flexShrink={0}
+            display="flex"
+            alignItems="center"
+            justifyContent="space-between"
+          >
+            <Text fontSize="11px" color="#aaa" fontWeight="500">
+              Game over · Round {gameState?.roundNumber}
+            </Text>
+          </Box>
 
-              {/* Last round hands */}
+          {/* scrollable body */}
+          <Box flex={1} overflowY="auto" px="12px" pt="14px" pb="20px">
+            <VStack spacing="12px" align="stretch">
+              {/* ── hero ── */}
+              {(() => {
+                const iWon = gameEndData?.winner.playerId === playerId;
+                const winnerName = gameEndData?.winner.username ?? 'Someone';
+                const loserName = gameEndData?.loser.username ?? 'Someone';
+                const loserIsMe = gameEndData?.loser.playerId === playerId;
+                return (
+                  <Box textAlign="center" pt="6px" pb="2px">
+                    <Text
+                      fontSize="10px"
+                      letterSpacing="0.12em"
+                      textTransform="uppercase"
+                      fontWeight="600"
+                      color="#c9a227"
+                      mb="4px"
+                    >
+                      Game over
+                    </Text>
+                    {iWon ? (
+                      <motion.div
+                        initial={{ scale: 0.5, opacity: 0 }}
+                        animate={{ scale: [0.5, 1.15, 1], opacity: 1 }}
+                        transition={{ duration: 0.6, ease: 'easeOut' }}
+                      >
+                        <Text
+                          fontSize="24px"
+                          fontWeight="800"
+                          lineHeight="1.1"
+                          color="#c9a227"
+                          mb="4px"
+                        >
+                          You win!
+                        </Text>
+                      </motion.div>
+                    ) : (
+                      <Text
+                        fontSize="24px"
+                        fontWeight="800"
+                        lineHeight="1.1"
+                        color="#c9a227"
+                        mb="4px"
+                      >
+                        {winnerName} wins!
+                      </Text>
+                    )}
+                    <Text fontSize="12px" color="#555">
+                      {loserIsMe ? 'You' : loserName} reached {gameEndData?.loser.score} points —
+                      game ends
+                    </Text>
+                  </Box>
+                );
+              })()}
+
+              {/* ── winner banner ── */}
+              {gameEndData &&
+                (() => {
+                  const w = gameEndData.winner;
+                  const isMe = w.playerId === playerId;
+                  const initials = w.username.slice(0, 2).toUpperCase();
+                  return (
+                    <Box
+                      borderRadius="12px"
+                      px="14px"
+                      py="12px"
+                      bg="#1a1500"
+                      border="1px solid #4a3a00"
+                      display="flex"
+                      alignItems="center"
+                      gap="10px"
+                    >
+                      <Box
+                        w="36px"
+                        h="36px"
+                        borderRadius="full"
+                        flexShrink={0}
+                        bg="#1a3a2a"
+                        color="#5ecf5e"
+                        display="flex"
+                        alignItems="center"
+                        justifyContent="center"
+                        fontSize="13px"
+                        fontWeight="700"
+                      >
+                        {initials}
+                      </Box>
+                      <Box flex={1}>
+                        <Text fontSize="14px" fontWeight="700" color="#eee">
+                          {w.username}
+                          {isMe ? ' (You)' : ''}
+                        </Text>
+                        <HStack spacing="5px" mt="4px">
+                          <Box
+                            px="7px"
+                            py="2px"
+                            borderRadius="4px"
+                            fontSize="9px"
+                            fontWeight="700"
+                            letterSpacing="0.04em"
+                            textTransform="uppercase"
+                            bg="#3a2a00"
+                            color="#c9a227"
+                            border="0.5px solid #6a4a00"
+                          >
+                            champion
+                          </Box>
+                        </HStack>
+                      </Box>
+                      <Text fontSize="22px" fontWeight="800" color="#c9a227" flexShrink={0}>
+                        {w.score} pts
+                      </Text>
+                    </Box>
+                  );
+                })()}
+
+              {/* ── full leaderboard ── */}
+              {gameEndData &&
+                (() => {
+                  const sorted = Object.entries(gameEndData.finalScores).sort(
+                    ([, a], [, b]) => a - b,
+                  );
+                  return (
+                    <Box>
+                      <Flex
+                        justify="space-between"
+                        px="2px"
+                        pb="6px"
+                        borderBottom="0.5px solid #1a1a24"
+                        fontSize="9px"
+                        color="#333"
+                        textTransform="uppercase"
+                        letterSpacing="0.08em"
+                        fontWeight="600"
+                      >
+                        <Text>player</Text>
+                        <HStack spacing="20px">
+                          <Text>last round</Text>
+                          <Text>final</Text>
+                        </HStack>
+                      </Flex>
+                      {sorted.map(([pid, score], idx) => {
+                        const playerName =
+                          gameState?.players.find((p) => p.playerId === pid)?.username ?? pid;
+                        const isMe = pid === playerId;
+                        const isWinner = pid === gameEndData.winner.playerId;
+                        const isLoser = pid === gameEndData.loser.playerId;
+                        const lastRoundPts =
+                          gameEndData.allHands.find((h) => h.playerId === pid)?.handSum ?? 0;
+                        const initials = playerName.slice(0, 2).toUpperCase();
+                        return (
+                          <Flex
+                            key={pid}
+                            align="center"
+                            gap="8px"
+                            px="2px"
+                            py="8px"
+                            borderBottom="0.5px solid #13131e"
+                            _last={{ borderBottom: 'none' }}
+                          >
+                            <Box
+                              w="18px"
+                              h="18px"
+                              borderRadius="full"
+                              flexShrink={0}
+                              display="flex"
+                              alignItems="center"
+                              justifyContent="center"
+                              fontSize="9px"
+                              fontWeight="700"
+                              bg={idx === 0 ? '#3a2a00' : '#1a1a2a'}
+                              color={idx === 0 ? '#c9a227' : '#555'}
+                            >
+                              {idx + 1}
+                            </Box>
+                            <Box
+                              w="22px"
+                              h="22px"
+                              borderRadius="full"
+                              flexShrink={0}
+                              display="flex"
+                              alignItems="center"
+                              justifyContent="center"
+                              fontSize="9px"
+                              fontWeight="700"
+                              bg={isWinner ? '#1a3a2a' : '#1a1a3a'}
+                              color={isWinner ? '#5ecf5e' : '#7a7aee'}
+                            >
+                              {initials}
+                            </Box>
+                            <Text fontSize="12px" color="#ccc" flex={1} fontWeight="500">
+                              {playerName}
+                              {isMe && (
+                                <Text as="span" fontSize="10px" color="#7a7aee">
+                                  {' '}
+                                  (You)
+                                </Text>
+                              )}
+                            </Text>
+                            <Text
+                              fontSize="10px"
+                              fontWeight="600"
+                              minW="28px"
+                              textAlign="right"
+                              color={lastRoundPts === 0 ? '#5ecf5e' : '#cf7070'}
+                            >
+                              +{lastRoundPts}
+                            </Text>
+                            <Text
+                              fontSize="13px"
+                              fontWeight="700"
+                              minW="36px"
+                              textAlign="right"
+                              color={isWinner ? '#5ecf5e' : isLoser ? '#cf5e5e' : '#aaa'}
+                              position="relative"
+                            >
+                              {score}
+                              {isLoser && (
+                                <Text as="span" fontSize="8px" ml="3px">
+                                  💀
+                                </Text>
+                              )}
+                            </Text>
+                          </Flex>
+                        );
+                      })}
+                    </Box>
+                  );
+                })()}
+
+              {/* ── final hands ── */}
               {gameEndData?.allHands && gameEndData.allHands.length > 0 && (
                 <Box>
-                  <Text fontWeight="bold" fontSize="sm" mb={2} color="gray.300">
-                    Final Hands
+                  <Text
+                    fontSize="10px"
+                    color="#333"
+                    textTransform="uppercase"
+                    letterSpacing="0.08em"
+                    fontWeight="600"
+                    mb="8px"
+                  >
+                    final hands
                   </Text>
-                  {gameEndData.allHands.map((hand: PlayerRoundResult) => (
-                    <Box key={hand.playerId} mb={2}>
-                      <Flex justify="space-between" align="center" mb={1}>
-                        <Text fontSize="xs" fontWeight="bold" color="gray.300">
-                          {hand.username} — {hand.handSum} pts
-                        </Text>
-                      </Flex>
-                      <HStack spacing={1} flexWrap="wrap">
-                        {hand.cards.map((c, i) => (
-                          <Box
-                            key={i}
-                            w={{ base: '36px', md: '44px' }}
-                            h={{ base: '50px', md: '62px' }}
-                            borderRadius="sm"
-                            border="1px solid"
-                            borderColor="gray.500"
-                            bg="white"
-                            position="relative"
-                            display="flex"
-                            flexDirection="column"
-                            alignItems="center"
-                            justifyContent="center"
-                            fontSize="2xs"
-                          >
+                  <VStack spacing="8px" align="stretch">
+                    {gameEndData.allHands.map((hand: PlayerRoundResult) => {
+                      const isWinner = hand.playerId === gameEndData.winner.playerId;
+                      const isLoser = hand.playerId === gameEndData.loser.playerId;
+                      const isMe = hand.playerId === playerId;
+                      const initials = hand.username.slice(0, 2).toUpperCase();
+                      return (
+                        <Box
+                          key={hand.playerId}
+                          bg={isWinner ? '#0e1e16' : '#1a1a26'}
+                          borderRadius="10px"
+                          border="0.5px solid"
+                          borderColor={
+                            isWinner
+                              ? '#2a5a3a'
+                              : isLoser
+                                ? '#5a2a2a20'
+                                : isMe
+                                  ? '#3a3a6a'
+                                  : '#2a2a3a'
+                          }
+                          px="10px"
+                          pt="10px"
+                          pb="8px"
+                        >
+                          <Flex justify="space-between" align="center" mb="8px">
+                            <HStack spacing="6px">
+                              <Box
+                                w="20px"
+                                h="20px"
+                                borderRadius="full"
+                                display="flex"
+                                alignItems="center"
+                                justifyContent="center"
+                                fontSize="8px"
+                                fontWeight="700"
+                                bg={isWinner ? '#1a3a2a' : '#1a1a3a'}
+                                color={isWinner ? '#5ecf5e' : '#7a7aee'}
+                              >
+                                {initials}
+                              </Box>
+                              <Text fontSize="12px" fontWeight="600" color="#ccc">
+                                {hand.username}
+                                {isMe ? ' (You)' : ''}
+                              </Text>
+                              {isWinner && (
+                                <Box
+                                  px="7px"
+                                  py="2px"
+                                  borderRadius="4px"
+                                  fontSize="9px"
+                                  fontWeight="700"
+                                  textTransform="uppercase"
+                                  letterSpacing="0.04em"
+                                  bg="#3a2a00"
+                                  color="#c9a227"
+                                  border="0.5px solid #6a4a00"
+                                >
+                                  winner
+                                </Box>
+                              )}
+                              {isLoser && (
+                                <Box
+                                  px="7px"
+                                  py="2px"
+                                  borderRadius="4px"
+                                  fontSize="9px"
+                                  fontWeight="700"
+                                  textTransform="uppercase"
+                                  letterSpacing="0.04em"
+                                  bg="#3a1010"
+                                  color="#cf5e5e"
+                                  border="0.5px solid #5a2020"
+                                >
+                                  loser
+                                </Box>
+                              )}
+                            </HStack>
                             <Text
-                              color={c.isRed ? 'card.red' : 'card.black'}
-                              fontWeight="bold"
-                              lineHeight={1}
+                              fontSize="14px"
+                              fontWeight="800"
+                              color={isWinner ? '#5ecf5e' : hand.handSum > 15 ? '#cf5e5e' : '#aaa'}
                             >
-                              {c.rank}
+                              {hand.handSum} pts
                             </Text>
-                            <Text color={c.isRed ? 'card.red' : 'card.black'} lineHeight={1}>
-                              {c.suit}
-                            </Text>
-                            {/* Point value badge — bottom-right corner */}
-                            <Text
-                              position="absolute"
-                              bottom="1px"
-                              right="2px"
-                              fontSize="7px"
-                              fontWeight="bold"
-                              color={c.value === 0 ? 'green.600' : 'gray.500'}
-                              lineHeight={1}
-                            >
-                              {c.value}
-                            </Text>
-                          </Box>
-                        ))}
-                      </HStack>
-                    </Box>
-                  ))}
+                          </Flex>
+                          <Flex gap="5px" flexWrap="wrap">
+                            {hand.cards.map((c, i) => (
+                              <Box
+                                key={i}
+                                display="flex"
+                                flexDirection="column"
+                                alignItems="center"
+                                gap="3px"
+                              >
+                                <Box
+                                  w="38px"
+                                  h="52px"
+                                  borderRadius="5px"
+                                  bg="white"
+                                  border="1px solid"
+                                  borderColor={
+                                    c.value === 0 ? '#5ecf5e' : c.value >= 10 ? '#cf5e5e40' : '#ddd'
+                                  }
+                                  boxShadow={c.value === 0 ? '0 0 0 1px #5ecf5e30' : 'none'}
+                                  position="relative"
+                                  display="flex"
+                                  alignItems="center"
+                                  justifyContent="center"
+                                  color={c.isRed ? '#c0392b' : '#222'}
+                                  fontSize="13px"
+                                  fontWeight="700"
+                                >
+                                  <Text
+                                    position="absolute"
+                                    top="2px"
+                                    left="3px"
+                                    fontSize="7px"
+                                    fontWeight="700"
+                                    lineHeight="1.1"
+                                    color={c.isRed ? '#c0392b' : '#222'}
+                                  >
+                                    {c.rank}
+                                    <br />
+                                    {c.suit}
+                                  </Text>
+                                  <Text fontSize="9px">{c.suit}</Text>
+                                  <Text
+                                    position="absolute"
+                                    bottom="2px"
+                                    right="3px"
+                                    fontSize="7px"
+                                    fontWeight="700"
+                                    lineHeight="1.1"
+                                    color={c.isRed ? '#c0392b' : '#222'}
+                                    transform="rotate(180deg)"
+                                  >
+                                    {c.rank}
+                                    <br />
+                                    {c.suit}
+                                  </Text>
+                                </Box>
+                                <Text fontSize="8px" color="#444">
+                                  {hand.slots[i]}
+                                </Text>
+                                <Text
+                                  fontSize="8px"
+                                  color={
+                                    c.value === 0 ? '#5ecf5e' : c.value >= 10 ? '#cf5e5e' : '#555'
+                                  }
+                                >
+                                  {c.value} pts
+                                </Text>
+                              </Box>
+                            ))}
+                          </Flex>
+                        </Box>
+                      );
+                    })}
+                  </VStack>
                 </Box>
               )}
+
+              {/* ── game summary strip ── */}
+              {gameEndData && (
+                <Box
+                  bg="#1a1a26"
+                  borderRadius="10px"
+                  border="0.5px solid #2a2a3a"
+                  px="12px"
+                  py="10px"
+                >
+                  <Text
+                    fontSize="10px"
+                    color="#333"
+                    textTransform="uppercase"
+                    letterSpacing="0.08em"
+                    fontWeight="600"
+                    mb="8px"
+                  >
+                    game summary
+                  </Text>
+                  <Flex>
+                    <Box flex={1} textAlign="center" borderRight="0.5px solid #2a2a3a" pr="8px">
+                      <Text fontSize="18px" fontWeight="800" color="#eee">
+                        {gameState?.roundNumber}
+                      </Text>
+                      <Text fontSize="9px" color="#555">
+                        rounds played
+                      </Text>
+                    </Box>
+                    <Box flex={1} textAlign="center" px="8px" borderRight="0.5px solid #2a2a3a">
+                      <Text fontSize="14px" fontWeight="800" color="#5ecf5e" lineHeight="1.4">
+                        {gameEndData.winner.username}
+                      </Text>
+                      <Text fontSize="9px" color="#555">
+                        champion
+                      </Text>
+                    </Box>
+                    <Box flex={1} textAlign="center" pl="8px">
+                      <Text fontSize="18px" fontWeight="800" color="#c9a227">
+                        {gameEndData.winner.score}
+                      </Text>
+                      <Text fontSize="9px" color="#555">
+                        winning score
+                      </Text>
+                    </Box>
+                  </Flex>
+                </Box>
+              )}
+
+              {/* ── action buttons ── */}
+              <Flex gap="8px">
+                <Box
+                  as="button"
+                  flex={1}
+                  py="11px"
+                  borderRadius="10px"
+                  fontSize="13px"
+                  fontWeight="700"
+                  cursor="pointer"
+                  textAlign="center"
+                  bg="transparent"
+                  border="1px solid #2a2a4a"
+                  color="#7a7aee"
+                  onClick={handleReturnToLobby}
+                  _hover={{ bg: '#0a0a1a' }}
+                >
+                  Play again
+                </Box>
+                <Box
+                  as="button"
+                  flex={1}
+                  py="11px"
+                  borderRadius="10px"
+                  fontSize="13px"
+                  fontWeight="700"
+                  cursor="pointer"
+                  textAlign="center"
+                  bg="#c9a227"
+                  color="#1a1200"
+                  onClick={handleReturnToLobby}
+                  _hover={{ bg: '#b89020' }}
+                >
+                  Return home
+                </Box>
+              </Flex>
             </VStack>
-          </ModalBody>
-          <ModalFooter justifyContent="center">
-            <Button colorScheme="purple" size="md" onClick={handleReturnToLobby}>
-              Return to Home
-            </Button>
-          </ModalFooter>
+          </Box>
         </ModalContent>
       </Modal>
     </Box>
