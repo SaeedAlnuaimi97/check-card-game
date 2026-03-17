@@ -3,7 +3,12 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { expireStaleRooms, startRoomExpiryJob, stopRoomExpiryJob } from '../utils/roomExpiry';
+import {
+  expireStaleRooms,
+  expireEmptyRooms,
+  startRoomExpiryJob,
+  stopRoomExpiryJob,
+} from '../utils/roomExpiry';
 
 // Mock the Room model and roomLock utility
 vi.mock('../models/Room', () => ({
@@ -68,6 +73,56 @@ describe('expireStaleRooms', () => {
   });
 });
 
+describe('expireEmptyRooms', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('returns 0 when no empty stale rooms found', async () => {
+    mockFind.mockReturnValue({ lean: () => Promise.resolve([]) });
+
+    const count = await expireEmptyRooms();
+    expect(count).toBe(0);
+    expect(mockDeleteMany).not.toHaveBeenCalled();
+  });
+
+  it('deletes empty rooms and cleans up mutexes', async () => {
+    const emptyRooms = [{ roomCode: 'EMP001' }, { roomCode: 'EMP002' }];
+    mockFind.mockReturnValue({ lean: () => Promise.resolve(emptyRooms) });
+    mockDeleteMany.mockResolvedValue({ deletedCount: 2 });
+
+    const count = await expireEmptyRooms();
+
+    expect(count).toBe(2);
+    expect(mockDeleteMany).toHaveBeenCalledWith({ roomCode: { $in: ['EMP001', 'EMP002'] } });
+    expect(mockDeleteMutex).toHaveBeenCalledWith('EMP001');
+    expect(mockDeleteMutex).toHaveBeenCalledWith('EMP002');
+  });
+
+  it('queries for lobby and playing rooms with no human players', async () => {
+    mockFind.mockReturnValue({ lean: () => Promise.resolve([]) });
+
+    await expireEmptyRooms();
+
+    expect(mockFind).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: { $in: ['lobby', 'playing'] },
+        $nor: expect.any(Array),
+      }),
+      expect.anything(),
+    );
+  });
+
+  it('returns 0 and logs error when DB throws', async () => {
+    mockFind.mockReturnValue({
+      lean: () => Promise.reject(new Error('DB error')),
+    });
+
+    const count = await expireEmptyRooms();
+    expect(count).toBe(0);
+  });
+});
+
 describe('startRoomExpiryJob / stopRoomExpiryJob', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -80,16 +135,19 @@ describe('startRoomExpiryJob / stopRoomExpiryJob', () => {
     vi.useRealTimers();
   });
 
-  it('runs expiry on startup', async () => {
+  it('runs both expiry functions on startup', async () => {
     mockFind.mockReturnValue({ lean: () => Promise.resolve([]) });
 
     startRoomExpiryJob();
 
-    // Flush promises for the immediate call (no timer advancement needed)
+    // Flush promises for both immediate calls
+    await Promise.resolve();
+    await Promise.resolve();
     await Promise.resolve();
     await Promise.resolve();
 
-    expect(mockFind).toHaveBeenCalled();
+    // find is called twice: once for expireEmptyRooms, once for expireStaleRooms
+    expect(mockFind).toHaveBeenCalledTimes(2);
   });
 
   it('does not start a second interval if called twice', async () => {
@@ -100,9 +158,11 @@ describe('startRoomExpiryJob / stopRoomExpiryJob', () => {
 
     await Promise.resolve();
     await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
 
-    // find is called once (from first startRoomExpiryJob immediate call only)
-    expect(mockFind).toHaveBeenCalledTimes(1);
+    // find is called twice (one immediate call each, from first startRoomExpiryJob only)
+    expect(mockFind).toHaveBeenCalledTimes(2);
   });
 
   it('stops running after stopRoomExpiryJob', () => {
@@ -111,11 +171,9 @@ describe('startRoomExpiryJob / stopRoomExpiryJob', () => {
     startRoomExpiryJob();
     stopRoomExpiryJob();
 
-    // After stopping, the interval should be gone — advance time, nothing should run
+    // After stopping, advance time well past both intervals — nothing should fire
     vi.advanceTimersByTime(2 * 60 * 60 * 1000);
 
-    // The immediate startup call may have fired (async), but the interval should not
-    // We just verify stop doesn't throw and the interval is cleared
     expect(() => stopRoomExpiryJob()).not.toThrow();
   });
 });
