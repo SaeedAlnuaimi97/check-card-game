@@ -605,7 +605,7 @@ export const GameBoard: FC = () => {
   const toast = useToast();
 
   // Peek animation state
-  const [isPeeking, setIsPeeking] = useState(true);
+  const [isPeeking, setIsPeeking] = useState(false);
   const [peekProgress, setPeekProgress] = useState(100);
 
   // RS-007: Track known card slots (peeked during setup or Red Queen) for eye badge
