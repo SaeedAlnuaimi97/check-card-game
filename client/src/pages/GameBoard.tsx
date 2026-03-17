@@ -610,16 +610,11 @@ export const GameBoard: FC = () => {
   const [isPeeking, setIsPeeking] = useState(false);
   const [peekProgress, setPeekProgress] = useState(100);
 
-  // RS-007: Track known card slots (peeked during setup or Red Queen) for eye badge
-  const [knownSlots, setKnownSlots] = useState<Set<string>>(new Set());
-
-  // Reset peeking state and known slots when a new round starts
+  // Reset peeking state when a new round starts
   useEffect(() => {
     if (peekedCards && peekedCards.length > 0 && gameState?.phase === 'peeking') {
       setIsPeeking(true);
       setPeekProgress(100);
-      // Seed known slots from setup peek cards
-      setKnownSlots(new Set(peekedCards.map((pc: PeekedCard) => pc.slot)));
     }
   }, [peekedCards, gameState?.phase]);
 
@@ -904,18 +899,22 @@ export const GameBoard: FC = () => {
     if (lastBurnResult.burnSuccess && lastBurnResult.burnedCard) {
       const { rank, suit } = lastBurnResult.burnedCard;
       toast({
+        id: 'burn-result',
         title: 'Card Burned',
         description: `${burnerUsername} burned a ${rank}${suit}!`,
         status: 'info',
-        duration: 3000,
+        duration: 2000,
+        isClosable: true,
         position: 'top',
       });
     } else {
       toast({
+        id: 'burn-result',
         title: 'Burn Failed',
         description: `${burnerUsername} failed to burn — got a penalty card`,
         status: 'warning',
-        duration: 3000,
+        duration: 2000,
+        isClosable: true,
         position: 'top',
       });
     }
@@ -947,10 +946,12 @@ export const GameBoard: FC = () => {
     }
 
     toast({
+      id: 'swap-result',
       title,
       description,
       status: 'info',
-      duration: 3000,
+      duration: 2000,
+      isClosable: true,
       position: 'top',
     });
   }, [lastSwapResult, playerId, toast]);
@@ -1214,8 +1215,6 @@ export const GameBoard: FC = () => {
       if (result.success && result.card) {
         setQueenPeekedCard(result.card);
         setQueenPeekTimer(true);
-        // RS-007: mark this slot as known
-        setKnownSlots((prev) => new Set([...prev, slot]));
         // Auto-close after 3 seconds
         setTimeout(() => {
           setQueenPeekTimer(false);
@@ -2630,7 +2629,6 @@ export const GameBoard: FC = () => {
                           ) : (
                             <CardBack
                               isSelected={isPeekedSlot(h.slot)}
-                              isKnown={!isPeeking && knownSlots.has(h.slot)}
                               isClickable={isClickable}
                               onClick={handleClick}
                               size={isDesktop ? 'lg' : isPeeking ? 'md' : 'sm'}
@@ -3385,7 +3383,6 @@ export const GameBoard: FC = () => {
                                     ) : (
                                       <CardBack
                                         isSelected={isPeekedSlot(h.slot)}
-                                        isKnown={!isPeeking && knownSlots.has(h.slot)}
                                         isClickable={isClickable}
                                         onClick={handleClick}
                                         size="lg"
@@ -3902,7 +3899,6 @@ export const GameBoard: FC = () => {
                   </Text>
                   <Box display="flex" gap="8px">
                     {myPlayer.hand.map((h) => {
-                      const isKnown = knownSlots.has(h.slot);
                       const isSelected = jackMySlot === h.slot;
                       return (
                         <Box
@@ -3919,38 +3915,11 @@ export const GameBoard: FC = () => {
                             h="64px"
                             borderRadius="7px"
                             bg={isSelected ? '#0a1a1f' : '#22223a'}
-                            border={`1.5px solid ${isSelected ? '#5eb8cf' : isKnown ? '#c9a22780' : '#3a3a5a'}`}
+                            border={`1.5px solid ${isSelected ? '#5eb8cf' : '#3a3a5a'}`}
                             boxShadow={isSelected ? '0 0 0 1px #5eb8cf30' : 'none'}
                             position="relative"
                             transition="border-color 0.12s, background 0.12s"
-                          >
-                            {isKnown && !isSelected && (
-                              <Box
-                                position="absolute"
-                                top="3px"
-                                right="3px"
-                                w="12px"
-                                h="12px"
-                                bg="#c9a227"
-                                borderRadius="50%"
-                                display="flex"
-                                alignItems="center"
-                                justifyContent="center"
-                              >
-                                <svg viewBox="0 0 10 7" fill="none" width="7" height="7">
-                                  <ellipse
-                                    cx="5"
-                                    cy="3.5"
-                                    rx="4"
-                                    ry="2.5"
-                                    stroke="white"
-                                    strokeWidth="1"
-                                  />
-                                  <circle cx="5" cy="3.5" r="1.2" fill="white" />
-                                </svg>
-                              </Box>
-                            )}
-                          </Box>
+                          ></Box>
                           <Text
                             fontSize="10px"
                             color={isSelected ? '#5eb8cf' : '#555'}
@@ -4251,7 +4220,6 @@ export const GameBoard: FC = () => {
               </Text>
               <Box display="flex" gap="8px">
                 {myPlayer.hand.map((h) => {
-                  const isKnown = knownSlots.has(h.slot);
                   return (
                     <Box
                       key={h.slot}
@@ -4264,55 +4232,21 @@ export const GameBoard: FC = () => {
                         w="46px"
                         h="64px"
                         borderRadius="7px"
-                        bg={isKnown ? '#22223a' : '#22223a'}
-                        border={`1.5px solid ${isKnown ? '#c9a22780' : '#3a3a5a'}`}
+                        bg="#22223a"
+                        border="1.5px solid #3a3a5a"
                         position="relative"
-                        opacity={isKnown ? 0.5 : 1}
-                        cursor={isKnown ? 'not-allowed' : queenLoading ? 'wait' : 'pointer'}
-                        onClick={() => {
-                          if (!isKnown) handleQueenPeek(h.slot);
-                        }}
-                        transition="border-color 0.12s, opacity 0.12s"
-                        _hover={!isKnown ? { borderColor: '#5a5a8a' } : {}}
-                      >
-                        {isKnown && (
-                          <Box
-                            position="absolute"
-                            top="3px"
-                            right="3px"
-                            w="12px"
-                            h="12px"
-                            bg="#c9a227"
-                            borderRadius="50%"
-                            display="flex"
-                            alignItems="center"
-                            justifyContent="center"
-                          >
-                            <svg viewBox="0 0 10 7" fill="none" width="7" height="7">
-                              <ellipse
-                                cx="5"
-                                cy="3.5"
-                                rx="4"
-                                ry="2.5"
-                                stroke="white"
-                                strokeWidth="1"
-                              />
-                              <circle cx="5" cy="3.5" r="1.2" fill="white" />
-                            </svg>
-                          </Box>
-                        )}
-                      </Box>
-                      <Text fontSize="10px" color={isKnown ? '#333' : '#555'} fontWeight="500">
+                        cursor={queenLoading ? 'wait' : 'pointer'}
+                        onClick={() => handleQueenPeek(h.slot)}
+                        transition="border-color 0.12s"
+                        _hover={{ borderColor: '#5a5a8a' }}
+                      />
+                      <Text fontSize="10px" color="#555" fontWeight="500">
                         {h.slot}
                       </Text>
                     </Box>
                   );
                 })}
               </Box>
-              <Text fontSize="10px" color="#3a3a4a" mt="6px" lineHeight={1.5}>
-                Already-known slots are dimmed and untappable — peek is wasted on them. Only unknown
-                slots can be peeked.
-              </Text>
             </Box>
           )}
 
@@ -4609,7 +4543,6 @@ export const GameBoard: FC = () => {
               </Text>
               <Box display="flex" gap="6px">
                 {myPlayer.hand.map((h) => {
-                  const isKnown = knownSlots.has(h.slot);
                   const isSelected = kingReplaceSlot === h.slot;
                   return (
                     <Box
@@ -4626,38 +4559,11 @@ export const GameBoard: FC = () => {
                         h="62px"
                         borderRadius="7px"
                         bg={isSelected ? '#1e0f0f' : '#22223a'}
-                        border={`1.5px solid ${isSelected ? '#cf5e5e' : isKnown ? '#c9a22780' : '#3a3a5a'}`}
+                        border={`1.5px solid ${isSelected ? '#cf5e5e' : '#3a3a5a'}`}
                         boxShadow={isSelected ? '0 0 0 1px #cf5e5e30' : 'none'}
                         position="relative"
                         transition="border-color 0.12s, background 0.12s"
-                      >
-                        {isKnown && !isSelected && (
-                          <Box
-                            position="absolute"
-                            top="2px"
-                            right="2px"
-                            w="12px"
-                            h="12px"
-                            bg="#c9a227"
-                            borderRadius="50%"
-                            display="flex"
-                            alignItems="center"
-                            justifyContent="center"
-                          >
-                            <svg viewBox="0 0 10 7" fill="none" width="7" height="7">
-                              <ellipse
-                                cx="5"
-                                cy="3.5"
-                                rx="4"
-                                ry="2.5"
-                                stroke="white"
-                                strokeWidth="1"
-                              />
-                              <circle cx="5" cy="3.5" r="1.2" fill="white" />
-                            </svg>
-                          </Box>
-                        )}
-                      </Box>
+                      />
                       <Text
                         fontSize="10px"
                         color={isSelected ? '#cf5e5e' : '#555'}
@@ -4700,7 +4606,6 @@ export const GameBoard: FC = () => {
                   const isFirst = kingReplaceSlots[0] === h.slot;
                   const isSecond = kingReplaceSlots[1] === h.slot;
                   const isSelected = isFirst || isSecond;
-                  const isKnown = knownSlots.has(h.slot);
                   return (
                     <Box
                       key={h.slot}
@@ -4726,38 +4631,11 @@ export const GameBoard: FC = () => {
                         h="62px"
                         borderRadius="7px"
                         bg={isSelected ? '#1e0f0f' : '#22223a'}
-                        border={`1.5px solid ${isSelected ? '#cf5e5e' : isKnown ? '#c9a22780' : '#3a3a5a'}`}
+                        border={`1.5px solid ${isSelected ? '#cf5e5e' : '#3a3a5a'}`}
                         boxShadow={isSelected ? '0 0 0 1px #cf5e5e30' : 'none'}
                         position="relative"
                         transition="border-color 0.12s, background 0.12s"
-                      >
-                        {isKnown && !isSelected && (
-                          <Box
-                            position="absolute"
-                            top="2px"
-                            right="2px"
-                            w="12px"
-                            h="12px"
-                            bg="#c9a227"
-                            borderRadius="50%"
-                            display="flex"
-                            alignItems="center"
-                            justifyContent="center"
-                          >
-                            <svg viewBox="0 0 10 7" fill="none" width="7" height="7">
-                              <ellipse
-                                cx="5"
-                                cy="3.5"
-                                rx="4"
-                                ry="2.5"
-                                stroke="white"
-                                strokeWidth="1"
-                              />
-                              <circle cx="5" cy="3.5" r="1.2" fill="white" />
-                            </svg>
-                          </Box>
-                        )}
-                      </Box>
+                      />
                       <Text
                         fontSize="10px"
                         color={isSelected ? '#cf5e5e' : '#555'}

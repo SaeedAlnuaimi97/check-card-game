@@ -8,7 +8,7 @@ import { Box } from '@chakra-ui/react';
 export interface CardBackProps {
   isSelected?: boolean;
   isClickable?: boolean;
-  isKnown?: boolean; // RS-007: gold border + eye badge for peeked cards
+  isKnown?: boolean; // kept for API compatibility; no longer renders border/badge
   onClick?: () => void;
   size?: '2xs' | 'xs' | 'sm' | 'md' | 'lg';
 }
@@ -32,7 +32,7 @@ const SIZES = {
 export const CardBack: FC<CardBackProps> = ({
   isSelected = false,
   isClickable = false,
-  isKnown = false,
+  isKnown: _isKnown = false, // kept for API compatibility, no longer renders
   onClick,
   size = 'md',
 }) => {
@@ -49,8 +49,8 @@ export const CardBack: FC<CardBackProps> = ({
     `linear-gradient(-45deg, transparent 75%, rgba(255,255,255,0.08) 75%)`,
   ].join(', ');
 
-  // Border color priority: selected > known > default
-  const borderColor = isSelected ? '#c9a227' : isKnown ? '#c9a227' : undefined;
+  // Border color priority: selected > default
+  const borderColor = isSelected ? '#c9a227' : undefined;
 
   return (
     <Box
@@ -59,7 +59,6 @@ export const CardBack: FC<CardBackProps> = ({
       borderRadius={isCompact ? 'sm' : 'md'}
       border={isCompact ? '1px solid' : '2px solid'}
       borderColor={borderColor ?? (isSelected ? 'card.selected' : 'gray.500')}
-      boxShadow={isKnown && !isSelected ? '0 0 0 1px #c9a22740' : undefined}
       bg="card.back"
       cursor={isClickable || onClick ? 'pointer' : 'default'}
       onClick={onClick}
@@ -112,28 +111,6 @@ export const CardBack: FC<CardBackProps> = ({
           zIndex={1}
           bg="brand.600"
         />
-      )}
-
-      {/* RS-007: Eye badge for known (peeked) cards */}
-      {isKnown && !isCompact && (
-        <Box
-          position="absolute"
-          top="3px"
-          right="3px"
-          w="14px"
-          h="14px"
-          bg="#c9a227"
-          borderRadius="50%"
-          display="flex"
-          alignItems="center"
-          justifyContent="center"
-          zIndex={2}
-        >
-          <svg viewBox="0 0 10 7" fill="none" width="8" height="8">
-            <ellipse cx="5" cy="3.5" rx="4" ry="2.5" stroke="white" strokeWidth="1" />
-            <circle cx="5" cy="3.5" r="1.2" fill="white" />
-          </svg>
-        </Box>
       )}
     </Box>
   );
