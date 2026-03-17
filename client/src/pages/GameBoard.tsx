@@ -5,7 +5,6 @@ import {
   Button,
   Divider,
   Flex,
-  Grid,
   IconButton,
   Modal,
   ModalBody,
@@ -14,7 +13,6 @@ import {
   ModalFooter,
   ModalHeader,
   ModalOverlay,
-  Switch,
   Table,
   Tbody,
   Td,
@@ -39,8 +37,6 @@ import {
   LogoutOutlined,
   EyeOutlined,
   FireOutlined,
-  CloseOutlined,
-  InfoCircleOutlined,
   SoundOutlined,
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
@@ -71,6 +67,34 @@ import type { PeekedCard, PlayerRoundResult } from '../types/game.types';
 
 const PEEK_DURATION_MS = 8000;
 const PEEK_TICK_MS = 100;
+
+// ============================================================
+// Avatar color palette (deterministic by player index)
+// ============================================================
+
+const AVATAR_PALETTE = [
+  { bg: '#1a3a2a', color: '#5ecf5e', dot: '#5ecf5e' }, // green
+  { bg: '#1a1a3a', color: '#7a7aee', dot: '#7a7aee' }, // blue
+  { bg: '#3a1a1a', color: '#cf5e5e', dot: '#cf5e5e' }, // red
+  { bg: '#2a1f00', color: '#c9a227', dot: '#c9a227' }, // gold
+  { bg: '#0a2a2a', color: '#5ecfcf', dot: '#5ecfcf' }, // teal
+  { bg: '#2a1a2a', color: '#ee7aee', dot: '#ee7aee' }, // pink
+];
+
+function getAvatarColors(playerIndex: number) {
+  return AVATAR_PALETTE[playerIndex % AVATAR_PALETTE.length];
+}
+
+// ============================================================
+// Discard history card type
+// ============================================================
+
+interface DiscardHistoryCard {
+  id: string;
+  rank: string;
+  suit: string;
+  isRed: boolean;
+}
 
 // ============================================================
 // F-309: Confetti overlay for victory animation
@@ -148,24 +172,212 @@ const ConfettiOverlay: FC = () => {
 
 interface OpponentProps {
   player: ClientPlayerState;
+  playerIndex: number;
   isCurrentTurn: boolean;
+  targetScore: number;
   debugRevealed?: Record<string, CardType>;
   modifiedSlots?: { playerId: string; slot: string }[];
-  isDesktop?: boolean;
 }
 
-const OpponentRow: FC<OpponentProps> = ({
+/** Mobile slim row (~30px tall) */
+const MobileOpponentRow: FC<OpponentProps> = ({
   player,
+  playerIndex,
   isCurrentTurn,
+  targetScore,
+}) => {
+  const initials = player.username.slice(0, 2).toUpperCase();
+  const av = getAvatarColors(playerIndex);
+  const dangerThreshold = targetScore - 15;
+  const isDanger = player.totalScore >= dangerThreshold;
+
+  return (
+    <Box
+      display="flex"
+      alignItems="center"
+      gap="8px"
+      px="10px"
+      py="4px"
+      borderBottom="0.5px solid #13131e"
+      position="relative"
+      bg={isCurrentTurn ? '#17150a' : isDanger ? '#140a0a' : 'transparent'}
+      sx={{
+        '&::before': isCurrentTurn
+          ? {
+              content: '""',
+              position: 'absolute',
+              left: 0,
+              top: 0,
+              bottom: 0,
+              width: '2px',
+              background: '#c9a227',
+              borderRadius: '0 1px 1px 0',
+            }
+          : isDanger
+            ? {
+                content: '""',
+                position: 'absolute',
+                left: 0,
+                top: 0,
+                bottom: 0,
+                width: '2px',
+                background: '#cf5e5e',
+                borderRadius: '0 1px 1px 0',
+              }
+            : {},
+      }}
+    >
+      {/* Turn pip */}
+      <Box
+        w="5px"
+        h="5px"
+        borderRadius="full"
+        bg={isCurrentTurn ? '#c9a227' : 'transparent'}
+        flexShrink={0}
+      />
+      {/* Avatar */}
+      <Box
+        w="20px"
+        h="20px"
+        borderRadius="full"
+        bg={av.bg}
+        display="flex"
+        alignItems="center"
+        justifyContent="center"
+        fontSize="8px"
+        fontWeight="700"
+        color={av.color}
+        flexShrink={0}
+      >
+        {initials}
+      </Box>
+      {/* Name */}
+      <Box
+        flex={1}
+        minW={0}
+        fontSize="11px"
+        color="#bbb"
+        fontWeight="500"
+        whiteSpace="nowrap"
+        overflow="hidden"
+        textOverflow="ellipsis"
+      >
+        {player.username}
+        {player.isBot && (
+          <Box as="span" fontSize="8px" color="#3a3a6a" fontWeight="400" ml="3px">
+            BOT
+          </Box>
+        )}
+      </Box>
+      {/* Mini card pips */}
+      <Box display="flex" gap="2px" alignItems="center" flexShrink={0}>
+        {player.hand.map((h: ClientHandSlot) => (
+          <Box
+            key={h.slot}
+            w="9px"
+            h="13px"
+            borderRadius="2px"
+            bg="#2a2a4a"
+            border="0.5px solid #3a3a5a"
+          />
+        ))}
+      </Box>
+      {/* Score */}
+      <Box
+        fontSize="10px"
+        color={isDanger ? '#cf5e5e' : '#555'}
+        fontWeight="500"
+        minW="32px"
+        textAlign="right"
+        flexShrink={0}
+      >
+        {player.totalScore}
+        {isDanger ? ' !' : ''}
+      </Box>
+    </Box>
+  );
+};
+
+/** Desktop side opponent card (left/right columns) */
+const DesktopSideOpponent: FC<OpponentProps> = ({
+  player,
+  playerIndex,
+  isCurrentTurn,
+  targetScore,
   debugRevealed,
   modifiedSlots,
-  isDesktop,
 }) => {
-  // Desktop/tablet: clean layout — just cards + info below, no bordered box
-  if (isDesktop) {
-    return (
-      <VStack spacing={1} px={2}>
-        <HStack spacing={1}>
+  const initials = player.username.slice(0, 2).toUpperCase();
+  const av = getAvatarColors(playerIndex);
+  const dangerThreshold = targetScore - 15;
+  const isDanger = player.totalScore >= dangerThreshold;
+
+  return (
+    <Box
+      bg={isCurrentTurn ? '#1e1b0c' : '#1a1a26'}
+      border="0.5px solid"
+      borderColor={isCurrentTurn ? '#c9a22780' : isDanger ? '#cf5e5e60' : '#2a2a3a'}
+      borderRadius="10px"
+      px="10px"
+      py="8px"
+      display="flex"
+      alignItems="center"
+      gap="8px"
+    >
+      {/* Avatar */}
+      <Box
+        w="30px"
+        h="30px"
+        borderRadius="full"
+        bg={av.bg}
+        display="flex"
+        alignItems="center"
+        justifyContent="center"
+        fontSize="11px"
+        fontWeight="700"
+        color={av.color}
+        flexShrink={0}
+      >
+        {initials}
+      </Box>
+      {/* Info */}
+      <Box flex={1} minW={0}>
+        <Box fontSize="12px" color="#ccc" fontWeight="500" noOfLines={1}>
+          {player.username}
+          {player.isBot && (
+            <Box
+              as="span"
+              fontSize="9px"
+              color="#555"
+              bg="#1a1a28"
+              px="5px"
+              py="1px"
+              borderRadius="3px"
+              ml="5px"
+            >
+              BOT
+            </Box>
+          )}
+          {isCurrentTurn && (
+            <Box
+              as="span"
+              fontSize="9px"
+              color="#c9a227"
+              bg="#2a1f00"
+              px="5px"
+              py="1px"
+              borderRadius="3px"
+              ml="5px"
+            >
+              TURN
+            </Box>
+          )}
+        </Box>
+        <Box fontSize="11px" color={isDanger ? '#cf5e5e' : '#555'} mt="2px">
+          {player.totalScore} pts{isDanger ? ' — danger!' : ''}
+        </Box>
+        {/* Mini card backs */}
+        <Box display="flex" gap="3px" flexWrap="wrap" mt="5px">
           {player.hand.map((h: ClientHandSlot) => {
             const key = `${player.playerId}:${h.slot}`;
             const revealedCard = debugRevealed?.[key];
@@ -175,123 +387,126 @@ const OpponentRow: FC<OpponentProps> = ({
             return (
               <Box
                 key={h.slot}
-                position="relative"
-                overflow="hidden"
-                borderRadius="sm"
+                w="16px"
+                h="22px"
+                borderRadius="3px"
+                bg={revealedCard ? 'white' : '#2a2a4a'}
+                border="0.5px solid"
+                borderColor={revealedCard ? '#ddd' : '#3a3a5a'}
+                display="flex"
+                alignItems="center"
+                justifyContent="center"
+                fontSize="7px"
+                fontWeight="700"
+                color={revealedCard ? (revealedCard.isRed ? '#c0392b' : '#222') : undefined}
                 sx={
-                  isModified
+                  isModified && !revealedCard
                     ? {
-                        '&::before': {
-                          content: '""',
-                          position: 'absolute',
-                          inset: 0,
-                          borderRadius: 'sm',
-                          background:
-                            'linear-gradient(180deg, rgba(71, 213, 166, 0.9) 0%, rgba(71, 213, 166, 0) 60%)',
-                          animation: 'gradientSweep 3.5s ease-out forwards',
-                          pointerEvents: 'none',
-                          zIndex: 1,
+                        '@keyframes bgFlash': {
+                          '0%': { background: '#2a2a4a' },
+                          '20%': { background: '#1a3a2a' },
+                          '70%': { background: '#1a3a2a' },
+                          '100%': { background: '#2a2a4a' },
                         },
-                        '@keyframes gradientSweep': {
-                          '0%': { transform: 'translateY(-100%)' },
-                          '50%': { transform: 'translateY(0%)', opacity: 1 },
-                          '100%': { transform: 'translateY(100%)', opacity: 0 },
-                        },
+                        animation: 'bgFlash 1.5s ease-out forwards',
                       }
                     : {}
                 }
               >
-                {revealedCard ? (
-                  <Box
-                    w="52px"
-                    h="74px"
-                    borderRadius="sm"
-                    border="1px solid"
-                    borderColor="purple.400"
-                    bg="white"
-                    display="flex"
-                    flexDirection="column"
-                    alignItems="center"
-                    justifyContent="center"
-                    fontSize="xs"
-                  >
-                    <Text
-                      color={revealedCard.isRed ? 'red.500' : 'gray.800'}
-                      fontWeight="bold"
-                      lineHeight={1}
-                    >
-                      {revealedCard.rank}
-                    </Text>
-                    <Text color={revealedCard.isRed ? 'red.500' : 'gray.800'} lineHeight={1}>
-                      {revealedCard.suit}
-                    </Text>
-                  </Box>
-                ) : (
-                  <CardBack size="xs" />
-                )}
+                {revealedCard ? `${revealedCard.rank}${revealedCard.suit}` : null}
               </Box>
             );
           })}
-        </HStack>
-        <HStack spacing={1} justify="center">
-          <Text
-            fontSize="xs"
-            fontWeight="bold"
-            noOfLines={1}
-            color={player.isBot ? 'purple.200' : 'gray.300'}
-          >
-            {player.username}
-          </Text>
-          {player.isBot && (
-            <Badge colorScheme="purple" fontSize="2xs" variant="subtle">
-              BOT
-            </Badge>
-          )}
-          {isCurrentTurn && (
-            <Badge colorScheme="yellow" fontSize="2xs">
-              Turn
-            </Badge>
-          )}
-        </HStack>
-        <Text fontSize="2xs" color="gray.500">
-          Score: {player.totalScore}
-        </Text>
-      </VStack>
-    );
-  }
+        </Box>
+      </Box>
+    </Box>
+  );
+};
 
-  // Mobile: original bordered box layout
+/** Desktop top opponent card (top row, column layout) */
+const DesktopTopOpponent: FC<OpponentProps> = ({
+  player,
+  playerIndex,
+  isCurrentTurn,
+  targetScore,
+  debugRevealed,
+  modifiedSlots,
+}) => {
+  const initials = player.username.slice(0, 2).toUpperCase();
+  const av = getAvatarColors(playerIndex);
+  const dangerThreshold = targetScore - 15;
+  const isDanger = player.totalScore >= dangerThreshold;
+
   return (
-    <VStack
-      spacing={1}
-      p={2}
-      borderRadius="md"
-      bg={isCurrentTurn ? 'whiteAlpha.200' : player.isBot ? 'purple.900' : 'whiteAlpha.50'}
-      border="1px solid"
-      borderColor={isCurrentTurn ? 'warning.a10' : player.isBot ? 'purple.500' : 'whiteAlpha.100'}
-      minW={{ base: '100px', md: '140px' }}
+    <Box
+      bg={isCurrentTurn ? '#1e1b0c' : '#1a1a26'}
+      border="0.5px solid"
+      borderColor={isCurrentTurn ? '#c9a22780' : isDanger ? '#cf5e5e60' : '#2a2a3a'}
+      borderRadius="10px"
+      px="12px"
+      py="8px"
+      display="flex"
+      flexDirection="column"
+      alignItems="center"
+      gap="6px"
+      minW="110px"
     >
-      <HStack spacing={1}>
-        <Text
-          fontSize={{ base: 'xs', md: 'sm' }}
-          fontWeight="bold"
-          noOfLines={1}
-          color={player.isBot ? 'purple.200' : undefined}
+      {/* Header row: avatar + name/score */}
+      <Box display="flex" alignItems="center" gap="6px">
+        <Box
+          w="28px"
+          h="28px"
+          borderRadius="full"
+          bg={av.bg}
+          display="flex"
+          alignItems="center"
+          justifyContent="center"
+          fontSize="10px"
+          fontWeight="700"
+          color={av.color}
+          flexShrink={0}
         >
-          {player.username}
-        </Text>
-        {player.isBot && (
-          <Badge colorScheme="purple" fontSize="2xs" variant="subtle">
-            BOT
-          </Badge>
-        )}
-        {isCurrentTurn && (
-          <Badge colorScheme="yellow" fontSize="2xs">
-            Turn
-          </Badge>
-        )}
-      </HStack>
-      <HStack spacing={1}>
+          {initials}
+        </Box>
+        <Box>
+          <Box fontSize="11px" color="#ccc" fontWeight="500" whiteSpace="nowrap">
+            {player.username}
+            {isCurrentTurn && (
+              <Box
+                as="span"
+                fontSize="9px"
+                color="#c9a227"
+                bg="#2a1f00"
+                px="5px"
+                py="1px"
+                borderRadius="3px"
+                ml="4px"
+              >
+                TURN
+              </Box>
+            )}
+            {player.isBot && !isCurrentTurn && (
+              <Box
+                as="span"
+                fontSize="9px"
+                color="#555"
+                bg="#1a1a28"
+                px="5px"
+                py="1px"
+                borderRadius="3px"
+                ml="4px"
+              >
+                BOT
+              </Box>
+            )}
+          </Box>
+          <Box fontSize="10px" color={isDanger ? '#cf5e5e' : '#555'}>
+            {player.totalScore} pts
+          </Box>
+        </Box>
+      </Box>
+      {/* Mini card backs */}
+      <Box display="flex" gap="3px">
         {player.hand.map((h: ClientHandSlot) => {
           const key = `${player.playerId}:${h.slot}`;
           const revealedCard = debugRevealed?.[key];
@@ -301,68 +516,38 @@ const OpponentRow: FC<OpponentProps> = ({
           return (
             <Box
               key={h.slot}
-              position="relative"
-              overflow="hidden"
-              borderRadius="sm"
+              w="16px"
+              h="22px"
+              borderRadius="3px"
+              bg={revealedCard ? 'white' : '#2a2a4a'}
+              border="0.5px solid"
+              borderColor={revealedCard ? '#ddd' : '#3a3a5a'}
+              display="flex"
+              alignItems="center"
+              justifyContent="center"
+              fontSize="7px"
+              fontWeight="700"
+              color={revealedCard ? (revealedCard.isRed ? '#c0392b' : '#222') : undefined}
               sx={
-                isModified
+                isModified && !revealedCard
                   ? {
-                      '&::before': {
-                        content: '""',
-                        position: 'absolute',
-                        inset: 0,
-                        borderRadius: 'sm',
-                        background:
-                          'linear-gradient(180deg, rgba(71, 213, 166, 0.9) 0%, rgba(71, 213, 166, 0) 60%)',
-                        animation: 'gradientSweep 3.5s ease-out forwards',
-                        pointerEvents: 'none',
-                        zIndex: 1,
+                      '@keyframes bgFlash': {
+                        '0%': { background: '#2a2a4a' },
+                        '20%': { background: '#1a3a2a' },
+                        '70%': { background: '#1a3a2a' },
+                        '100%': { background: '#2a2a4a' },
                       },
-                      '@keyframes gradientSweep': {
-                        '0%': { transform: 'translateY(-100%)' },
-                        '50%': { transform: 'translateY(0%)', opacity: 1 },
-                        '100%': { transform: 'translateY(100%)', opacity: 0 },
-                      },
+                      animation: 'bgFlash 1.5s ease-out forwards',
                     }
                   : {}
               }
             >
-              {revealedCard ? (
-                <Box
-                  w={{ base: '40px', md: '52px' }}
-                  h={{ base: '56px', md: '74px' }}
-                  borderRadius="sm"
-                  border="1px solid"
-                  borderColor="purple.400"
-                  bg="white"
-                  display="flex"
-                  flexDirection="column"
-                  alignItems="center"
-                  justifyContent="center"
-                  fontSize={{ base: '2xs', md: 'xs' }}
-                >
-                  <Text
-                    color={revealedCard.isRed ? 'red.500' : 'gray.800'}
-                    fontWeight="bold"
-                    lineHeight={1}
-                  >
-                    {revealedCard.rank}
-                  </Text>
-                  <Text color={revealedCard.isRed ? 'red.500' : 'gray.800'} lineHeight={1}>
-                    {revealedCard.suit}
-                  </Text>
-                </Box>
-              ) : (
-                <CardBack size="2xs" />
-              )}
+              {revealedCard ? `${revealedCard.rank}${revealedCard.suit}` : null}
             </Box>
           );
         })}
-      </HStack>
-      <Text fontSize="2xs" color="gray.400">
-        Score: {player.totalScore}
-      </Text>
-    </VStack>
+      </Box>
+    </Box>
   );
 };
 
@@ -413,11 +598,16 @@ export const GameBoard: FC = () => {
   const [isPeeking, setIsPeeking] = useState(true);
   const [peekProgress, setPeekProgress] = useState(100);
 
-  // Reset peeking state when a new round starts (component is not remounted)
+  // RS-007: Track known card slots (peeked during setup or Red Queen) for eye badge
+  const [knownSlots, setKnownSlots] = useState<Set<string>>(new Set());
+
+  // Reset peeking state and known slots when a new round starts
   useEffect(() => {
     if (peekedCards && peekedCards.length > 0 && gameState?.phase === 'peeking') {
       setIsPeeking(true);
       setPeekProgress(100);
+      // Seed known slots from setup peek cards
+      setKnownSlots(new Set(peekedCards.map((pc: PeekedCard) => pc.slot)));
     }
   }, [peekedCards, gameState?.phase]);
 
@@ -458,12 +648,31 @@ export const GameBoard: FC = () => {
 
   // F-308: Track discard pile top card ID to animate new cards appearing
   const [discardAnimKey, setDiscardAnimKey] = useState<string>('');
+
+  // Discard history — last 5 discarded cards (newest last), reset each round
+  const [discardHistory, setDiscardHistory] = useState<DiscardHistoryCard[]>([]);
+  const prevDiscardTopIdRef = useRef<string>('');
+  const prevRoundNumberRef = useRef<number>(0);
   useEffect(() => {
-    if (gameState && gameState.discardPile.length > 0) {
-      const topId = gameState.discardPile[gameState.discardPile.length - 1].id;
-      setDiscardAnimKey(topId);
+    if (!gameState) return;
+    const pile = gameState.discardPile;
+    // Reset on new round
+    if (gameState.roundNumber !== prevRoundNumberRef.current) {
+      prevRoundNumberRef.current = gameState.roundNumber;
+      prevDiscardTopIdRef.current = '';
+      setDiscardHistory([]);
+      return;
     }
-  }, [gameState?.discardPile]);
+    if (pile.length === 0) return;
+    const top = pile[pile.length - 1];
+    if (top.id !== prevDiscardTopIdRef.current) {
+      prevDiscardTopIdRef.current = top.id;
+      setDiscardAnimKey(top.id);
+      setDiscardHistory((prev) =>
+        [...prev, { id: top.id, rank: top.rank, suit: top.suit, isRed: top.isRed }].slice(-5),
+      );
+    }
+  }, [gameState?.discardPile, gameState?.roundNumber]);
 
   // F-308: Track drawn card ID to animate it appearing
   const [drawnCardAnimKey, setDrawnCardAnimKey] = useState<string>('');
@@ -631,7 +840,8 @@ export const GameBoard: FC = () => {
     return () => clearInterval(interval);
   }, [gameState?.turnStartedAt, gameState?.phase, gameState?.paused, pendingEffect]);
 
-  // Burn result — play sound and haptics (toast removed) (F-044 to F-048)
+  // Burn result — play sound, haptics, and show inline feedback banner (RS-006) (F-044 to F-048)
+  const [burnBanner, setBurnBanner] = useState<{ success: boolean } | null>(null);
   useEffect(() => {
     if (!lastBurnResult) return;
     playBurnSound();
@@ -640,7 +850,15 @@ export const GameBoard: FC = () => {
     } else {
       vibrateWarning();
     }
+    setBurnBanner({ success: lastBurnResult.burnSuccess });
+    const t = setTimeout(() => setBurnBanner(null), 2500);
+    return () => clearTimeout(t);
   }, [lastBurnResult]);
+
+  // Clear burn banner when turn advances to the next player
+  useEffect(() => {
+    setBurnBanner(null);
+  }, [gameState?.currentTurnIndex]);
 
   // Red Jack swap toast notification
   useEffect(() => {
@@ -898,6 +1116,8 @@ export const GameBoard: FC = () => {
       if (result.success && result.card) {
         setQueenPeekedCard(result.card);
         setQueenPeekTimer(true);
+        // RS-007: mark this slot as known
+        setKnownSlots((prev) => new Set([...prev, slot]));
         // Auto-close after 3 seconds
         setTimeout(() => {
           setQueenPeekTimer(false);
@@ -965,7 +1185,10 @@ export const GameBoard: FC = () => {
 
   // Find current player and opponents
   const myPlayer = gameState.players.find((p) => p.playerId === playerId);
+  const myPlayerIndex = gameState.players.findIndex((p) => p.playerId === playerId);
   const opponents = gameState.players.filter((p) => p.playerId !== playerId);
+  // Map playerId -> global player index for avatar colors
+  const playerIndexMap = new Map(gameState.players.map((p, idx) => [p.playerId, idx]));
   const topDiscard =
     gameState.discardPile.length > 0
       ? gameState.discardPile[gameState.discardPile.length - 1]
@@ -982,7 +1205,7 @@ export const GameBoard: FC = () => {
       display="flex"
       flexDirection="column"
       position="relative"
-      overflow="hidden"
+      sx={{ overflowX: 'clip', overflowY: 'visible' }}
       pb="env(safe-area-inset-bottom)"
     >
       {/* Red card flash overlay (UI-006) */}
@@ -1007,9 +1230,7 @@ export const GameBoard: FC = () => {
           />
         )}
       </AnimatePresence>
-
       {/* Pause overlay removed — pause/resume handled via menu modal & header badge */}
-
       {/* Peek overlay / countdown */}
       {isPeeking && peekedCards && peekedCards.length > 0 && (
         <Box
@@ -1051,14 +1272,12 @@ export const GameBoard: FC = () => {
           </VStack>
         </Box>
       )}
-
       {/* Score / Round info */}
       <Flex
         px={{ base: 4, md: 5 }}
         py={{ base: 2, md: 3 }}
-        bg="surface.tonal20"
-        borderBottom="1px solid"
-        borderColor="table.border"
+        bg="#13131a"
+        borderBottom="0.5px solid #222"
         justify="space-between"
         align="center"
         flexShrink={0}
@@ -1113,16 +1332,31 @@ export const GameBoard: FC = () => {
               CHECK ({checkCalledData.playerId === playerId ? 'You' : checkCalledData.username})
             </Badge>
           )}
-          {/* CHECK button — only visible on player's turn when check is available */}
+          {/* CHECK button — gold styling (RS-003) */}
           {turnData?.canCheck && !hasDrawnCard && !pendingEffect && (
-            <Button
-              size={{ base: 'xs', md: 'sm' }}
-              colorScheme="red"
-              variant="solid"
-              onClick={handleCallCheck}
+            <Tooltip
+              label="Call CHECK — you think you have the lowest hand"
+              placement="bottom"
+              isDisabled={!isDesktop}
             >
-              CHECK
-            </Button>
+              <Button
+                px="12px"
+                py="4px"
+                h="auto"
+                minH="28px"
+                borderRadius="6px"
+                bg="#c9a227"
+                color="#1a1200"
+                fontSize={{ base: '11px', md: '12px' }}
+                fontWeight="600"
+                border="none"
+                _hover={{ bg: '#b8911e' }}
+                _active={{ bg: '#a07e18' }}
+                onClick={handleCallCheck}
+              >
+                CHECK
+              </Button>
+            </Tooltip>
           )}
 
           {isDesktop ? (
@@ -1178,17 +1412,6 @@ export const GameBoard: FC = () => {
                   icon={<LogoutOutlined />}
                 />
               </Tooltip>
-
-              {/* Menu button for host player management / How to Play */}
-              <IconButton
-                aria-label="Game menu"
-                size="sm"
-                variant="ghost"
-                color="gray.400"
-                _hover={{ color: 'white', bg: 'whiteAlpha.100' }}
-                onClick={onMenuOpen}
-                icon={<MenuOutlined />}
-              />
             </>
           ) : (
             /* Mobile: single menu button */
@@ -1204,140 +1427,291 @@ export const GameBoard: FC = () => {
           )}
         </HStack>
       </Flex>
-
-      {/* Game Menu Modal */}
-      <Modal isOpen={isMenuOpen} onClose={onMenuClose} isCentered size="xs">
-        <ModalOverlay bg="blackAlpha.700" />
-        <ModalContent bg="table.border" color="white">
-          <ModalHeader fontSize="md" borderBottom="1px solid" borderColor="surface.tonal30" pb={3}>
-            Menu
-          </ModalHeader>
-          <ModalCloseButton />
-          <ModalBody py={4}>
-            <VStack spacing={3} align="stretch">
-              {/* How to Play */}
-              <Button
-                variant="ghost"
-                justifyContent="flex-start"
-                leftIcon={<InfoCircleOutlined />}
-                onClick={() => {
-                  onMenuClose();
-                  onInfoOpen();
-                }}
+      {/* Game Menu Modal — bottom sheet style */}
+      <Modal isOpen={isMenuOpen} onClose={onMenuClose} size="full" motionPreset="slideInBottom">
+        <ModalOverlay bg="rgba(0,0,0,0.55)" />
+        <ModalContent
+          bg="transparent"
+          color="white"
+          display="flex"
+          alignItems="flex-end"
+          justifyContent="center"
+          m={0}
+          p="12px"
+          maxW="480px"
+          mx="auto"
+          shadow="none"
+          mt="auto"
+        >
+          <Box
+            w="100%"
+            bg="#1c1c28"
+            borderRadius="14px"
+            border="0.5px solid #2a2a3a"
+            overflow="hidden"
+            mb={2}
+          >
+            {/* Drag handle row with close button */}
+            <Flex align="center" justify="center" position="relative" mt="14px" mb="10px" px="16px">
+              <Box w="36px" h="3px" bg="#333" borderRadius="2px" />
+              <Box
+                as="button"
+                position="absolute"
+                right="16px"
+                top="50%"
+                transform="translateY(-50%)"
+                fontSize="16px"
+                color="#555"
+                bg="transparent"
+                border="none"
+                cursor="pointer"
+                lineHeight={1}
+                px="4px"
+                _hover={{ color: '#aaa' }}
+                onClick={onMenuClose}
+                aria-label="Close menu"
               >
+                ✕
+              </Box>
+            </Flex>
+
+            {/* RS-014: Score summary */}
+            <Box px="16px" pb="4px">
+              <Text
+                fontSize="10px"
+                color="#444"
+                letterSpacing="0.1em"
+                textTransform="uppercase"
+                mb="6px"
+              >
+                Scores
+              </Text>
+              {[...gameState.players]
+                .sort((a, b) => a.totalScore - b.totalScore)
+                .map((p) => (
+                  <Flex key={p.playerId} justify="space-between" align="center" py="4px">
+                    <HStack spacing="6px">
+                      <Box
+                        w="6px"
+                        h="6px"
+                        borderRadius="full"
+                        bg={p.playerId === playerId ? '#c9a227' : p.isBot ? '#7a7aee' : '#4ecb4e'}
+                      />
+                      <Text
+                        fontSize="13px"
+                        color={p.playerId === playerId ? '#c9a227' : '#ccc'}
+                        fontWeight={p.playerId === playerId ? '600' : 'normal'}
+                      >
+                        {p.username}
+                        {p.playerId === playerId ? ' (You)' : ''}
+                      </Text>
+                    </HStack>
+                    <Text
+                      fontSize="13px"
+                      fontWeight="600"
+                      color={p.totalScore >= 50 ? '#cf7070' : '#999'}
+                    >
+                      {p.totalScore}
+                    </Text>
+                  </Flex>
+                ))}
+            </Box>
+
+            <Box h="0.5px" bg="#1a1a24" />
+
+            {/* How to Play */}
+            <Box
+              as="button"
+              display="flex"
+              alignItems="center"
+              gap="10px"
+              px="16px"
+              py="13px"
+              w="100%"
+              borderBottom="0.5px solid #1a1a24"
+              cursor="pointer"
+              _hover={{ bg: '#222232' }}
+              onClick={() => {
+                onMenuClose();
+                onInfoOpen();
+              }}
+            >
+              <Text fontSize="15px" color="#666" w="20px" textAlign="center">
+                ?
+              </Text>
+              <Text fontSize="14px" color="#ccc">
                 How to Play
-              </Button>
+              </Text>
+            </Box>
 
-              <Divider borderColor="surface.tonal30" />
-
-              {/* Pause / Resume */}
-              <Button
-                variant="ghost"
-                justifyContent="flex-start"
-                leftIcon={gameState.paused ? <PlayCircleOutlined /> : <PauseCircleOutlined />}
-                isDisabled={
+            {/* Pause / Resume */}
+            <Box
+              as="button"
+              display="flex"
+              alignItems="center"
+              gap="10px"
+              px="16px"
+              py="13px"
+              w="100%"
+              borderBottom="0.5px solid #1a1a24"
+              cursor="pointer"
+              opacity={
+                gameState.phase === 'roundEnd' ||
+                gameState.phase === 'gameEnd' ||
+                gameState.phase === 'dealing'
+                  ? 0.4
+                  : 1
+              }
+              _hover={{ bg: '#222232' }}
+              onClick={async () => {
+                if (
                   gameState.phase === 'roundEnd' ||
                   gameState.phase === 'gameEnd' ||
                   gameState.phase === 'dealing'
+                )
+                  return;
+                const result = gameState.paused ? await resumeGame() : await pauseGame();
+                if (!result.success && result.error) {
+                  toast({ title: result.error, status: 'error', duration: 2000, position: 'top' });
                 }
-                onClick={async () => {
-                  const result = gameState.paused ? await resumeGame() : await pauseGame();
-                  if (!result.success && result.error) {
-                    toast({
-                      title: result.error,
-                      status: 'error',
-                      duration: 2000,
-                      position: 'top',
-                    });
-                  }
-                }}
-              >
+              }}
+            >
+              <Text fontSize="15px" color="#666" w="20px" textAlign="center">
+                {gameState.paused ? '▶' : '⏸'}
+              </Text>
+              <Text fontSize="14px" color="#ccc">
                 {gameState.paused ? 'Resume Game' : 'Pause Game'}
-              </Button>
+              </Text>
+            </Box>
 
-              <Divider borderColor="surface.tonal30" />
-
-              {/* Manage Players — host-only, in-game kick (F-365) */}
-              {roomData?.host === playerId &&
-                gameState.players.filter((p) => p.playerId !== playerId).length > 0 && (
-                  <>
-                    <Text
-                      fontSize="xs"
-                      color="gray.500"
-                      fontWeight="bold"
-                      textTransform="uppercase"
-                      letterSpacing="wider"
-                    >
-                      Players
-                    </Text>
-                    <VStack spacing={1} align="stretch">
-                      {gameState.players
-                        .filter((p) => p.playerId !== playerId)
-                        .map((p) => (
-                          <HStack key={p.playerId} justify="space-between" px={2} py={1}>
-                            <Text fontSize="sm" color="gray.200">
-                              {p.username}
-                              {p.isBot ? ' (Bot)' : ''}
-                            </Text>
-                            <IconButton
-                              aria-label={`Kick ${p.username}`}
-                              size="xs"
-                              variant="ghost"
-                              colorScheme="red"
-                              icon={<CloseOutlined />}
-                              onClick={async () => {
-                                onMenuClose();
-                                const result = await kickPlayer(p.playerId);
-                                toast({
-                                  title: result.success
-                                    ? `${p.username} was removed`
-                                    : (result.error ?? 'Failed to kick player'),
-                                  status: result.success ? 'info' : 'error',
-                                  duration: 2500,
-                                  position: 'top',
-                                });
-                              }}
-                            />
-                          </HStack>
-                        ))}
-                    </VStack>
-                    <Divider borderColor="surface.tonal30" />
-                  </>
-                )}
-
-              {/* Sound toggle */}
-              <HStack justify="space-between" px={2} py={1}>
-                <Text fontSize="sm" color="gray.200">
+            {/* Sound toggle */}
+            <Flex
+              justify="space-between"
+              align="center"
+              px="16px"
+              py="12px"
+              borderBottom="0.5px solid #1a1a24"
+            >
+              <HStack spacing="10px">
+                <Text fontSize="15px" color="#666" w="20px" textAlign="center">
+                  ♪
+                </Text>
+                <Text fontSize="14px" color="#ccc">
                   Sound
                 </Text>
-                <Switch
-                  size="sm"
-                  isChecked={soundEnabled}
-                  onChange={toggleSound}
-                  colorScheme="green"
-                />
               </HStack>
-
-              <Divider borderColor="surface.tonal30" />
-
-              {/* Exit */}
-              <Button
-                variant="ghost"
-                colorScheme="red"
-                justifyContent="flex-start"
-                leftIcon={<LogoutOutlined />}
-                onClick={() => {
-                  onMenuClose();
-                  handleExitGame();
-                }}
+              {/* Custom toggle */}
+              <Box
+                as="button"
+                w="38px"
+                h="22px"
+                borderRadius="11px"
+                bg={soundEnabled ? '#3a6a4a' : '#2a2a3a'}
+                position="relative"
+                cursor="pointer"
+                transition="background 0.2s"
+                onClick={toggleSound}
+                flexShrink={0}
               >
+                <Box
+                  w="16px"
+                  h="16px"
+                  borderRadius="full"
+                  bg={soundEnabled ? '#5ecf5e' : '#555'}
+                  position="absolute"
+                  top="3px"
+                  left={soundEnabled ? '19px' : '3px'}
+                  transition="left 0.2s, background 0.2s"
+                />
+              </Box>
+            </Flex>
+
+            {/* Players section — host-only */}
+            {roomData?.host === playerId &&
+              gameState.players.filter((p) => p.playerId !== playerId).length > 0 && (
+                <>
+                  <Text
+                    fontSize="10px"
+                    color="#444"
+                    letterSpacing="0.1em"
+                    textTransform="uppercase"
+                    px="16px"
+                    pt="10px"
+                    pb="4px"
+                  >
+                    Players
+                  </Text>
+                  {gameState.players
+                    .filter((p) => p.playerId !== playerId)
+                    .map((p) => (
+                      <Flex
+                        key={p.playerId}
+                        justify="space-between"
+                        align="center"
+                        px="16px"
+                        py="10px"
+                        borderTop="0.5px solid #1a1a24"
+                      >
+                        <Text fontSize="13px" color="#ccc">
+                          {p.username}
+                          {p.isBot ? ' (Bot)' : ''}
+                        </Text>
+                        <Box
+                          as="span"
+                          fontSize="14px"
+                          color="#3a2a2a"
+                          cursor="pointer"
+                          px="6px"
+                          py="2px"
+                          borderRadius="4px"
+                          sx={{ '&:hover': { color: '#cf5e5e' } }}
+                          onClick={async () => {
+                            onMenuClose();
+                            const result = await kickPlayer(p.playerId);
+                            toast({
+                              title: result.success
+                                ? `${p.username} was removed`
+                                : (result.error ?? 'Failed to kick player'),
+                              status: result.success ? 'info' : 'error',
+                              duration: 2500,
+                              position: 'top',
+                            });
+                          }}
+                        >
+                          ✕
+                        </Box>
+                      </Flex>
+                    ))}
+                  <Box h="0.5px" bg="#1a1a24" />
+                </>
+              )}
+
+            {/* Exit Game — danger row */}
+            <Box
+              as="button"
+              display="flex"
+              alignItems="center"
+              gap="10px"
+              px="16px"
+              py="13px"
+              w="100%"
+              cursor="pointer"
+              _hover={{ bg: '#1a1010' }}
+              onClick={() => {
+                onMenuClose();
+                handleExitGame();
+              }}
+            >
+              <Text fontSize="15px" color="#7a3a3a" w="20px" textAlign="center">
+                ⎋
+              </Text>
+              <Text fontSize="14px" color="#cf7070">
                 Exit Game
-              </Button>
-            </VStack>
-          </ModalBody>
+              </Text>
+            </Box>
+          </Box>
         </ModalContent>
       </Modal>
-
       {/* How to Play Info Modal */}
       <Modal
         isOpen={isInfoOpen}
@@ -1392,7 +1766,6 @@ export const GameBoard: FC = () => {
           </ModalBody>
         </ModalContent>
       </Modal>
-
       {/* Final Round banner (UI-005) */}
       {checkCalledData && (
         <Box
@@ -1415,277 +1788,497 @@ export const GameBoard: FC = () => {
           </Text>
         </Box>
       )}
-
-      {/* Main game area */}
-      <Grid
-        flex={1}
-        templateRows="auto 1fr auto"
-        p={{ base: 2, md: 4 }}
-        gap={{ base: 2, md: 3 }}
-        maxW={{ base: '900px', lg: '1100px' }}
-        mx="auto"
-        w="100%"
-        overflow="visible"
-      >
-        {/* Top: Opponents */}
-        <Flex wrap="wrap" justify="center" gap={{ base: 2, md: 3 }}>
+      {/* ── MOBILE: OPPONENT SLIM ROWS ── */}
+      {!isDesktop && (
+        <Box bg="#0d0d14" flexShrink={0}>
+          {/* Section header */}
+          <Box display="flex" justifyContent="space-between" px="10px" pt="6px" pb="2px">
+            <Box fontSize="9px" color="#333" textTransform="uppercase" letterSpacing="0.08em">
+              opponents
+            </Box>
+            <Box fontSize="9px" color="#333">
+              {opponents.length}
+            </Box>
+          </Box>
           {opponents.map((opp) => (
-            <OpponentRow
+            <MobileOpponentRow
               key={opp.playerId}
               player={opp}
+              playerIndex={playerIndexMap.get(opp.playerId) ?? 0}
               isCurrentTurn={
                 gameState.players[gameState.currentTurnIndex]?.playerId === opp.playerId
               }
+              targetScore={gameState.targetScore}
               debugRevealed={debugRevealed}
               modifiedSlots={modifiedSlots}
-              isDesktop={isDesktop}
             />
           ))}
-        </Flex>
-
-        {/* Center: Draw pile and Discard pile */}
-        <Flex justify="center" align="center" gap={{ base: 6, md: 10 }}>
-          {/* Draw Pile */}
-          <Tooltip
-            label={
-              canAct && !hasDrawnCard && turnData?.availableActions.includes('drawDeck')
-                ? 'Draw from deck'
-                : hasDrawnCard
-                  ? 'Card already drawn'
-                  : !canAct
-                    ? 'Not your turn'
-                    : ''
-            }
-            isDisabled={!canAct && gameState.phase !== 'playing'}
+        </Box>
+      )}
+      {/* ── MOBILE: SCORE BAR ── */}
+      {!isDesktop && (
+        <Box
+          display="flex"
+          gap="4px"
+          bg="#0d0d14"
+          px="10px"
+          py="4px"
+          overflowX="auto"
+          flexShrink={0}
+          sx={{ '&::-webkit-scrollbar': { display: 'none' }, scrollbarWidth: 'none' }}
+        >
+          {/* "You" pill */}
+          <Box
+            bg="#1a1a3a"
+            color="#7a7aee"
+            border="0.5px solid #2a2a3a"
+            borderRadius="10px"
+            px="7px"
+            py="2px"
+            fontSize="9px"
+            fontWeight="500"
+            whiteSpace="nowrap"
+            flexShrink={0}
           >
-            <VStack spacing={2}>
-              <CardBack
-                size="lg"
-                isClickable={
-                  canAct &&
-                  !hasDrawnCard &&
-                  (turnData?.availableActions.includes('drawDeck') ?? false)
-                }
-                onClick={handleDrawDeck}
-              />
-            </VStack>
-          </Tooltip>
-
-          {/* Drawn Card (floating between deck and discard) */}
-          <AnimatePresence mode="wait">
-            {hasDrawnCard && drawnCard && (
-              <Tooltip
-                label={
-                  drawnFromDiscard
-                    ? 'Click a hand card to swap (must swap)'
-                    : 'Click a hand card to swap, or click discard to keep hand'
-                }
+            You · {myPlayer.totalScore}
+          </Box>
+          {opponents.map((opp) => {
+            const oppIdx = playerIndexMap.get(opp.playerId) ?? 0;
+            const av = getAvatarColors(oppIdx);
+            const dangerThreshold = gameState.targetScore - 15;
+            const isDanger = opp.totalScore >= dangerThreshold;
+            return (
+              <Box
+                key={opp.playerId}
+                bg="#1a1a28"
+                color={isDanger ? '#cf5e5e' : '#555'}
+                border="0.5px solid #2a2a3a"
+                borderRadius="10px"
+                px="7px"
+                py="2px"
+                fontSize="9px"
+                fontWeight="500"
+                whiteSpace="nowrap"
+                flexShrink={0}
+                display="flex"
+                alignItems="center"
+                gap="4px"
               >
-                <VStack spacing={2}>
-                  <motion.div
-                    key={drawnCardAnimKey}
-                    initial={{ scale: 0.6, opacity: 0, y: -20 }}
-                    animate={{ scale: 1, opacity: 1, y: 0 }}
-                    exit={{ scale: 0.6, opacity: 0, y: 20 }}
-                    transition={{ type: 'spring', stiffness: 300, damping: 20 }}
-                  >
-                    <Box
-                      borderRadius="md"
-                      border="2px solid"
-                      borderColor="warning.a10"
-                      shadow="0 0 16px rgba(215, 172, 97, 0.5)"
-                      animation="pulse 1.5s ease-in-out infinite"
-                    >
-                      <Card card={drawnCard} size="lg" />
-                    </Box>
-                  </motion.div>
-                  <Text fontSize="xs" color="warning.a10" fontWeight="bold">
-                    {drawnFromDiscard ? 'From Discard' : 'Drawn'}
-                  </Text>
-                </VStack>
-              </Tooltip>
-            )}
-          </AnimatePresence>
-
-          {/* Discard Pile */}
-          <Tooltip
-            label={
-              hasDrawnCard && drawnFromDiscard
-                ? 'Must swap with a hand card'
-                : hasDrawnCard
-                  ? 'Discard drawn card'
-                  : topDiscard?.isBurned
-                    ? 'Burned card — cannot pick up'
-                    : canAct && turnData?.availableActions.includes('takeDiscard')
-                      ? 'Tap to take from discard'
-                      : !canAct
-                        ? 'Not your turn'
-                        : ''
-            }
-            isDisabled={!canAct && gameState.phase !== 'playing'}
+                <Box w="6px" h="6px" borderRadius="full" bg={av.dot} flexShrink={0} />
+                {opp.username} · {opp.totalScore}
+                {isDanger ? ' !' : ''}
+              </Box>
+            );
+          })}
+        </Box>
+      )}
+      {/* ── MOBILE: TABLE CENTER ── */}
+      {!isDesktop && (
+        <Box
+          flex={1}
+          bg="#0d0d12"
+          display="flex"
+          flexDirection="column"
+          justifyContent="center"
+          px="14px"
+          py="14px"
+          overflow="hidden"
+        >
+          <Box
+            bg="#12181a"
+            borderRadius="14px"
+            border="0.5px solid #1a2a22"
+            px="14px"
+            py="14px"
+            display="flex"
+            flexDirection="column"
+            gap="12px"
           >
-            <VStack spacing={2}>
-              {topDiscard ? (
-                <Box position="relative">
-                  <Box position="relative">
-                    {/* F-308: Animate new cards appearing on the discard pile */}
-                    <AnimatePresence mode="wait">
-                      <motion.div
-                        key={discardAnimKey}
-                        initial={{ rotateY: 90, opacity: 0 }}
-                        animate={{ rotateY: 0, opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        transition={{ duration: 0.25, ease: 'easeOut' }}
-                        style={{ transformStyle: 'preserve-3d' }}
+            {/* Timer row — SVG ring + text label + progress bar */}
+            {turnTimeLeft !== null &&
+              gameState.phase === 'playing' &&
+              (() => {
+                const pct = turnTimeLeft / TURN_TIMEOUT_SECS;
+                const timerColor = pct > 0.6 ? '#4ecb4e' : pct > 0.3 ? '#c9a227' : '#cf5e5e';
+                const circumference = 2 * Math.PI * 14;
+                const isPulsing = pct <= 0.3;
+                const currentTurnPlayer = gameState.players[gameState.currentTurnIndex];
+                const isMyTurnNow = currentTurnPlayer?.playerId === playerId;
+                const statusText =
+                  hasDrawnCard && drawnFromDiscard
+                    ? 'tap a hand card to swap'
+                    : hasDrawnCard
+                      ? 'tap hand to swap · tap discard to keep'
+                      : isMyTurnNow
+                        ? `your turn · ${Math.ceil(turnTimeLeft)}s`
+                        : `${currentTurnPlayer?.username ?? ''} · ${Math.ceil(turnTimeLeft)}s`;
+                return (
+                  <Box
+                    display="flex"
+                    alignItems="center"
+                    gap="10px"
+                    sx={
+                      isPulsing
+                        ? {
+                            '@keyframes timerPulse': {
+                              '0%, 100%': { opacity: 1 },
+                              '50%': { opacity: 0.55 },
+                            },
+                            animation: 'timerPulse 1s ease-in-out infinite',
+                          }
+                        : {}
+                    }
+                  >
+                    <svg width="36" height="36" viewBox="0 0 36 36" style={{ flexShrink: 0 }}>
+                      <circle
+                        cx="18"
+                        cy="18"
+                        r="14"
+                        fill="none"
+                        stroke="#1a2a1a"
+                        strokeWidth="2.5"
+                      />
+                      <circle
+                        cx="18"
+                        cy="18"
+                        r="14"
+                        fill="none"
+                        stroke={timerColor}
+                        strokeWidth="2.5"
+                        strokeDasharray={circumference}
+                        strokeDashoffset={circumference * (1 - pct)}
+                        strokeLinecap="round"
+                        transform="rotate(-90 18 18)"
+                        style={{ transition: 'stroke-dashoffset 0.5s linear, stroke 0.5s' }}
+                      />
+                      <text
+                        x="18"
+                        y="22"
+                        textAnchor="middle"
+                        fontSize="10"
+                        fontWeight="600"
+                        fill={timerColor}
+                        fontFamily="Inter, system-ui, sans-serif"
                       >
-                        <Card
-                          card={topDiscard}
-                          size="lg"
-                          isClickable={
-                            hasDrawnCard
-                              ? !drawnFromDiscard
-                              : canAct &&
-                                !topDiscard.isBurned &&
-                                (turnData?.availableActions.includes('takeDiscard') ?? false)
-                          }
-                          onClick={
-                            hasDrawnCard && !drawnFromDiscard
-                              ? () => handleDiscardChoice(null)
-                              : !hasDrawnCard &&
-                                  canAct &&
-                                  !topDiscard.isBurned &&
-                                  turnData?.availableActions.includes('takeDiscard')
-                                ? handleTakeDiscard
-                                : undefined
-                          }
+                        {Math.ceil(turnTimeLeft)}
+                      </text>
+                    </svg>
+                    <Box flex={1}>
+                      <Text fontSize="11px" color={timerColor} mb="4px" noOfLines={1}>
+                        {statusText}
+                      </Text>
+                      <Box h="5px" bg="#1a2a1a" borderRadius="3px" overflow="hidden">
+                        <Box
+                          h="100%"
+                          borderRadius="3px"
+                          bg={timerColor}
+                          w={`${pct * 100}%`}
+                          style={{ transition: 'width 0.5s linear, background 0.5s' }}
                         />
-                      </motion.div>
-                    </AnimatePresence>
+                      </Box>
+                    </Box>
                   </Box>
-                  {topDiscard.isBurned && (
+                );
+              })()}
+
+            {/* Burn result feedback banner (RS-006) */}
+            {burnBanner && (
+              <Box
+                px="14px"
+                py="6px"
+                borderRadius="8px"
+                bg={burnBanner.success ? 'rgba(94,207,94,0.12)' : 'rgba(207,94,94,0.12)'}
+                border={`1px solid ${burnBanner.success ? '#5ecf5e' : '#cf5e5e'}`}
+                textAlign="center"
+              >
+                <Text
+                  fontSize="13px"
+                  fontWeight="600"
+                  color={burnBanner.success ? '#5ecf5e' : '#cf5e5e'}
+                >
+                  {burnBanner.success ? '✓ Burned!' : 'X No match! +1 penalty card'}
+                </Text>
+              </Box>
+            )}
+
+            {/* Pile area — draw + discard */}
+            <Flex justify="center" align="center" gap={{ base: '28px', md: '40px' }}>
+              {/* Draw Pile */}
+              <VStack spacing="5px">
+                <Tooltip
+                  label={
+                    canAct && !hasDrawnCard && turnData?.availableActions.includes('drawDeck')
+                      ? 'Draw from deck'
+                      : hasDrawnCard
+                        ? 'Card already drawn'
+                        : !canAct
+                          ? 'Not your turn'
+                          : ''
+                  }
+                  isDisabled={!isDesktop || (!canAct && gameState.phase !== 'playing')}
+                >
+                  <Box>
+                    <CardBack
+                      size="lg"
+                      isClickable={
+                        canAct &&
+                        !hasDrawnCard &&
+                        (turnData?.availableActions.includes('drawDeck') ?? false)
+                      }
+                      onClick={handleDrawDeck}
+                    />
+                  </Box>
+                </Tooltip>
+                <Text fontSize="10px" color="#444">
+                  draw pile
+                </Text>
+                {canAct && !hasDrawnCard && turnData?.availableActions.includes('drawDeck') && (
+                  <Text fontSize="10px" color="#333">
+                    tap to draw
+                  </Text>
+                )}
+              </VStack>
+
+              {/* Swap arrow */}
+              <Text color="#2a2a3a" fontSize="20px">
+                ⇄
+              </Text>
+
+              {/* Drawn Card (floating) */}
+              <AnimatePresence mode="wait">
+                {hasDrawnCard && drawnCard && (
+                  <VStack spacing="5px">
+                    <motion.div
+                      key={drawnCardAnimKey}
+                      initial={{ scale: 0.6, opacity: 0, y: -20 }}
+                      animate={{ scale: 1, opacity: 1, y: 0 }}
+                      exit={{ scale: 0.6, opacity: 0, y: 20 }}
+                      transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+                    >
+                      <Box
+                        borderRadius="md"
+                        border="2px solid #c9a227"
+                        boxShadow="0 0 16px rgba(215, 172, 97, 0.5)"
+                        animation="pulse 1.5s ease-in-out infinite"
+                      >
+                        <Card card={drawnCard} size="lg" />
+                      </Box>
+                    </motion.div>
+                    <Text fontSize="10px" color="#c9a227" fontWeight="600">
+                      {drawnFromDiscard ? 'from discard' : 'drawn'}
+                    </Text>
+                  </VStack>
+                )}
+              </AnimatePresence>
+
+              {/* Discard Pile */}
+              <VStack spacing="5px">
+                <Tooltip
+                  label={
+                    hasDrawnCard && drawnFromDiscard
+                      ? 'Must swap with a hand card'
+                      : hasDrawnCard
+                        ? 'Discard drawn card'
+                        : topDiscard?.isBurned
+                          ? 'Burned card — cannot pick up'
+                          : canAct && turnData?.availableActions.includes('takeDiscard')
+                            ? 'Tap to take from discard'
+                            : !canAct
+                              ? 'Not your turn'
+                              : ''
+                  }
+                  isDisabled={!isDesktop || (!canAct && gameState.phase !== 'playing')}
+                >
+                  <Box>
+                    {topDiscard ? (
+                      <Box position="relative">
+                        <AnimatePresence mode="wait">
+                          <motion.div
+                            key={discardAnimKey}
+                            initial={{ rotateY: 90, opacity: 0 }}
+                            animate={{ rotateY: 0, opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            transition={{ duration: 0.25, ease: 'easeOut' }}
+                            style={{ transformStyle: 'preserve-3d' }}
+                          >
+                            <Card
+                              card={topDiscard}
+                              size="lg"
+                              isClickable={
+                                hasDrawnCard
+                                  ? !drawnFromDiscard
+                                  : canAct &&
+                                    !topDiscard.isBurned &&
+                                    (turnData?.availableActions.includes('takeDiscard') ?? false)
+                              }
+                              onClick={
+                                hasDrawnCard && !drawnFromDiscard
+                                  ? () => handleDiscardChoice(null)
+                                  : !hasDrawnCard &&
+                                      canAct &&
+                                      !topDiscard.isBurned &&
+                                      turnData?.availableActions.includes('takeDiscard')
+                                    ? handleTakeDiscard
+                                    : undefined
+                              }
+                            />
+                          </motion.div>
+                        </AnimatePresence>
+                        {topDiscard.isBurned && (
+                          <Box
+                            position="absolute"
+                            top="-6px"
+                            right="-6px"
+                            bg="warning.a0"
+                            borderRadius="full"
+                            w="24px"
+                            h="24px"
+                            display="flex"
+                            alignItems="center"
+                            justifyContent="center"
+                            shadow="md"
+                            border="2px solid"
+                            borderColor="warning.a10"
+                          >
+                            <FireOutlined style={{ fontSize: '12px', color: 'white' }} />
+                          </Box>
+                        )}
+                      </Box>
+                    ) : (
+                      <Box
+                        w="58px"
+                        h="80px"
+                        borderRadius="8px"
+                        border="2px dashed"
+                        borderColor={hasDrawnCard && !drawnFromDiscard ? '#c9a227' : '#2a2a3a'}
+                        display="flex"
+                        alignItems="center"
+                        justifyContent="center"
+                        cursor={hasDrawnCard && !drawnFromDiscard ? 'pointer' : 'default'}
+                        onClick={
+                          hasDrawnCard && !drawnFromDiscard
+                            ? () => handleDiscardChoice(null)
+                            : undefined
+                        }
+                      >
+                        <Text
+                          fontSize="9px"
+                          color={hasDrawnCard && !drawnFromDiscard ? '#c9a227' : '#333'}
+                        >
+                          {hasDrawnCard && !drawnFromDiscard ? 'discard' : 'empty'}
+                        </Text>
+                      </Box>
+                    )}
+                  </Box>
+                </Tooltip>
+                <Text
+                  fontSize="10px"
+                  color={hasDrawnCard && !drawnFromDiscard && topDiscard ? '#c9a227' : '#444'}
+                >
+                  {hasDrawnCard && !drawnFromDiscard ? 'selected' : 'discard'}
+                </Text>
+                {canAct &&
+                  !hasDrawnCard &&
+                  topDiscard &&
+                  !topDiscard.isBurned &&
+                  turnData?.availableActions.includes('takeDiscard') && (
+                    <Text fontSize="10px" color="#333">
+                      tap to take
+                    </Text>
+                  )}
+              </VStack>
+            </Flex>
+
+            {/* Discard history strip */}
+            {discardHistory.length > 0 && (
+              <Box
+                display="flex"
+                alignItems="center"
+                gap="6px"
+                flexWrap="nowrap"
+                overflowX="auto"
+                sx={{ '&::-webkit-scrollbar': { display: 'none' }, scrollbarWidth: 'none' }}
+              >
+                <Box fontSize="8px" color="#444" flexShrink={0}>
+                  recent:
+                </Box>
+                {discardHistory.map((c, i) => {
+                  const isNewest = i === discardHistory.length - 1;
+                  return (
                     <Box
-                      position="absolute"
-                      top="-6px"
-                      right="-6px"
-                      bg="warning.a0"
-                      borderRadius="full"
-                      w="24px"
-                      h="24px"
+                      key={c.id}
+                      w="20px"
+                      h="28px"
+                      borderRadius="3px"
+                      bg="white"
+                      border="0.5px solid #ddd"
                       display="flex"
                       alignItems="center"
                       justifyContent="center"
-                      shadow="md"
-                      border="2px solid"
-                      borderColor="warning.a10"
+                      fontSize="7px"
+                      fontWeight="700"
+                      color={c.isRed ? '#c0392b' : '#222'}
+                      opacity={isNewest ? 1 : 0.35}
+                      flexShrink={0}
                     >
-                      <FireOutlined style={{ fontSize: '12px', color: 'white' }} />
+                      {c.rank}
+                      {c.suit}
                     </Box>
-                  )}
-                </Box>
-              ) : (
-                <Box
-                  w="100px"
-                  h="140px"
-                  borderRadius="md"
-                  border="2px dashed"
-                  borderColor={hasDrawnCard && !drawnFromDiscard ? 'warning.a10' : 'gray.600'}
-                  display="flex"
-                  alignItems="center"
-                  justifyContent="center"
-                  cursor={hasDrawnCard && !drawnFromDiscard ? 'pointer' : 'default'}
-                  onClick={
-                    hasDrawnCard && !drawnFromDiscard ? () => handleDiscardChoice(null) : undefined
-                  }
-                  _hover={
-                    hasDrawnCard && !drawnFromDiscard
-                      ? { borderColor: 'warning.a10', shadow: 'lg' }
-                      : {}
-                  }
-                >
-                  <Text
-                    fontSize="xs"
-                    color={hasDrawnCard && !drawnFromDiscard ? 'warning.a10' : 'gray.500'}
-                  >
-                    {hasDrawnCard && !drawnFromDiscard ? 'Discard here' : 'Empty'}
-                  </Text>
-                </Box>
-              )}
-              <Text fontSize="xs" color="gray.400">
-                Discard
-              </Text>
-            </VStack>
-          </Tooltip>
-        </Flex>
+                  );
+                })}
+              </Box>
+            )}
+          </Box>
+        </Box>
+      )}{' '}
+      {/* end !isDesktop table */}
+      {/* ── MOBILE: PLAYER ZONE ── */}
+      {!isDesktop && (
+        <Box bg="#13131a" px="14px" pt="10px" pb="16px" flexShrink={0}>
+          {/* hand label */}
+          <Text
+            fontSize="10px"
+            color={hasDrawnCard && drawnFromDiscard ? '#c9a227' : '#555'}
+            textAlign="center"
+            textTransform="uppercase"
+            letterSpacing="0.07em"
+            fontWeight="500"
+            mb="8px"
+          >
+            {hasDrawnCard && drawnFromDiscard
+              ? 'pick a slot to replace'
+              : gameState.phase === 'roundEnd' || gameState.phase === 'gameEnd'
+                ? 'round over'
+                : 'your hand'}
+          </Text>
 
-        {/* Bottom: Player's hand + actions */}
-        <VStack spacing={2} minW={0} overflow="visible">
-          {/* Turn indicator + Check button */}
-          {gameState.phase === 'peeking' ? (
-            <Text fontSize="sm" color="warning.a10" fontWeight="bold">
-              Memorizing...
-            </Text>
-          ) : gameState.phase === 'roundEnd' || gameState.phase === 'gameEnd' ? (
-            <Text fontSize="sm" color="warning.a10" fontWeight="bold">
-              Round Over
-            </Text>
-          ) : hasDrawnCard && drawnFromDiscard ? (
-            <HStack spacing={3}>
-              <Text fontSize="sm" color="warning.a10" fontWeight="bold">
-                Click a hand card to swap (must swap)
-              </Text>
-              <Button
-                size="xs"
-                colorScheme="orange"
-                variant="outline"
+          {/* Undo button when discard was taken */}
+          {hasDrawnCard && drawnFromDiscard && (
+            <Flex justify="center" mb="8px">
+              <Box
+                as="button"
+                px="12px"
+                py="4px"
+                borderRadius="6px"
+                bg="#1c1c2e"
+                border="0.5px solid #2a2a3a"
+                color="#888"
+                fontSize="12px"
+                cursor="pointer"
                 onClick={handleUndoTakeDiscard}
+                _hover={{ bg: '#222235' }}
               >
-                Undo
-              </Button>
-            </HStack>
-          ) : hasDrawnCard ? (
-            <Text fontSize="sm" color="warning.a10" fontWeight="bold">
-              Click a hand card to swap, or click discard to keep hand
-            </Text>
-          ) : gameState.players[gameState.currentTurnIndex]?.playerId === playerId ? (
-            <Heading size="sm" color="warning.a10">
-              Your Turn
-            </Heading>
-          ) : (
-            <Text fontSize="sm" color="gray.500">
-              {gameState.players[gameState.currentTurnIndex]?.username}&apos;s turn
-            </Text>
+                undo
+              </Box>
+            </Flex>
           )}
 
-          {/* Turn timer countdown */}
-          {turnTimeLeft !== null && gameState.phase === 'playing' && (
-            <Box w="100%" maxW="300px" mx="auto">
-              <Progress
-                value={(turnTimeLeft / TURN_TIMEOUT_SECS) * 100}
-                size="xs"
-                colorScheme={turnTimeLeft <= 5 ? 'red' : turnTimeLeft <= 10 ? 'orange' : 'green'}
-                borderRadius="full"
-                bg="surface.tonal20"
-              />
-              <Text
-                fontSize="2xs"
-                color={turnTimeLeft <= 5 ? 'danger.a10' : 'gray.500'}
-                textAlign="center"
-                mt={0.5}
-              >
-                {Math.ceil(turnTimeLeft)}s
-              </Text>
-            </Box>
-          )}
-
-          {/* Hand — horizontal scroll when > 4 cards, centered otherwise */}
+          {/* Hand row */}
           <Box
-            w="100%"
             overflowX="auto"
             overflowY="visible"
-            pb={5}
-            pt={5}
+            pb={3}
             sx={{
-              /* Hide scrollbar but keep scrolling */
               '&::-webkit-scrollbar': { display: 'none' },
               scrollbarWidth: 'none',
               msOverflowStyle: 'none',
@@ -1693,12 +2286,12 @@ export const GameBoard: FC = () => {
             }}
           >
             <HStack
-              spacing={{ base: 2, md: 3 }}
+              spacing={{ base: '8px', md: '10px' }}
               justify={myPlayer.hand.length > 4 ? 'flex-start' : 'center'}
               w={myPlayer.hand.length > 4 ? 'max-content' : '100%'}
               px={myPlayer.hand.length > 4 ? 2 : 0}
             >
-              {myPlayer.hand.map((h: ClientHandSlot) => {
+              {myPlayer.hand.map((h: ClientHandSlot, cardIdx: number) => {
                 const peekedCard = getPeekedCardForSlot(h.slot);
                 const showFaceUp = isPeekedSlot(h.slot) && peekedCard !== null;
                 const debugKey = `${playerId}:${h.slot}`;
@@ -1728,21 +2321,40 @@ export const GameBoard: FC = () => {
                   modifiedSlots.some((m) => m.playerId === playerId && m.slot === h.slot);
 
                 return (
-                  <Tooltip key={h.slot} label={tooltipLabel} isDisabled={!isClickable}>
-                    {/* F-308: Shake animation when burning a card */}
+                  <Tooltip
+                    key={h.slot}
+                    label={tooltipLabel}
+                    isDisabled={!isDesktop || !isClickable}
+                  >
                     <motion.div
+                      key={`${gameState.roundNumber}:${h.slot}`}
+                      initial={{ opacity: 0, y: 20, scale: 0.85 }}
                       animate={
                         burningSlot === h.slot
                           ? {
                               x: [0, -6, 6, -6, 6, -4, 4, 0],
                               rotate: [0, -3, 3, -3, 3, -2, 2, 0],
+                              opacity: 1,
+                              y: 0,
+                              scale: 1,
                             }
-                          : {}
+                          : { opacity: 1, y: 0, scale: 1 }
                       }
-                      transition={{ duration: 0.45, ease: 'easeInOut' }}
+                      transition={
+                        burningSlot === h.slot
+                          ? { duration: 0.45, ease: 'easeInOut' }
+                          : { duration: 0.3, delay: cardIdx * 0.07, ease: 'easeOut' }
+                      }
                       style={{ display: 'inline-block' }}
                     >
-                      <VStack spacing={1} position="relative" flexShrink={0}>
+                      <Box
+                        display="flex"
+                        flexDirection="column"
+                        alignItems="center"
+                        gap="4px"
+                        position="relative"
+                        flexShrink={0}
+                      >
                         <Box
                           position="relative"
                           overflow="visible"
@@ -1750,22 +2362,22 @@ export const GameBoard: FC = () => {
                           sx={
                             isModified
                               ? {
-                                  '&::before': {
+                                  '&::after': {
                                     content: '""',
                                     position: 'absolute',
                                     inset: 0,
                                     borderRadius: 'md',
-                                    background:
-                                      'linear-gradient(180deg, rgba(71, 213, 166, 0.9) 0%, rgba(71, 213, 166, 0) 60%)',
-                                    animation: 'gradientSweep 3.5s ease-out forwards',
+                                    background: '#1a3a2a',
+                                    opacity: 0,
                                     pointerEvents: 'none',
-                                    zIndex: 1,
-                                    clipPath: 'inset(0 round 6px)',
+                                    zIndex: 2,
+                                    animation: 'bgFlashOverlay 1.5s ease-out forwards',
                                   },
-                                  '@keyframes gradientSweep': {
-                                    '0%': { transform: 'translateY(-100%)' },
-                                    '50%': { transform: 'translateY(0%)', opacity: 1 },
-                                    '100%': { transform: 'translateY(100%)', opacity: 0 },
+                                  '@keyframes bgFlashOverlay': {
+                                    '0%': { opacity: 0 },
+                                    '20%': { opacity: 0.45 },
+                                    '70%': { opacity: 0.45 },
+                                    '100%': { opacity: 0 },
                                   },
                                 }
                               : {}
@@ -1791,16 +2403,28 @@ export const GameBoard: FC = () => {
                           ) : (
                             <CardBack
                               isSelected={isPeekedSlot(h.slot)}
+                              isKnown={!isPeeking && knownSlots.has(h.slot)}
                               isClickable={isClickable}
                               onClick={handleClick}
                               size={isDesktop ? 'lg' : 'md'}
                             />
                           )}
                         </Box>
-                        <Badge colorScheme={isPeekedSlot(h.slot) ? 'yellow' : 'gray'} fontSize="xs">
+                        {/* Plain slot label — not a Badge */}
+                        <Text
+                          fontSize="10px"
+                          color={
+                            isPeekedSlot(h.slot)
+                              ? '#c9a227'
+                              : pendingBurnSlot === h.slot
+                                ? '#cf5e5e'
+                                : '#555'
+                          }
+                          fontWeight="500"
+                        >
                           {h.slot}
-                        </Badge>
-                      </VStack>
+                        </Text>
+                      </Box>
                     </motion.div>
                   </Tooltip>
                 );
@@ -1808,14 +2432,734 @@ export const GameBoard: FC = () => {
             </HStack>
           </Box>
 
-          {/* Player info */}
-          <Text fontSize="xs" color="gray.500">
-            {myPlayer.username} | Score: {myPlayer.totalScore}
+          {/* hint-text */}
+          <Text fontSize="11px" color="#555" textAlign="center" mt="6px">
+            {gameState.phase === 'peeking'
+              ? 'memorize your cards'
+              : hasDrawnCard && drawnFromDiscard
+                ? 'tap a slot to place the discard card · tap discard again to cancel'
+                : hasDrawnCard
+                  ? 'tap hand to swap · tap discard to keep hand'
+                  : 'tap draw pile · tap discard then hand · tap hand card to burn'}
           </Text>
-        </VStack>
-      </Grid>
+        </Box>
+      )}{' '}
+      {/* end !isDesktop player zone */}
+      {/* ── DESKTOP: OVAL 3-COL GRID ── */}
+      {isDesktop &&
+        (() => {
+          const topOpponents = opponents.slice(0, Math.min(3, opponents.length));
+          const sideOpponents = opponents.slice(Math.min(3, opponents.length));
+          const leftOpp = sideOpponents[0] ?? null;
+          const rightOpp = sideOpponents[1] ?? null;
+          const dangerThreshold = gameState.targetScore - 15;
+          return (
+            <Box flex={1} display="flex" flexDirection="column" overflow="hidden">
+              {/* 3-col grid */}
+              <Box
+                display="grid"
+                gridTemplateColumns="1fr 1fr 1fr"
+                gridTemplateRows="auto 1fr auto"
+                flex={1}
+                overflow="hidden"
+              >
+                {/* dt-top: top opponents */}
+                <Box
+                  gridColumn="1 / -1"
+                  gridRow="1"
+                  display="flex"
+                  justifyContent="center"
+                  gap="10px"
+                  padding="12px 12px 0"
+                >
+                  {topOpponents.map((opp) => (
+                    <DesktopTopOpponent
+                      key={opp.playerId}
+                      player={opp}
+                      playerIndex={playerIndexMap.get(opp.playerId) ?? 0}
+                      isCurrentTurn={
+                        gameState.players[gameState.currentTurnIndex]?.playerId === opp.playerId
+                      }
+                      targetScore={gameState.targetScore}
+                      debugRevealed={debugRevealed}
+                      modifiedSlots={modifiedSlots}
+                    />
+                  ))}
+                </Box>
 
-      {/* ============================================================ */}
+                {/* dt-left */}
+                <Box
+                  gridColumn="1"
+                  gridRow="2"
+                  display="flex"
+                  alignItems="center"
+                  justifyContent="flex-end"
+                  padding="10px 8px 10px 12px"
+                >
+                  {leftOpp && (
+                    <DesktopSideOpponent
+                      player={leftOpp}
+                      playerIndex={playerIndexMap.get(leftOpp.playerId) ?? 0}
+                      isCurrentTurn={
+                        gameState.players[gameState.currentTurnIndex]?.playerId === leftOpp.playerId
+                      }
+                      targetScore={gameState.targetScore}
+                      debugRevealed={debugRevealed}
+                      modifiedSlots={modifiedSlots}
+                    />
+                  )}
+                </Box>
+
+                {/* dt-center: table surface */}
+                <Box
+                  gridColumn="2"
+                  gridRow="2"
+                  display="flex"
+                  alignItems="center"
+                  justifyContent="center"
+                  overflow="hidden"
+                >
+                  <Box
+                    bg="#111820"
+                    borderRadius="14px"
+                    border="0.5px solid #1a2a22"
+                    padding="14px"
+                    display="flex"
+                    flexDirection="column"
+                    gap="12px"
+                    w="100%"
+                  >
+                    {/* Timer */}
+                    {turnTimeLeft !== null &&
+                      gameState.phase === 'playing' &&
+                      (() => {
+                        const pct = turnTimeLeft / TURN_TIMEOUT_SECS;
+                        const timerColor =
+                          pct > 0.6 ? '#4ecb4e' : pct > 0.3 ? '#c9a227' : '#cf5e5e';
+                        const circumference = 2 * Math.PI * 12;
+                        const isPulsing = pct <= 0.3;
+                        const currentTurnPlayer = gameState.players[gameState.currentTurnIndex];
+                        const isMyTurnNow = currentTurnPlayer?.playerId === playerId;
+                        const statusText =
+                          hasDrawnCard && drawnFromDiscard
+                            ? 'tap a hand card to swap'
+                            : hasDrawnCard
+                              ? 'tap hand to swap · tap discard to keep'
+                              : isMyTurnNow
+                                ? `your turn · ${Math.ceil(turnTimeLeft)}s`
+                                : `${currentTurnPlayer?.username ?? ''} · ${Math.ceil(turnTimeLeft)}s`;
+                        return (
+                          <Box
+                            display="flex"
+                            alignItems="center"
+                            gap="10px"
+                            sx={
+                              isPulsing
+                                ? {
+                                    '@keyframes timerPulse': {
+                                      '0%, 100%': { opacity: 1 },
+                                      '50%': { opacity: 0.55 },
+                                    },
+                                    animation: 'timerPulse 1s ease-in-out infinite',
+                                  }
+                                : {}
+                            }
+                          >
+                            <svg
+                              width="30"
+                              height="30"
+                              viewBox="0 0 30 30"
+                              style={{ flexShrink: 0 }}
+                            >
+                              <circle
+                                cx="15"
+                                cy="15"
+                                r="12"
+                                fill="none"
+                                stroke="#1a2a1a"
+                                strokeWidth="2.5"
+                              />
+                              <circle
+                                cx="15"
+                                cy="15"
+                                r="12"
+                                fill="none"
+                                stroke={timerColor}
+                                strokeWidth="2.5"
+                                strokeDasharray={circumference}
+                                strokeDashoffset={circumference * (1 - pct)}
+                                strokeLinecap="round"
+                                transform="rotate(-90 15 15)"
+                                style={{ transition: 'stroke-dashoffset 0.5s linear, stroke 0.5s' }}
+                              />
+                              <text
+                                x="15"
+                                y="19"
+                                textAnchor="middle"
+                                fontSize="9"
+                                fontWeight="600"
+                                fill={timerColor}
+                                fontFamily="Inter, system-ui, sans-serif"
+                              >
+                                {Math.ceil(turnTimeLeft)}
+                              </text>
+                            </svg>
+                            <Box flex={1}>
+                              <Text fontSize="11px" color={timerColor} mb="3px" noOfLines={1}>
+                                {statusText}
+                              </Text>
+                              <Box h="4px" bg="#1a2a1a" borderRadius="3px" overflow="hidden">
+                                <Box
+                                  h="100%"
+                                  borderRadius="3px"
+                                  bg={timerColor}
+                                  w={`${pct * 100}%`}
+                                  style={{ transition: 'width 0.5s linear, background 0.5s' }}
+                                />
+                              </Box>
+                            </Box>
+                          </Box>
+                        );
+                      })()}
+
+                    {/* Burn result feedback */}
+                    {burnBanner && (
+                      <Box
+                        px="14px"
+                        py="6px"
+                        borderRadius="8px"
+                        bg={burnBanner.success ? 'rgba(94,207,94,0.12)' : 'rgba(207,94,94,0.12)'}
+                        border={`1px solid ${burnBanner.success ? '#5ecf5e' : '#cf5e5e'}`}
+                        textAlign="center"
+                      >
+                        <Text
+                          fontSize="13px"
+                          fontWeight="600"
+                          color={burnBanner.success ? '#5ecf5e' : '#cf5e5e'}
+                        >
+                          {burnBanner.success ? '✓ Burned!' : 'X No match! +1 penalty card'}
+                        </Text>
+                      </Box>
+                    )}
+
+                    {/* Pile area */}
+                    <Flex justify="center" align="center" gap="40px">
+                      {/* Draw Pile */}
+                      <VStack spacing="5px">
+                        <Tooltip
+                          label={
+                            canAct &&
+                            !hasDrawnCard &&
+                            turnData?.availableActions.includes('drawDeck')
+                              ? 'Draw from deck'
+                              : hasDrawnCard
+                                ? 'Card already drawn'
+                                : !canAct
+                                  ? 'Not your turn'
+                                  : ''
+                          }
+                          isDisabled={!isDesktop}
+                        >
+                          <Box>
+                            <CardBack
+                              size="lg"
+                              isClickable={
+                                canAct &&
+                                !hasDrawnCard &&
+                                (turnData?.availableActions.includes('drawDeck') ?? false)
+                              }
+                              onClick={handleDrawDeck}
+                            />
+                          </Box>
+                        </Tooltip>
+                        <Text fontSize="10px" color="#444">
+                          draw pile
+                        </Text>
+                      </VStack>
+                      <Text color="#2a2a3a" fontSize="20px">
+                        ⇄
+                      </Text>
+                      <AnimatePresence mode="wait">
+                        {hasDrawnCard && drawnCard && (
+                          <VStack spacing="5px">
+                            <motion.div
+                              key={drawnCardAnimKey}
+                              initial={{ scale: 0.6, opacity: 0, y: -20 }}
+                              animate={{ scale: 1, opacity: 1, y: 0 }}
+                              exit={{ scale: 0.6, opacity: 0, y: 20 }}
+                              transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+                            >
+                              <Box
+                                borderRadius="md"
+                                border="2px solid #c9a227"
+                                boxShadow="0 0 16px rgba(215,172,97,0.5)"
+                                animation="pulse 1.5s ease-in-out infinite"
+                              >
+                                <Card card={drawnCard} size="lg" />
+                              </Box>
+                            </motion.div>
+                            <Text fontSize="10px" color="#c9a227" fontWeight="600">
+                              {drawnFromDiscard ? 'from discard' : 'drawn'}
+                            </Text>
+                          </VStack>
+                        )}
+                      </AnimatePresence>
+                      {/* Discard Pile */}
+                      <VStack spacing="5px">
+                        <Tooltip
+                          label={
+                            hasDrawnCard && drawnFromDiscard
+                              ? 'Must swap with a hand card'
+                              : hasDrawnCard
+                                ? 'Discard drawn card'
+                                : topDiscard?.isBurned
+                                  ? 'Burned card — cannot pick up'
+                                  : canAct && turnData?.availableActions.includes('takeDiscard')
+                                    ? 'Tap to take from discard'
+                                    : !canAct
+                                      ? 'Not your turn'
+                                      : ''
+                          }
+                          isDisabled={!isDesktop}
+                        >
+                          <Box>
+                            {topDiscard ? (
+                              <Box position="relative">
+                                <AnimatePresence mode="wait">
+                                  <motion.div
+                                    key={discardAnimKey}
+                                    initial={{ rotateY: 90, opacity: 0 }}
+                                    animate={{ rotateY: 0, opacity: 1 }}
+                                    exit={{ opacity: 0 }}
+                                    transition={{ duration: 0.25, ease: 'easeOut' }}
+                                    style={{ transformStyle: 'preserve-3d' }}
+                                  >
+                                    <Card
+                                      card={topDiscard}
+                                      size="lg"
+                                      isClickable={
+                                        hasDrawnCard
+                                          ? !drawnFromDiscard
+                                          : canAct &&
+                                            !topDiscard.isBurned &&
+                                            (turnData?.availableActions.includes('takeDiscard') ??
+                                              false)
+                                      }
+                                      onClick={
+                                        hasDrawnCard && !drawnFromDiscard
+                                          ? () => handleDiscardChoice(null)
+                                          : !hasDrawnCard &&
+                                              canAct &&
+                                              !topDiscard.isBurned &&
+                                              turnData?.availableActions.includes('takeDiscard')
+                                            ? handleTakeDiscard
+                                            : undefined
+                                      }
+                                    />
+                                  </motion.div>
+                                </AnimatePresence>
+                                {topDiscard.isBurned && (
+                                  <Box
+                                    position="absolute"
+                                    top="-6px"
+                                    right="-6px"
+                                    bg="warning.a0"
+                                    borderRadius="full"
+                                    w="24px"
+                                    h="24px"
+                                    display="flex"
+                                    alignItems="center"
+                                    justifyContent="center"
+                                    shadow="md"
+                                    border="2px solid"
+                                    borderColor="warning.a10"
+                                  >
+                                    <FireOutlined style={{ fontSize: '12px', color: 'white' }} />
+                                  </Box>
+                                )}
+                              </Box>
+                            ) : (
+                              <Box
+                                w="62px"
+                                h="86px"
+                                borderRadius="8px"
+                                border="2px dashed"
+                                borderColor={
+                                  hasDrawnCard && !drawnFromDiscard ? '#c9a227' : '#2a2a3a'
+                                }
+                                display="flex"
+                                alignItems="center"
+                                justifyContent="center"
+                                cursor={hasDrawnCard && !drawnFromDiscard ? 'pointer' : 'default'}
+                                onClick={
+                                  hasDrawnCard && !drawnFromDiscard
+                                    ? () => handleDiscardChoice(null)
+                                    : undefined
+                                }
+                              >
+                                <Text
+                                  fontSize="9px"
+                                  color={hasDrawnCard && !drawnFromDiscard ? '#c9a227' : '#333'}
+                                >
+                                  {hasDrawnCard && !drawnFromDiscard ? 'discard' : 'empty'}
+                                </Text>
+                              </Box>
+                            )}
+                          </Box>
+                        </Tooltip>
+                        <Text
+                          fontSize="10px"
+                          color={
+                            hasDrawnCard && !drawnFromDiscard && topDiscard ? '#c9a227' : '#444'
+                          }
+                        >
+                          {hasDrawnCard && !drawnFromDiscard ? 'selected' : 'discard'}
+                        </Text>
+                      </VStack>
+                    </Flex>
+
+                    {/* Desktop discard history */}
+                    {discardHistory.length > 0 && (
+                      <Box
+                        display="flex"
+                        alignItems="center"
+                        gap="6px"
+                        flexWrap="nowrap"
+                        overflowX="auto"
+                        sx={{ '&::-webkit-scrollbar': { display: 'none' }, scrollbarWidth: 'none' }}
+                      >
+                        <Box fontSize="8px" color="#444" flexShrink={0}>
+                          last discards:
+                        </Box>
+                        {discardHistory.map((c, i) => {
+                          const isNewest = i === discardHistory.length - 1;
+                          return (
+                            <Box
+                              key={c.id}
+                              w="30px"
+                              h="42px"
+                              borderRadius="4px"
+                              bg="white"
+                              border="0.5px solid #ddd"
+                              display="flex"
+                              alignItems="center"
+                              justifyContent="center"
+                              fontSize="10px"
+                              fontWeight="700"
+                              color={c.isRed ? '#c0392b' : '#222'}
+                              opacity={isNewest ? 1 : 0.35}
+                              flexShrink={0}
+                            >
+                              {c.rank}
+                              {c.suit}
+                            </Box>
+                          );
+                        })}
+                      </Box>
+                    )}
+                  </Box>
+                </Box>
+
+                {/* dt-right */}
+                <Box
+                  gridColumn="3"
+                  gridRow="2"
+                  display="flex"
+                  alignItems="center"
+                  justifyContent="flex-start"
+                  padding="10px 12px 10px 8px"
+                >
+                  {rightOpp && (
+                    <DesktopSideOpponent
+                      player={rightOpp}
+                      playerIndex={playerIndexMap.get(rightOpp.playerId) ?? 0}
+                      isCurrentTurn={
+                        gameState.players[gameState.currentTurnIndex]?.playerId ===
+                        rightOpp.playerId
+                      }
+                      targetScore={gameState.targetScore}
+                      debugRevealed={debugRevealed}
+                      modifiedSlots={modifiedSlots}
+                    />
+                  )}
+                </Box>
+
+                {/* dt-bottom: hand zone */}
+                <Box gridColumn="1 / -1" gridRow="3" padding="0 12px 14px">
+                  <Box
+                    bg="#13131a"
+                    borderRadius="12px"
+                    border="0.5px solid #1e1e2a"
+                    px="16px"
+                    py="12px"
+                  >
+                    {/* hand label */}
+                    <Text
+                      fontSize="10px"
+                      color={hasDrawnCard && drawnFromDiscard ? '#c9a227' : '#555'}
+                      textAlign="center"
+                      textTransform="uppercase"
+                      letterSpacing="0.07em"
+                      fontWeight="500"
+                      mb="8px"
+                    >
+                      {hasDrawnCard && drawnFromDiscard
+                        ? 'pick a slot to replace'
+                        : gameState.phase === 'roundEnd' || gameState.phase === 'gameEnd'
+                          ? 'round over'
+                          : 'your hand'}
+                    </Text>
+                    {hasDrawnCard && drawnFromDiscard && (
+                      <Flex justify="center" mb="8px">
+                        <Box
+                          as="button"
+                          px="12px"
+                          py="4px"
+                          borderRadius="6px"
+                          bg="#1c1c2e"
+                          border="0.5px solid #2a2a3a"
+                          color="#888"
+                          fontSize="12px"
+                          cursor="pointer"
+                          onClick={handleUndoTakeDiscard}
+                          _hover={{ bg: '#222235' }}
+                        >
+                          undo
+                        </Box>
+                      </Flex>
+                    )}
+                    {/* Hand row */}
+                    <Box
+                      overflowX="auto"
+                      overflowY="visible"
+                      pb={3}
+                      sx={{
+                        '&::-webkit-scrollbar': { display: 'none' },
+                        scrollbarWidth: 'none',
+                        msOverflowStyle: 'none',
+                        WebkitOverflowScrolling: 'touch',
+                      }}
+                    >
+                      <HStack
+                        spacing="10px"
+                        justify={myPlayer.hand.length > 4 ? 'flex-start' : 'center'}
+                        w={myPlayer.hand.length > 4 ? 'max-content' : '100%'}
+                        px={myPlayer.hand.length > 4 ? 2 : 0}
+                      >
+                        {myPlayer.hand.map((h: ClientHandSlot, cardIdx: number) => {
+                          const peekedCard = getPeekedCardForSlot(h.slot);
+                          const showFaceUp = isPeekedSlot(h.slot) && peekedCard !== null;
+                          const debugKey = `${playerId}:${h.slot}`;
+                          const debugCard = debugRevealed[debugKey];
+                          const visibleCard = showFaceUp ? peekedCard : (debugCard ?? h.card);
+                          const burnAvailable =
+                            canAct &&
+                            !hasDrawnCard &&
+                            (turnData?.availableActions.includes('burn') ?? false);
+                          const swapAvailable = canAct && hasDrawnCard;
+                          const isClickable = burnAvailable || swapAvailable;
+                          const tooltipLabel = swapAvailable
+                            ? 'Swap with drawn card'
+                            : burnAvailable
+                              ? 'Burn this card'
+                              : '';
+                          const handleClick = () => {
+                            if (swapAvailable) {
+                              handleDiscardChoice(h.slot);
+                            } else if (burnAvailable) {
+                              setPendingBurnSlot(h.slot);
+                            }
+                          };
+                          const isModified =
+                            playerId !== null &&
+                            modifiedSlots.some((m) => m.playerId === playerId && m.slot === h.slot);
+                          return (
+                            <Tooltip
+                              key={h.slot}
+                              label={tooltipLabel}
+                              isDisabled={!isDesktop || !isClickable}
+                            >
+                              <motion.div
+                                key={`${gameState.roundNumber}:${h.slot}`}
+                                initial={{ opacity: 0, y: 20, scale: 0.85 }}
+                                animate={
+                                  burningSlot === h.slot
+                                    ? {
+                                        x: [0, -6, 6, -6, 6, -4, 4, 0],
+                                        rotate: [0, -3, 3, -3, 3, -2, 2, 0],
+                                        opacity: 1,
+                                        y: 0,
+                                        scale: 1,
+                                      }
+                                    : { opacity: 1, y: 0, scale: 1 }
+                                }
+                                transition={
+                                  burningSlot === h.slot
+                                    ? { duration: 0.45, ease: 'easeInOut' }
+                                    : { duration: 0.3, delay: cardIdx * 0.07, ease: 'easeOut' }
+                                }
+                                style={{ display: 'inline-block' }}
+                              >
+                                <Box
+                                  display="flex"
+                                  flexDirection="column"
+                                  alignItems="center"
+                                  gap="4px"
+                                  position="relative"
+                                  flexShrink={0}
+                                >
+                                  <Box
+                                    position="relative"
+                                    overflow="visible"
+                                    borderRadius="md"
+                                    sx={
+                                      isModified
+                                        ? {
+                                            '&::after': {
+                                              content: '""',
+                                              position: 'absolute',
+                                              inset: 0,
+                                              borderRadius: 'md',
+                                              background: '#1a3a2a',
+                                              opacity: 0,
+                                              pointerEvents: 'none',
+                                              zIndex: 2,
+                                              animation: 'bgFlashOverlay 1.5s ease-out forwards',
+                                            },
+                                            '@keyframes bgFlashOverlay': {
+                                              '0%': { opacity: 0 },
+                                              '20%': { opacity: 0.45 },
+                                              '70%': { opacity: 0.45 },
+                                              '100%': { opacity: 0 },
+                                            },
+                                          }
+                                        : {}
+                                    }
+                                  >
+                                    {showFaceUp && peekedCard ? (
+                                      <FlippableCard
+                                        card={peekedCard}
+                                        isFaceUp={true}
+                                        isSelected={true}
+                                        isClickable={isClickable}
+                                        onClick={handleClick}
+                                        size="lg"
+                                      />
+                                    ) : visibleCard ? (
+                                      <Card
+                                        card={visibleCard}
+                                        isSelected={isPeekedSlot(h.slot)}
+                                        isClickable={isClickable}
+                                        onClick={handleClick}
+                                        size="lg"
+                                      />
+                                    ) : (
+                                      <CardBack
+                                        isSelected={isPeekedSlot(h.slot)}
+                                        isKnown={!isPeeking && knownSlots.has(h.slot)}
+                                        isClickable={isClickable}
+                                        onClick={handleClick}
+                                        size="lg"
+                                      />
+                                    )}
+                                  </Box>
+                                  <Text
+                                    fontSize="10px"
+                                    color={
+                                      isPeekedSlot(h.slot)
+                                        ? '#c9a227'
+                                        : pendingBurnSlot === h.slot
+                                          ? '#cf5e5e'
+                                          : '#555'
+                                    }
+                                    fontWeight="500"
+                                  >
+                                    {h.slot}
+                                  </Text>
+                                </Box>
+                              </motion.div>
+                            </Tooltip>
+                          );
+                        })}
+                      </HStack>
+                    </Box>
+                    <Text fontSize="11px" color="#555" textAlign="center" mt="6px">
+                      {gameState.phase === 'peeking'
+                        ? 'memorize your cards'
+                        : hasDrawnCard && drawnFromDiscard
+                          ? 'tap a slot to place the discard card · tap discard again to cancel'
+                          : hasDrawnCard
+                            ? 'tap hand to swap · tap discard to keep hand'
+                            : 'tap draw pile · tap discard then hand · tap hand card to burn'}
+                    </Text>
+                  </Box>
+                </Box>
+              </Box>
+
+              {/* Desktop score strip */}
+              <Box
+                bg="#0a0a10"
+                borderTop="0.5px solid #1a1a24"
+                px="12px"
+                py="8px"
+                pb="12px"
+                display="flex"
+                gap="6px"
+                flexWrap="wrap"
+                flexShrink={0}
+              >
+                {/* "You" pill */}
+                <Box
+                  bg="#1a1a26"
+                  border="0.5px solid #2a2a3a"
+                  borderRadius="20px"
+                  px="10px"
+                  py="4px"
+                  fontSize="11px"
+                  display="flex"
+                  alignItems="center"
+                  gap="6px"
+                >
+                  <Box
+                    w="6px"
+                    h="6px"
+                    borderRadius="full"
+                    bg={getAvatarColors(myPlayerIndex).dot}
+                    flexShrink={0}
+                  />
+                  <Box as="span" color="#7a7aee">
+                    You · {myPlayer.totalScore}
+                  </Box>
+                </Box>
+                {opponents.map((opp) => {
+                  const oppIdx = playerIndexMap.get(opp.playerId) ?? 0;
+                  const av = getAvatarColors(oppIdx);
+                  const isDanger = opp.totalScore >= dangerThreshold;
+                  return (
+                    <Box
+                      key={opp.playerId}
+                      bg="#1a1a26"
+                      border="0.5px solid #2a2a3a"
+                      borderRadius="20px"
+                      px="10px"
+                      py="4px"
+                      fontSize="11px"
+                      display="flex"
+                      alignItems="center"
+                      gap="6px"
+                    >
+                      <Box w="6px" h="6px" borderRadius="full" bg={av.dot} flexShrink={0} />
+                      <Box as="span" color={isDanger ? '#cf5e5e' : '#aaa'}>
+                        {opp.username} · {opp.totalScore}
+                        {isDanger ? ' !' : ''}
+                      </Box>
+                    </Box>
+                  );
+                })}
+              </Box>
+            </Box>
+          );
+        })()}
       {/* Burn Confirmation Modal                                       */}
       {/* ============================================================ */}
       <Modal
@@ -1855,7 +3199,6 @@ export const GameBoard: FC = () => {
           </ModalFooter>
         </ModalContent>
       </Modal>
-
       {/* ============================================================ */}
       {/* Red Jack Modal (F-049) — Blind swap with opponent             */}
       {/* ============================================================ */}
@@ -1969,7 +3312,6 @@ export const GameBoard: FC = () => {
           </ModalFooter>
         </ModalContent>
       </Modal>
-
       {/* ============================================================ */}
       {/* Red Queen Modal (F-050) — Peek at own card                    */}
       {/* ============================================================ */}
@@ -2033,7 +3375,6 @@ export const GameBoard: FC = () => {
           <ModalFooter />
         </ModalContent>
       </Modal>
-
       {/* ============================================================ */}
       {/* Red King Modal (F-051 to F-053) — Draw 2, choose action       */}
       {/* ============================================================ */}
@@ -2047,14 +3388,50 @@ export const GameBoard: FC = () => {
         motionPreset="slideInBottom"
       >
         <ModalOverlay bg="blackAlpha.700" />
-        <ModalContent bg="table.border" color="white">
-          <ModalHeader>
-            <HStack>
-              <Text>{'\u2666'}</Text>
-              <Text>Red King — Draw 2</Text>
+        <ModalContent bg="#1c1c28" color="white" border="0.5px solid #2a2a3a">
+          <ModalHeader pb={2}>
+            {/* Drag handle */}
+            <Box w="36px" h="3px" bg="#333" borderRadius="2px" mx="auto" mb="14px" />
+            <HStack spacing={2} mb={1}>
+              <Text color="#c0392b" fontSize="18px">
+                ♦
+              </Text>
+              <Text fontSize="15px" fontWeight="600" color="#eee">
+                Red King — Draw 2
+              </Text>
             </HStack>
-            <Text fontSize="xs" color="gray.400" fontWeight="normal" mt={1}>
+            <Text fontSize="12px" color="#555" fontWeight="normal">
               You drew 2 cards. Choose what to do with them.
+            </Text>
+            {/* RS-002: Step indicator */}
+            <HStack spacing={2} mt={3}>
+              <Box
+                h="3px"
+                flex={1}
+                borderRadius="2px"
+                bg={kingMode ? '#c9a227' : '#2a2a3a'}
+                transition="background 0.2s"
+              />
+              <Box
+                h="3px"
+                flex={1}
+                borderRadius="2px"
+                bg={
+                  (kingMode === 'keepOne' && kingKeepIndex !== null && kingReplaceSlot) ||
+                  (kingMode === 'keepBoth' && kingReplaceSlots[0] && kingReplaceSlots[1]) ||
+                  kingMode === 'returnBoth'
+                    ? '#c9a227'
+                    : '#2a2a3a'
+                }
+                transition="background 0.2s"
+              />
+            </HStack>
+            <Text fontSize="10px" color="#555" mt={1}>
+              {!kingMode
+                ? 'Step 1 of 2 — choose an action'
+                : kingMode === 'returnBoth'
+                  ? 'Step 2 of 2 — confirm'
+                  : 'Step 2 of 2 — select slots'}
             </Text>
           </ModalHeader>
           <ModalBody>
@@ -2067,94 +3444,101 @@ export const GameBoard: FC = () => {
                       <Box
                         border="2px solid"
                         borderColor={
-                          kingMode === 'keepOne' && kingKeepIndex === i ? 'warning.a10' : 'gray.500'
+                          kingMode === 'keepOne' && kingKeepIndex === i ? '#c9a227' : '#2a2a3a'
+                        }
+                        boxShadow={
+                          kingMode === 'keepOne' && kingKeepIndex === i
+                            ? '0 0 0 1px #c9a22740'
+                            : 'none'
                         }
                         borderRadius="md"
                         cursor={kingMode === 'keepOne' ? 'pointer' : 'default'}
                         onClick={() => {
                           if (kingMode === 'keepOne') setKingKeepIndex(i as 0 | 1);
                         }}
-                        shadow={
-                          kingMode === 'keepOne' && kingKeepIndex === i
-                            ? '0 0 12px rgba(215, 172, 97, 0.5)'
-                            : 'none'
-                        }
+                        transition="border-color 0.15s, box-shadow 0.15s"
                       >
                         <Card card={c} size="md" />
                       </Box>
-                      <Badge
-                        colorScheme={
-                          kingMode === 'keepOne' && kingKeepIndex === i ? 'yellow' : 'gray'
-                        }
-                        fontSize="xs"
+                      <Text
+                        fontSize="11px"
+                        fontWeight="600"
+                        color={kingMode === 'keepOne' && kingKeepIndex === i ? '#c9a227' : '#555'}
                       >
                         Card {i + 1}
-                      </Badge>
+                      </Text>
                     </VStack>
                   ))}
                 </HStack>
               )}
 
-              {/* Mode selection */}
+              {/* RS-002: Mode selection — all neutral outline, no color bias */}
               <HStack spacing={2} justify="center" flexWrap="wrap">
-                <Button
-                  size="sm"
-                  variant={kingMode === 'returnBoth' ? 'solid' : 'outline'}
-                  colorScheme={kingMode === 'returnBoth' ? 'red' : 'gray'}
-                  onClick={() => {
-                    setKingMode('returnBoth');
-                    setKingKeepIndex(null);
-                    setKingReplaceSlot(null);
-                    setKingReplaceSlots([null, null]);
-                  }}
-                >
-                  Return Both
-                </Button>
-                <Button
-                  size="sm"
-                  variant={kingMode === 'keepOne' ? 'solid' : 'outline'}
-                  colorScheme={kingMode === 'keepOne' ? 'yellow' : 'gray'}
-                  onClick={() => {
-                    setKingMode('keepOne');
-                    setKingKeepIndex(null);
-                    setKingReplaceSlot(null);
-                    setKingReplaceSlots([null, null]);
-                  }}
-                >
-                  Keep 1
-                </Button>
-                <Button
-                  size="sm"
-                  variant={kingMode === 'keepBoth' ? 'solid' : 'outline'}
-                  colorScheme={kingMode === 'keepBoth' ? 'green' : 'gray'}
-                  onClick={() => {
-                    setKingMode('keepBoth');
-                    setKingKeepIndex(null);
-                    setKingReplaceSlot(null);
-                    setKingReplaceSlots([null, null]);
-                  }}
-                >
-                  Keep Both
-                </Button>
+                {(['returnBoth', 'keepOne', 'keepBoth'] as const).map((mode) => {
+                  const labels = {
+                    returnBoth: 'Return Both',
+                    keepOne: 'Keep 1',
+                    keepBoth: 'Keep Both',
+                  };
+                  const isActive = kingMode === mode;
+                  return (
+                    <Box
+                      key={mode}
+                      as="button"
+                      flex={1}
+                      h="44px"
+                      borderRadius="8px"
+                      bg={isActive ? '#1f1a0a' : '#16162a'}
+                      border={`1px solid ${isActive ? '#c9a227' : '#2a2a4a'}`}
+                      color={isActive ? '#c9a227' : '#777'}
+                      fontSize="13px"
+                      fontWeight="600"
+                      cursor="pointer"
+                      transition="border-color 0.15s, color 0.15s, background 0.15s"
+                      onClick={() => {
+                        setKingMode(mode);
+                        setKingKeepIndex(null);
+                        setKingReplaceSlot(null);
+                        setKingReplaceSlots([null, null]);
+                      }}
+                    >
+                      {labels[mode]}
+                    </Box>
+                  );
+                })}
               </HStack>
 
               {/* Keep One: select which drawn card + which hand slot */}
               {kingMode === 'keepOne' && (
                 <VStack spacing={3} align="stretch">
-                  <Text fontSize="sm" color="gray.300">
-                    Click a drawn card above to select it, then pick a hand slot to replace:
+                  <Text
+                    fontSize="11px"
+                    color="#444"
+                    fontWeight="500"
+                    textTransform="uppercase"
+                    letterSpacing="0.05em"
+                  >
+                    Select slot to replace
                   </Text>
                   <HStack spacing={2} flexWrap="wrap">
                     {myPlayer.hand.map((h) => (
-                      <Button
+                      <Box
                         key={h.slot}
-                        size="sm"
-                        variant={kingReplaceSlot === h.slot ? 'solid' : 'outline'}
-                        colorScheme={kingReplaceSlot === h.slot ? 'yellow' : 'gray'}
+                        as="button"
+                        flex={1}
+                        h="44px"
+                        borderRadius="8px"
+                        bg={kingReplaceSlot === h.slot ? '#1f1a0a' : '#16162a'}
+                        border={`1px solid ${kingReplaceSlot === h.slot ? '#c9a227' : '#2a2a4a'}`}
+                        color={kingReplaceSlot === h.slot ? '#c9a227' : '#777'}
+                        fontSize="14px"
+                        fontWeight="600"
+                        cursor="pointer"
+                        transition="border-color 0.15s, color 0.15s, background 0.15s"
                         onClick={() => setKingReplaceSlot(h.slot)}
                       >
                         {h.slot}
-                      </Button>
+                      </Box>
                     ))}
                   </HStack>
                 </VStack>
@@ -2163,8 +3547,14 @@ export const GameBoard: FC = () => {
               {/* Keep Both: select 2 hand slots */}
               {kingMode === 'keepBoth' && (
                 <VStack spacing={3} align="stretch">
-                  <Text fontSize="sm" color="gray.300">
-                    Select 2 hand slots to replace (Card 1 goes to first, Card 2 to second):
+                  <Text
+                    fontSize="11px"
+                    color="#444"
+                    fontWeight="500"
+                    textTransform="uppercase"
+                    letterSpacing="0.05em"
+                  >
+                    Select 2 slots to replace
                   </Text>
                   <HStack spacing={2} flexWrap="wrap">
                     {myPlayer.hand.map((h) => {
@@ -2172,11 +3562,19 @@ export const GameBoard: FC = () => {
                       const isSecond = kingReplaceSlots[1] === h.slot;
                       const isSelected = isFirst || isSecond;
                       return (
-                        <Button
+                        <Box
                           key={h.slot}
-                          size="sm"
-                          variant={isSelected ? 'solid' : 'outline'}
-                          colorScheme={isFirst ? 'green' : isSecond ? 'blue' : 'gray'}
+                          as="button"
+                          flex={1}
+                          h="44px"
+                          borderRadius="8px"
+                          bg={isSelected ? '#1f1a0a' : '#16162a'}
+                          border={`1px solid ${isSelected ? '#c9a227' : '#2a2a4a'}`}
+                          color={isSelected ? '#c9a227' : '#777'}
+                          fontSize="13px"
+                          fontWeight="600"
+                          cursor="pointer"
+                          transition="border-color 0.15s, color 0.15s"
                           onClick={() => {
                             if (isFirst) {
                               setKingReplaceSlots([null, kingReplaceSlots[1]]);
@@ -2191,17 +3589,50 @@ export const GameBoard: FC = () => {
                         >
                           {h.slot}
                           {isFirst ? ' (1)' : isSecond ? ' (2)' : ''}
-                        </Button>
+                        </Box>
                       );
                     })}
                   </HStack>
                 </VStack>
               )}
+
+              {/* RS-002: Helper text when selections incomplete */}
+              {kingMode &&
+                kingMode !== 'returnBoth' &&
+                !(kingMode === 'keepOne' && kingKeepIndex !== null && kingReplaceSlot) &&
+                !(kingMode === 'keepBoth' && kingReplaceSlots[0] && kingReplaceSlots[1]) && (
+                  <Text fontSize="11px" color="#555" textAlign="center">
+                    {kingMode === 'keepOne'
+                      ? 'Select a card above and a slot to continue.'
+                      : 'Select 2 slots to continue.'}
+                  </Text>
+                )}
             </VStack>
           </ModalBody>
-          <ModalFooter>
+          <ModalFooter gap={2}>
             <Button
-              colorScheme="green"
+              flex={1}
+              py="10px"
+              borderRadius="8px"
+              bg="#1c1c2e"
+              color="#666"
+              fontSize="13px"
+              fontWeight="600"
+              _hover={{ bg: '#22222e' }}
+              isDisabled={kingLoading}
+            >
+              {/* No cancel for Red King — must choose */}
+            </Button>
+            <Button
+              flex={1}
+              py="10px"
+              borderRadius="8px"
+              bg="#c9a227"
+              color="#1a1200"
+              fontSize="13px"
+              fontWeight="600"
+              _hover={{ bg: '#b8911e' }}
+              _disabled={{ opacity: 0.35, cursor: 'not-allowed' }}
               onClick={handleKingSubmit}
               isLoading={kingLoading}
               isDisabled={
@@ -2215,7 +3646,6 @@ export const GameBoard: FC = () => {
           </ModalFooter>
         </ModalContent>
       </Modal>
-
       {/* ============================================================ */}
       {/* Round End Modal (F-070) — Show all hands and scores           */}
       {/* ============================================================ */}
@@ -2440,12 +3870,10 @@ export const GameBoard: FC = () => {
           </ModalFooter>
         </ModalContent>
       </Modal>
-
       {/* ============================================================ */}
       {/* F-309: Victory confetti — shown when current player wins      */}
       {/* ============================================================ */}
       {gameEndData !== null && gameEndData.winner.playerId === playerId && <ConfettiOverlay />}
-
       {/* ============================================================ */}
       {/* Game End Modal (F-075) — Final scores, winner, loser          */}
       {/* ============================================================ */}

@@ -1,0 +1,622 @@
+
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+.tabs {
+  display: flex; gap: 5px; padding: 1rem 1rem 0; flex-wrap: wrap;
+  border-bottom: 0.5px solid var(--color-border-tertiary);
+}
+.tab {
+  padding: 6px 13px; font-size: 12px; border-radius: 6px 6px 0 0;
+  border: 0.5px solid var(--color-border-tertiary); border-bottom: none;
+  background: var(--color-background-secondary);
+  color: var(--color-text-secondary); cursor: pointer;
+}
+.tab.active { background: var(--color-background-primary); color: var(--color-text-primary); font-weight: 500; }
+.screen { display: none; padding: 1rem; }
+.screen.active { display: block; }
+
+/* ─── MOBILE PHONE ─── */
+.phone {
+  width: 300px; margin: 0 auto;
+  background: #0f0f16; border-radius: 28px; border: 1px solid #2a2a3a;
+  overflow: hidden; display: flex; flex-direction: column; min-height: 620px;
+}
+.top-bar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 9px 13px; background: #13131a; border-bottom: 0.5px solid #1e1e2a;
+  flex-shrink: 0;
+}
+.round-lbl { font-size: 11px; color: #aaa; font-weight: 500; }
+.check-btn { padding: 3px 10px; border-radius: 5px; background: #c9a227; color: #1a1200; font-size: 11px; font-weight: 700; border: none; }
+.menu-ic { color: #444; font-size: 14px; }
+
+/* Opponent rows */
+.opp-section { background: #0d0d14; padding: 7px 10px; flex-shrink: 0; }
+.opp-row { display: flex; gap: 6px; margin-bottom: 5px; }
+.opp-row:last-child { margin-bottom: 0; }
+.opp-chip {
+  flex: 1; background: #1a1a26; border: 0.5px solid #2a2a3a;
+  border-radius: 8px; padding: 6px 8px;
+  display: flex; align-items: center; gap: 6px; min-width: 0;
+}
+.opp-chip.active-turn { border-color: #c9a22780; background: #1e1a0a; }
+.opp-chip.low-score { border-color: #cf5e5e60; }
+.opp-avatar {
+  width: 22px; height: 22px; border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 9px; font-weight: 700;
+}
+.av-green { background: #1a3a2a; color: #5ecf5e; }
+.av-blue  { background: #1a1a3a; color: #7a7aee; }
+.av-red   { background: #3a1a1a; color: #cf5e5e; }
+.av-gold  { background: #2a1f00; color: #c9a227; }
+.av-teal  { background: #0a2a2a; color: #5ecfcf; }
+.opp-info { flex: 1; min-width: 0; }
+.opp-name { font-size: 10px; color: #ccc; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.opp-score-sm { font-size: 9px; color: #555; }
+.opp-cards-sm { display: flex; gap: 2px; align-items: center; flex-shrink: 0; }
+.mini-c { width: 10px; height: 14px; border-radius: 2px; background: #2a2a4a; border: 0.5px solid #3a3a5a; }
+.card-num { font-size: 9px; color: #444; font-weight: 600; }
+.turn-dot { width: 5px; height: 5px; border-radius: 50%; background: #c9a227; flex-shrink: 0; }
+
+/* Table center */
+.table-center {
+  flex: 1; background: #0a0a10; display: flex; flex-direction: column;
+  justify-content: center; align-items: center; padding: 10px 12px; gap: 8px;
+}
+.table-surface {
+  width: 100%; background: #12181a; border-radius: 12px;
+  border: 0.5px solid #1a2a22; padding: 10px 12px;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.timer-row { display: flex; align-items: center; gap: 8px; }
+.timer-bar-wrap { flex: 1; height: 4px; background: #1a2a1a; border-radius: 2px; overflow: hidden; }
+.timer-bar { height: 100%; border-radius: 2px; }
+.pile-area { display: flex; align-items: center; justify-content: center; gap: 20px; }
+.pile-slot { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.pile-label { font-size: 9px; color: #444; }
+.card-back {
+  width: 46px; height: 64px; border-radius: 6px;
+  background: #2a2a4a; border: 1px solid #3a3a5a;
+  display: flex; align-items: center; justify-content: center;
+}
+.card-face {
+  width: 46px; height: 64px; border-radius: 6px;
+  background: #fff; border: 1px solid #ddd;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  position: relative; font-weight: 700; font-size: 16px; color: #c0392b;
+}
+.cf-corner { position: absolute; font-size: 8px; font-weight: 700; line-height: 1.1; color: #c0392b; }
+.cf-corner.tl { top: 3px; left: 4px; }
+.cf-corner.br { bottom: 3px; right: 4px; transform: rotate(180deg); }
+
+/* Discard history */
+.discard-history { display: flex; gap: 4px; align-items: center; }
+.hist-label { font-size: 9px; color: #333; flex-shrink: 0; }
+.hist-card {
+  width: 22px; height: 30px; border-radius: 3px;
+  background: #fff; border: 0.5px solid #ddd;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 8px; font-weight: 700;
+}
+.hist-card.red { color: #c0392b; }
+.hist-card.black { color: #222; }
+.hist-card.faded { opacity: 0.4; }
+
+/* Player hand */
+.player-zone { padding: 8px 10px 12px; background: #13131a; flex-shrink: 0; }
+.hand-label { font-size: 9px; color: #444; text-align: center; text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 6px; }
+.hand-row { display: flex; gap: 6px; justify-content: center; }
+.hcard-wrap { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+.hcard {
+  width: 46px; height: 64px; border-radius: 6px;
+  background: #2a2a4a; border: 1px solid #3a3a5a;
+  position: relative; cursor: pointer;
+}
+.hcard.known { border-color: #c9a227; }
+.eye-b {
+  position: absolute; top: 2px; right: 2px;
+  width: 12px; height: 12px; background: #c9a227;
+  border-radius: 50%; display: flex; align-items: center; justify-content: center;
+}
+.slot-l { font-size: 9px; color: #444; font-weight: 500; }
+.hint-sm { font-size: 9px; color: #333; text-align: center; margin-top: 4px; }
+
+/* score bar */
+.score-bar {
+  display: flex; gap: 4px; align-items: center; justify-content: center;
+  padding: 4px 10px; background: #0d0d14;
+}
+.score-pill {
+  padding: 2px 7px; border-radius: 10px;
+  font-size: 9px; font-weight: 600;
+  background: #1a1a28; color: #555;
+  border: 0.5px solid #2a2a3a;
+}
+.score-pill.you { background: #1a1a3a; color: #7a7aee; border-color: #3a3a7a; }
+.score-pill.low { background: #3a1a1a; color: #cf5e5e; border-color: #5a2a2a; }
+
+/* ─── DESKTOP ─── */
+.desktop-frame {
+  width: 100%; max-width: 780px; margin: 0 auto;
+  background: #0a0a10; border-radius: 16px; border: 1px solid #1e1e2a;
+  overflow: hidden;
+}
+.desktop-topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 16px; background: #13131a; border-bottom: 0.5px solid #1e1e2a;
+}
+.desktop-round { font-size: 12px; color: #aaa; font-weight: 500; }
+.desktop-check { padding: 4px 14px; border-radius: 6px; background: #c9a227; color: #1a1200; font-size: 12px; font-weight: 700; border: none; cursor: pointer; }
+.desktop-menu { color: #444; font-size: 14px; cursor: pointer; }
+
+.desktop-body {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-rows: auto 1fr auto;
+  gap: 0;
+  min-height: 520px;
+}
+
+/* oval table positioning */
+.dt-top { grid-column: 1/-1; display: flex; justify-content: center; padding: 12px 12px 0; gap: 10px; }
+.dt-left { grid-column: 1; grid-row: 2; display: flex; flex-direction: column; justify-content: center; gap: 10px; padding: 10px 8px 10px 12px; }
+.dt-right { grid-column: 3; grid-row: 2; display: flex; flex-direction: column; justify-content: center; gap: 10px; padding: 10px 12px 10px 8px; }
+.dt-center { grid-column: 2; grid-row: 2; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 10px 6px; }
+.dt-bottom { grid-column: 1/-1; grid-row: 3; padding: 0 12px 14px; }
+
+/* desktop opponent card */
+.dt-opp {
+  background: #1a1a26; border: 0.5px solid #2a2a3a;
+  border-radius: 10px; padding: 8px 10px;
+  display: flex; align-items: center; gap: 8px;
+}
+.dt-opp.active-turn { border-color: #c9a22780; background: #1e1b0c; }
+.dt-opp.low-score { border-color: #cf5e5e60; }
+.dt-avatar {
+  width: 30px; height: 30px; border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 700;
+}
+.dt-opp-info { flex: 1; min-width: 0; }
+.dt-opp-name { font-size: 12px; color: #ccc; font-weight: 500; }
+.dt-opp-score { font-size: 11px; color: #555; }
+.dt-opp-cards { display: flex; gap: 3px; flex-wrap: wrap; margin-top: 5px; }
+.dt-mini-c { width: 16px; height: 22px; border-radius: 3px; background: #2a2a4a; border: 0.5px solid #3a3a5a; }
+.dt-mini-c.known-back { background: #2a3a2a; border-color: #3a5a3a; }
+
+/* top opponents arranged in arc */
+.dt-top-opp {
+  background: #1a1a26; border: 0.5px solid #2a2a3a;
+  border-radius: 10px; padding: 8px 12px;
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  min-width: 110px;
+}
+.dt-top-opp.active-turn { border-color: #c9a22780; background: #1e1b0c; }
+.dt-top-opp-header { display: flex; align-items: center; gap: 6px; }
+.dt-top-opp-cards { display: flex; gap: 3px; }
+.dt-top-name { font-size: 11px; color: #ccc; font-weight: 500; }
+.dt-top-score { font-size: 10px; color: #555; }
+
+/* Desktop table */
+.dt-table-surface {
+  width: 100%; background: #111820; border-radius: 14px;
+  border: 0.5px solid #1a2a22; padding: 14px;
+  display: flex; flex-direction: column; gap: 12px;
+}
+.dt-pile-area { display: flex; align-items: center; justify-content: center; gap: 24px; }
+.dt-card-back {
+  width: 62px; height: 86px; border-radius: 8px;
+  background: #2a2a4a; border: 1px solid #3a3a5a;
+  display: flex; align-items: center; justify-content: center; cursor: pointer;
+}
+.dt-card-face {
+  width: 62px; height: 86px; border-radius: 8px;
+  background: #fff; border: 1px solid #ddd;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  position: relative; font-weight: 700; font-size: 20px; cursor: pointer;
+}
+.dt-cf-c { position: absolute; font-size: 10px; font-weight: 700; line-height: 1.1; }
+.dt-cf-c.tl { top: 4px; left: 5px; }
+.dt-cf-c.br { bottom: 4px; right: 5px; transform: rotate(180deg); }
+
+.dt-discard-history {
+  display: flex; gap: 5px; align-items: center; justify-content: center;
+}
+.dt-hist-label { font-size: 10px; color: #333; flex-shrink: 0; }
+.dt-hist-c {
+  width: 30px; height: 42px; border-radius: 4px;
+  background: #fff; border: 0.5px solid #ddd;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10px; font-weight: 700;
+}
+.dt-hist-c.red { color: #c0392b; }
+.dt-hist-c.black { color: #222; }
+.dt-hist-c.faded { opacity: 0.35; }
+
+.dt-timer-row { display: flex; align-items: center; gap: 10px; }
+.dt-tbar-wrap { flex: 1; height: 5px; background: #1a2a1a; border-radius: 3px; overflow: hidden; }
+.dt-tbar { height: 100%; border-radius: 3px; }
+
+/* Desktop hand */
+.dt-hand-zone { width: 100%; }
+.dt-hand-label { font-size: 10px; color: #444; text-align: center; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 8px; font-weight: 500; }
+.dt-hand-row { display: flex; gap: 10px; justify-content: center; }
+.dt-hcard-wrap { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.dt-hcard {
+  width: 64px; height: 88px; border-radius: 8px;
+  background: #2a2a4a; border: 1px solid #3a3a5a;
+  position: relative; cursor: pointer; transition: transform 0.1s;
+}
+.dt-hcard:hover { transform: translateY(-4px); border-color: #5a5a8a; }
+.dt-hcard.known { border-color: #c9a227; }
+.dt-hcard.known:hover { transform: translateY(-4px); }
+.dt-eye-b {
+  position: absolute; top: 3px; right: 3px;
+  width: 14px; height: 14px; background: #c9a227;
+  border-radius: 50%; display: flex; align-items: center; justify-content: center;
+}
+.dt-slot-l { font-size: 11px; color: #444; font-weight: 500; }
+.dt-hint { font-size: 11px; color: #2a2a3a; text-align: center; margin-top: 4px; }
+
+/* scores strip */
+.dt-scores-strip {
+  display: flex; gap: 6px; align-items: center; justify-content: center;
+  padding: 8px 12px 12px; background: #0a0a10;
+  border-top: 0.5px solid #1a1a24;
+  flex-wrap: wrap;
+}
+.dt-score-pill {
+  display: flex; align-items: center; gap: 5px;
+  padding: 4px 10px; border-radius: 20px;
+  background: #1a1a26; border: 0.5px solid #2a2a3a;
+  font-size: 11px;
+}
+.dt-score-pill .sname { color: #888; }
+.dt-score-pill .sval { color: #555; font-weight: 600; }
+.dt-score-pill.you .sname { color: #7a7aee; }
+.dt-score-pill.you .sval { color: #9a9aee; }
+.dt-score-pill.low .sname { color: #cf5e5e; }
+.dt-score-pill.low .sval { color: #cf5e5e; }
+.dt-score-pill .sdot { width: 6px; height: 6px; border-radius: 50%; }
+
+.annotation {
+  font-size: 11px; color: var(--color-text-secondary);
+  margin-top: 8px; text-align: center; line-height: 1.7;
+}
+.annotation strong { color: #c9a227; font-weight: 500; }
+
+.eyesvg { width: 7px; height: 7px; }
+</style>
+
+<div class="tabs">
+  <div class="tab active" onclick="sw('mobile6')">mobile · 6 players</div>
+  <div class="tab" onclick="sw('desktop')">desktop · 6 players</div>
+</div>
+
+<!-- ══════════════ MOBILE 6-PLAYER ══════════════ -->
+<div class="screen active" id="screen-mobile6">
+  <div class="phone">
+    <div class="top-bar">
+      <span class="round-lbl">Round: 1</span>
+      <button class="check-btn">CHECK</button>
+      <span class="menu-ic">☰</span>
+    </div>
+
+    <!-- Row 1: 2 opponents -->
+    <div class="opp-section" style="padding-bottom:4px;">
+      <div style="display:flex;gap:4px;justify-content:space-between;font-size:8px;color:#333;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:4px;padding:0 2px;">
+        <span>opponents</span><span>5 others</span>
+      </div>
+      <div class="opp-row">
+        <div class="opp-chip active-turn">
+          <div class="opp-avatar av-green">AL</div>
+          <div class="opp-info">
+            <div class="opp-name">Alex</div>
+            <div class="opp-score-sm">14 pts</div>
+          </div>
+          <div class="turn-dot"></div>
+          <div class="opp-cards-sm">
+            <div class="mini-c"></div><div class="mini-c"></div><div class="mini-c"></div><div class="mini-c"></div>
+            <div class="card-num">4</div>
+          </div>
+        </div>
+        <div class="opp-chip">
+          <div class="opp-avatar av-blue">MI</div>
+          <div class="opp-info">
+            <div class="opp-name">Mila</div>
+            <div class="opp-score-sm">0 pts</div>
+          </div>
+          <div class="opp-cards-sm">
+            <div class="mini-c"></div><div class="mini-c"></div><div class="mini-c"></div>
+            <div class="card-num">3</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Row 2: 3 opponents -->
+      <div class="opp-row" style="margin-bottom:0;">
+        <div class="opp-chip">
+          <div class="opp-avatar av-red">JO</div>
+          <div class="opp-info">
+            <div class="opp-name">Jo</div>
+            <div class="opp-score-sm">22 pts</div>
+          </div>
+          <div class="opp-cards-sm"><div class="mini-c"></div><div class="mini-c"></div><div class="mini-c"></div><div class="mini-c"></div><div class="card-num">4</div></div>
+        </div>
+        <div class="opp-chip low-score">
+          <div class="opp-avatar av-teal">KA</div>
+          <div class="opp-info">
+            <div class="opp-name">Kai</div>
+            <div class="opp-score-sm" style="color:#cf5e5e;">87 pts !</div>
+          </div>
+          <div class="opp-cards-sm"><div class="mini-c"></div><div class="mini-c"></div><div class="card-num">2</div></div>
+        </div>
+        <div class="opp-chip">
+          <div class="opp-avatar av-gold">NA</div>
+          <div class="opp-info">
+            <div class="opp-name">Nao</div>
+            <div class="opp-score-sm">5 pts</div>
+          </div>
+          <div class="opp-cards-sm"><div class="mini-c"></div><div class="mini-c"></div><div class="mini-c"></div><div class="mini-c"></div><div class="card-num">4</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Score bar -->
+    <div class="score-bar">
+      <div class="score-pill you">You · 0</div>
+      <div class="score-pill">Alex · 14</div>
+      <div class="score-pill">Mila · 0</div>
+      <div class="score-pill">Jo · 22</div>
+      <div class="score-pill low">Kai · 87</div>
+      <div class="score-pill">Nao · 5</div>
+    </div>
+
+    <!-- Table center -->
+    <div class="table-center">
+      <div class="table-surface">
+        <div class="timer-row">
+          <svg width="30" height="30" viewBox="0 0 30 30">
+            <circle cx="15" cy="15" r="12" fill="none" stroke="#1a2a1a" stroke-width="2.5"/>
+            <circle cx="15" cy="15" r="12" fill="none" stroke="#4ecb4e" stroke-width="2.5"
+              stroke-dasharray="75.4" stroke-dashoffset="20" stroke-linecap="round"
+              transform="rotate(-90 15 15)"/>
+            <text x="15" y="19" text-anchor="middle" font-size="9" font-weight="600" fill="#4ecb4e">28</text>
+          </svg>
+          <div style="flex:1;">
+            <div style="font-size:10px;color:#5ecf5e;margin-bottom:3px;">your turn · 28s</div>
+            <div class="timer-bar-wrap"><div class="timer-bar" style="width:75%;background:#4ecb4e;"></div></div>
+          </div>
+        </div>
+
+        <div class="pile-area">
+          <div class="pile-slot">
+            <div class="card-back"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3a3a6a" stroke-width="1.5"><rect x="3" y="4" width="18" height="16" rx="2"/></svg></div>
+            <div class="pile-label">draw · 38 left</div>
+          </div>
+          <div style="color:#252535;font-size:16px;">⇄</div>
+          <div class="pile-slot">
+            <div class="card-face">
+              <div class="cf-corner tl">Q<br>♦</div>
+              <div style="font-size:14px;color:#c0392b;">♦</div>
+              <div class="cf-corner br">Q<br>♦</div>
+            </div>
+            <div class="pile-label">discard</div>
+          </div>
+        </div>
+
+        <div class="discard-history">
+          <div class="hist-label">recent:</div>
+          <div class="hist-card red faded">7♥</div>
+          <div class="hist-card black faded">K♠</div>
+          <div class="hist-card red faded">3♦</div>
+          <div class="hist-card black faded">J♣</div>
+          <div class="hist-card red" style="font-size:7px;font-weight:700;">Q♦</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Player hand -->
+    <div class="player-zone">
+      <div class="hand-label">your hand</div>
+      <div class="hand-row">
+        <div class="hcard-wrap">
+          <div class="hcard known"><div class="eye-b"><svg class="eyesvg" viewBox="0 0 10 7" fill="none"><ellipse cx="5" cy="3.5" rx="4" ry="2.5" stroke="white" stroke-width="1"/><circle cx="5" cy="3.5" r="1.2" fill="white"/></svg></div></div>
+          <div class="slot-l">A</div>
+        </div>
+        <div class="hcard-wrap"><div class="hcard"></div><div class="slot-l">B</div></div>
+        <div class="hcard-wrap">
+          <div class="hcard known"><div class="eye-b"><svg class="eyesvg" viewBox="0 0 10 7" fill="none"><ellipse cx="5" cy="3.5" rx="4" ry="2.5" stroke="white" stroke-width="1"/><circle cx="5" cy="3.5" r="1.2" fill="white"/></svg></div></div>
+          <div class="slot-l">C</div>
+        </div>
+        <div class="hcard-wrap"><div class="hcard"></div><div class="slot-l">D</div></div>
+      </div>
+      <div class="hint-sm">tap draw pile · tap discard then hand · tap card to burn</div>
+    </div>
+  </div>
+
+  <p class="annotation">
+    <strong>2+3 row layout</strong> for 5 opponents — 2 prominent top row, 3 compact below.<br>
+    <strong>Turn indicator dot</strong> on Alex's chip. <strong>Red border</strong> on Kai at 87 pts (near 100 limit).<br>
+    <strong>Score bar</strong> gives at-a-glance standings. <strong>Discard history</strong> shows last 5 cards.
+  </p>
+</div>
+
+<!-- ══════════════ DESKTOP ══════════════ -->
+<div class="screen" id="screen-desktop">
+  <div class="desktop-frame">
+    <div class="desktop-topbar">
+      <span class="desktop-round">Round: 1 &nbsp;·&nbsp; <span style="color:#555;font-size:11px;">6 players</span></span>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <button class="desktop-check">CHECK</button>
+        <span class="desktop-menu">☰</span>
+      </div>
+    </div>
+
+    <div class="desktop-body">
+
+      <!-- TOP: 3 opponents across -->
+      <div class="dt-top">
+        <div class="dt-top-opp active-turn">
+          <div class="dt-top-opp-header">
+            <div class="dt-avatar av-green">AL</div>
+            <div>
+              <div class="dt-top-name">Alex &nbsp;<span style="font-size:9px;background:#2a1f00;color:#c9a227;padding:1px 5px;border-radius:3px;">TURN</span></div>
+              <div class="dt-top-score">14 pts</div>
+            </div>
+          </div>
+          <div class="dt-top-opp-cards">
+            <div class="dt-mini-c"></div><div class="dt-mini-c"></div><div class="dt-mini-c"></div><div class="dt-mini-c"></div>
+          </div>
+        </div>
+
+        <div class="dt-top-opp">
+          <div class="dt-top-opp-header">
+            <div class="dt-avatar av-blue">MI</div>
+            <div>
+              <div class="dt-top-name">Mila <span style="font-size:9px;color:#555;background:#1a1a28;padding:1px 5px;border-radius:3px;">BOT</span></div>
+              <div class="dt-top-score">0 pts</div>
+            </div>
+          </div>
+          <div class="dt-top-opp-cards">
+            <div class="dt-mini-c"></div><div class="dt-mini-c"></div><div class="dt-mini-c"></div>
+          </div>
+        </div>
+
+        <div class="dt-top-opp">
+          <div class="dt-top-opp-header">
+            <div class="dt-avatar av-gold">NA</div>
+            <div>
+              <div class="dt-top-name">Nao</div>
+              <div class="dt-top-score">5 pts</div>
+            </div>
+          </div>
+          <div class="dt-top-opp-cards">
+            <div class="dt-mini-c"></div><div class="dt-mini-c"></div><div class="dt-mini-c"></div><div class="dt-mini-c"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- LEFT: 1 opponent -->
+      <div class="dt-left">
+        <div class="dt-opp">
+          <div class="dt-avatar av-red">JO</div>
+          <div class="dt-opp-info">
+            <div class="dt-opp-name">Jo</div>
+            <div class="dt-opp-score">22 pts</div>
+            <div class="dt-opp-cards">
+              <div class="dt-mini-c"></div><div class="dt-mini-c"></div><div class="dt-mini-c"></div><div class="dt-mini-c"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- CENTER: table -->
+      <div class="dt-center">
+        <div class="dt-table-surface">
+          <div class="dt-timer-row">
+            <svg width="36" height="36" viewBox="0 0 36 36">
+              <circle cx="18" cy="18" r="14" fill="none" stroke="#1a2a1a" stroke-width="2.5"/>
+              <circle cx="18" cy="18" r="14" fill="none" stroke="#4ecb4e" stroke-width="2.5"
+                stroke-dasharray="87.96" stroke-dashoffset="22" stroke-linecap="round"
+                transform="rotate(-90 18 18)"/>
+              <text x="18" y="22" text-anchor="middle" font-size="10" font-weight="600" fill="#4ecb4e">28</text>
+            </svg>
+            <div style="flex:1;">
+              <div style="font-size:11px;color:#5ecf5e;margin-bottom:4px;">your turn · 28s</div>
+              <div class="dt-tbar-wrap"><div class="dt-tbar" style="width:75%;background:#4ecb4e;"></div></div>
+            </div>
+          </div>
+
+          <div class="dt-pile-area">
+            <div class="pile-slot">
+              <div class="dt-card-back"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#3a3a6a" stroke-width="1.5"><rect x="3" y="4" width="18" height="16" rx="2"/></svg></div>
+              <div class="pile-label" style="font-size:10px;">draw pile</div>
+              <div class="pile-label" style="font-size:10px;color:#333;">38 cards</div>
+            </div>
+            <div style="color:#252535;font-size:20px;">⇄</div>
+            <div class="pile-slot">
+              <div class="dt-card-face" style="color:#c0392b;">
+                <div class="dt-cf-c tl" style="color:#c0392b;">Q<br>♦</div>
+                <div style="font-size:18px;">♦</div>
+                <div class="dt-cf-c br" style="color:#c0392b;">Q<br>♦</div>
+              </div>
+              <div class="pile-label" style="font-size:10px;">discard</div>
+            </div>
+          </div>
+
+          <div class="dt-discard-history">
+            <div class="dt-hist-label">last discards:</div>
+            <div class="dt-hist-c red faded">7♥</div>
+            <div class="dt-hist-c black faded">K♠</div>
+            <div class="dt-hist-c red faded">3♦</div>
+            <div class="dt-hist-c black faded">J♣</div>
+            <div class="dt-hist-c red">Q♦</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT: 1 opponent -->
+      <div class="dt-right">
+        <div class="dt-opp low-score">
+          <div class="dt-avatar av-teal">KA</div>
+          <div class="dt-opp-info">
+            <div class="dt-opp-name">Kai</div>
+            <div class="dt-opp-score" style="color:#cf5e5e;">87 pts — danger!</div>
+            <div class="dt-opp-cards">
+              <div class="dt-mini-c"></div><div class="dt-mini-c"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- BOTTOM: player hand full width -->
+      <div class="dt-bottom">
+        <div style="background:#13131a;border-radius:12px;padding:12px 16px;border:0.5px solid #1e1e2a;">
+          <div class="dt-hand-label">your hand</div>
+          <div class="dt-hand-row">
+            <div class="dt-hcard-wrap">
+              <div class="dt-hcard known"><div class="dt-eye-b"><svg width="8" height="8" viewBox="0 0 10 7" fill="none"><ellipse cx="5" cy="3.5" rx="4" ry="2.5" stroke="white" stroke-width="1"/><circle cx="5" cy="3.5" r="1.2" fill="white"/></svg></div></div>
+              <div class="dt-slot-l">A</div>
+            </div>
+            <div class="dt-hcard-wrap"><div class="dt-hcard"></div><div class="dt-slot-l">B</div></div>
+            <div class="dt-hcard-wrap">
+              <div class="dt-hcard known"><div class="dt-eye-b"><svg width="8" height="8" viewBox="0 0 10 7" fill="none"><ellipse cx="5" cy="3.5" rx="4" ry="2.5" stroke="white" stroke-width="1"/><circle cx="5" cy="3.5" r="1.2" fill="white"/></svg></div></div>
+              <div class="dt-slot-l">C</div>
+            </div>
+            <div class="dt-hcard-wrap"><div class="dt-hcard"></div><div class="dt-slot-l">D</div></div>
+          </div>
+          <div class="dt-hint">click draw pile to draw · click discard then a card to swap · click a card to attempt burn</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Global score strip -->
+    <div class="dt-scores-strip">
+      <div style="font-size:10px;color:#333;letter-spacing:0.08em;text-transform:uppercase;margin-right:4px;">Scores:</div>
+      <div class="dt-score-pill you"><div class="sdot" style="background:#7a7aee;"></div><span class="sname">You</span><span class="sval">0</span></div>
+      <div class="dt-score-pill"><div class="sdot" style="background:#5ecf5e;"></div><span class="sname">Alex</span><span class="sval">14</span></div>
+      <div class="dt-score-pill"><div class="sdot" style="background:#7a7aee;"></div><span class="sname">Mila</span><span class="sval">0</span></div>
+      <div class="dt-score-pill"><div class="sdot" style="background:#cf5e5e;"></div><span class="sname">Jo</span><span class="sval">22</span></div>
+      <div class="dt-score-pill low"><div class="sdot" style="background:#cf5e5e;"></div><span class="sname">Kai</span><span class="sval">87</span></div>
+      <div class="dt-score-pill"><div class="sdot" style="background:#c9a227;"></div><span class="sname">Nao</span><span class="sval">5</span></div>
+    </div>
+  </div>
+
+  <p class="annotation">
+    <strong>Oval arrangement:</strong> 3 opponents across top, 1 each left/right flanking the table, you at bottom.<br>
+    <strong>Discard history</strong> strip in table center — last 5 cards visible, faded oldest to newest.<br>
+    <strong>Kai at 87 pts</strong> gets red danger border — everyone can see who's close to losing.<br>
+    <strong>Score strip</strong> always visible at the bottom edge. <strong>Cards larger</strong> than mobile for easier reading.
+  </p>
+</div>
+
+<script>
+function sw(id) {
+  const ids = ['mobile6','desktop'];
+  document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', ids[i] === id));
+  document.querySelectorAll('.screen').forEach(s => s.classList.toggle('active', s.id === 'screen-' + id));
+}
+</script>

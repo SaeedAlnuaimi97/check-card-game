@@ -1,0 +1,665 @@
+
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  .tabs {
+    display: flex; gap: 6px; padding: 1rem 1rem 0;
+    border-bottom: 0.5px solid var(--color-border-tertiary);
+    flex-wrap: wrap;
+  }
+  .tab {
+    padding: 6px 14px; font-size: 13px; border-radius: 6px 6px 0 0;
+    border: 0.5px solid var(--color-border-tertiary); border-bottom: none;
+    background: var(--color-background-secondary);
+    color: var(--color-text-secondary); cursor: pointer;
+  }
+  .tab.active {
+    background: var(--color-background-primary);
+    color: var(--color-text-primary); font-weight: 500;
+  }
+  .screen { display: none; padding: 1rem; }
+  .screen.active { display: block; }
+
+  .phone {
+    width: 320px; min-height: 600px; margin: 0 auto;
+    background: #0f0f14; border-radius: 28px; border: 1px solid #2a2a3a;
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+
+  .top-bar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 14px 8px; background: #13131a;
+    border-bottom: 0.5px solid #222; font-size: 12px; color: #888;
+  }
+  .check-btn {
+    padding: 4px 12px; border-radius: 6px;
+    background: #c9a227; color: #1a1200;
+    font-size: 12px; font-weight: 600; border: none; cursor: pointer;
+  }
+
+  .opponent-zone { padding: 10px 14px 8px; background: #13131a; }
+  .opp-card {
+    display: flex; align-items: center; gap: 8px;
+    background: #1c1c26; border-radius: 10px; padding: 8px 10px;
+    border: 0.5px solid #2a2a3a;
+  }
+  .avatar {
+    width: 28px; height: 28px; border-radius: 50%; background: #3a3a5a;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; color: #aaa; font-weight: 500; flex-shrink: 0;
+  }
+  .opp-name { font-size: 12px; color: #ccc; font-weight: 500; }
+  .opp-meta { font-size: 11px; color: #555; }
+  .opp-hand { display: flex; gap: 4px; margin-left: auto; align-items: center; }
+  .mini-card {
+    width: 20px; height: 28px; border-radius: 4px;
+    background: #2a2a4a; border: 0.5px solid #3a3a5a;
+  }
+  .count-badge {
+    background: #2a2a3a; color: #666; font-size: 10px;
+    padding: 2px 6px; border-radius: 10px; font-weight: 600;
+  }
+
+  /* ── TABLE CENTER ── */
+  .table-center {
+    flex: 1; background: #0d0d12;
+    display: flex; flex-direction: column; justify-content: center;
+    padding: 14px;
+  }
+  .table-surface {
+    background: #13191a; border-radius: 14px;
+    border: 0.5px solid #1a2a22; padding: 14px;
+    display: flex; flex-direction: column; gap: 12px;
+  }
+
+  .timer-row { display: flex; align-items: center; gap: 10px; }
+  .timer-bar-wrap { flex: 1; height: 5px; background: #1a2a1a; border-radius: 3px; overflow: hidden; }
+  .timer-bar { height: 100%; border-radius: 3px; transition: width 0.5s, background 0.5s; }
+
+  .pile-area {
+    display: flex; align-items: center; justify-content: center; gap: 28px;
+  }
+  .pile-slot { display: flex; flex-direction: column; align-items: center; gap: 5px; }
+  .pile-label { font-size: 10px; color: #444; }
+  .pile-sub { font-size: 10px; color: #333; }
+
+  .card-back {
+    width: 58px; height: 80px; border-radius: 8px;
+    background: #2a2a4a; border: 1px solid #3a3a5a;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; transition: border-color 0.15s, transform 0.1s;
+  }
+  .card-back:hover { border-color: #5a5a8a; transform: translateY(-2px); }
+  .card-back.active-target { border-color: #c9a227; box-shadow: 0 0 0 1px #c9a22740; }
+
+  .card-face {
+    width: 58px; height: 80px; border-radius: 8px;
+    background: #fff; border: 1px solid #ddd;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    cursor: pointer; position: relative; font-weight: 700; font-size: 20px;
+    transition: transform 0.1s;
+  }
+  .card-face:hover { transform: translateY(-2px); }
+  .card-face .cn { position: absolute; font-size: 10px; font-weight: 700; line-height: 1.1; }
+  .card-face .cn.tl { top: 4px; left: 5px; }
+  .card-face .cn.br { bottom: 4px; right: 5px; transform: rotate(180deg); }
+  .card-face.red { color: #c0392b; }
+  .card-face.selected-discard { border-color: #c9a227; box-shadow: 0 0 0 2px #c9a22740; }
+
+  /* ── PLAYER HAND ── */
+  .player-zone { padding: 10px 14px 16px; background: #13131a; }
+  .hand-label {
+    font-size: 10px; color: #555; text-align: center;
+    text-transform: uppercase; letter-spacing: 0.07em;
+    font-weight: 500; margin-bottom: 8px;
+  }
+  .hand-row { display: flex; gap: 8px; justify-content: center; }
+  .hcard-wrap { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .hcard {
+    width: 58px; height: 80px; border-radius: 8px;
+    background: #2a2a4a; border: 1px solid #3a3a5a;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; position: relative; transition: border-color 0.15s, transform 0.1s;
+  }
+  .hcard:hover { border-color: #5a5a8a; transform: translateY(-2px); }
+  .hcard.known { border-color: #c9a227; }
+  .hcard.burn-selected { border-color: #cf5e5e; box-shadow: 0 0 0 1px #cf5e5e40; transform: translateY(-4px); }
+  .hcard.swap-selected { border-color: #5eb8cf; box-shadow: 0 0 0 1px #5eb8cf40; transform: translateY(-4px); }
+  .hcard.swap-target { border-color: #c9a227; box-shadow: 0 0 0 1px #c9a22740; }
+  .eye-badge {
+    position: absolute; top: 3px; right: 3px;
+    width: 14px; height: 14px; background: #c9a227;
+    border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  }
+  .slot-lbl { font-size: 10px; color: #555; font-weight: 500; }
+
+  .hint-text {
+    font-size: 11px; color: #555; text-align: center; margin-top: 6px;
+  }
+
+  /* ── MODALS ── */
+  .modal-overlay {
+    position: absolute; inset: 0; background: rgba(0,0,0,0.65);
+    display: flex; align-items: flex-end; border-radius: 28px;
+    padding: 12px;
+  }
+  .modal-sheet {
+    width: 100%; background: #1c1c28;
+    border-radius: 14px; border: 0.5px solid #2a2a3a;
+    padding: 16px;
+  }
+  .modal-drag { width: 36px; height: 3px; background: #333; border-radius: 2px; margin: 0 auto 14px; }
+  .modal-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+  .modal-icon { font-size: 16px; }
+  .modal-title { font-size: 15px; font-weight: 600; color: #eee; }
+  .modal-desc { font-size: 12px; color: #555; margin-bottom: 14px; }
+
+  .slot-grid { display: flex; gap: 8px; margin-bottom: 10px; }
+  .slot-choice {
+    flex: 1; height: 44px; border-radius: 8px;
+    background: #16162a; border: 1px solid #2a2a4a;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; font-weight: 600; color: #777; cursor: pointer;
+    transition: border-color 0.15s;
+  }
+  .slot-choice.sel { border-color: #c9a227; color: #c9a227; background: #1f1a0a; }
+  .slot-choice.blue-sel { border-color: #5eb8cf; color: #5eb8cf; background: #0a1a1f; }
+
+  .opp-select { margin-bottom: 10px; }
+  .opp-pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 5px 12px; border-radius: 20px;
+    border: 1px solid #2a2a4a; background: #16162a;
+    color: #777; font-size: 12px; cursor: pointer;
+  }
+  .opp-pill.sel { border-color: #5eb8cf; color: #5eb8cf; background: #0a1a1f; }
+  .opp-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+
+  .row-label { font-size: 11px; color: #444; margin-bottom: 6px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em; }
+
+  .swap-arrow {
+    display: flex; align-items: center; justify-content: center;
+    color: #333; font-size: 18px; margin: 6px 0;
+  }
+
+  .peek-cards { display: flex; gap: 8px; justify-content: center; margin-bottom: 14px; }
+  .peek-card {
+    width: 56px; height: 78px; border-radius: 8px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    cursor: pointer; position: relative; font-weight: 700; font-size: 18px;
+  }
+  .peek-card.unknown {
+    background: #2a2a4a; border: 1px solid #3a3a5a; color: transparent;
+  }
+  .peek-card.known-face {
+    background: #fff; border: 2px solid #c9a227; color: #333;
+  }
+  .peek-card.known-face.red { color: #c0392b; }
+  .peek-card .slot-tag {
+    position: absolute; bottom: 4px; font-size: 9px; font-weight: 600;
+    color: #666; letter-spacing: 0.05em;
+  }
+  .peek-card.known-face .slot-tag { color: #aaa; }
+  .peek-reveal-badge {
+    position: absolute; top: -6px; right: -6px;
+    background: #c9a227; color: #1a1200;
+    font-size: 9px; font-weight: 700; padding: 2px 5px;
+    border-radius: 8px;
+  }
+
+  .burn-card-preview {
+    display: flex; align-items: center; justify-content: center;
+    gap: 14px; margin: 8px 0 14px;
+  }
+  .burn-preview-card {
+    width: 52px; height: 72px; border-radius: 8px;
+    background: #2a2a4a; border: 1px solid #cf5e5e;
+    box-shadow: 0 0 0 1px #cf5e5e30;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .vs-badge {
+    font-size: 11px; color: #444; font-weight: 600;
+  }
+  .discard-preview {
+    width: 52px; height: 72px; border-radius: 8px;
+    background: #fff; border: 1px solid #ddd;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    font-size: 18px; font-weight: 700; color: #333; position: relative;
+  }
+  .discard-preview .pcn { position: absolute; font-size: 9px; font-weight: 700; }
+  .discard-preview .pcn.tl { top: 3px; left: 4px; }
+  .discard-preview .pcn.br { bottom: 3px; right: 4px; transform: rotate(180deg); }
+
+  .match-tag {
+    font-size: 11px; font-weight: 600; text-align: center; margin-bottom: 10px;
+  }
+  .match-tag.match { color: #5ecf5e; }
+  .match-tag.nomatch { color: #cf5e5e; }
+
+  .modal-btns { display: flex; gap: 8px; }
+  .mbtn {
+    flex: 1; padding: 10px; border-radius: 8px;
+    font-size: 13px; font-weight: 600; cursor: pointer; border: none;
+  }
+  .mbtn.confirm { background: #cf5e5e; color: #fff; }
+  .mbtn.confirm.safe { background: #c9a227; color: #1a1200; }
+  .mbtn.cancel { background: #1c1c2e; color: #666; }
+
+  .phone-relative { position: relative; }
+
+  .annotation {
+    font-size: 11px; color: var(--color-text-secondary);
+    margin-top: 8px; text-align: center; line-height: 1.6;
+  }
+  .annotation strong { color: #c9a227; font-weight: 500; }
+</style>
+
+<div class="tabs">
+  <div class="tab active" onclick="switchTab('main')">main (idle)</div>
+  <div class="tab" onclick="switchTab('discard-flow')">discard swap flow</div>
+  <div class="tab" onclick="switchTab('burn')">burn confirm</div>
+  <div class="tab" onclick="switchTab('red-j')">red jack swap</div>
+  <div class="tab" onclick="switchTab('red-q')">red queen peek</div>
+</div>
+
+<!-- ══════════════ MAIN IDLE ══════════════ -->
+<div class="screen active" id="screen-main">
+  <div class="phone">
+    <div class="top-bar">
+      <span style="font-size:12px;color:#aaa;font-weight:500;">Round: 1</span>
+      <button class="check-btn">CHECK</button>
+    </div>
+    <div class="opponent-zone">
+      <div class="opp-card">
+        <div class="avatar">ML</div>
+        <div><div class="opp-name">Mila <span style="font-size:10px;color:#555;background:#222;padding:1px 5px;border-radius:4px;">BOT</span></div><div class="opp-meta">Score: 0</div></div>
+        <div class="opp-hand">
+          <div class="mini-card"></div><div class="mini-card"></div>
+          <div class="mini-card"></div><div class="mini-card"></div>
+        </div>
+        <div class="count-badge">4</div>
+      </div>
+    </div>
+
+    <div class="table-center">
+      <div class="table-surface">
+        <div class="timer-row">
+          <svg width="36" height="36" viewBox="0 0 36 36">
+            <circle cx="18" cy="18" r="14" fill="none" stroke="#1a2a1a" stroke-width="2.5"/>
+            <circle cx="18" cy="18" r="14" fill="none" stroke="#4ecb4e" stroke-width="2.5"
+              stroke-dasharray="87.96" stroke-dashoffset="22" stroke-linecap="round"
+              transform="rotate(-90 18 18)"/>
+            <text x="18" y="22" text-anchor="middle" font-size="10" font-weight="600" fill="#4ecb4e">28</text>
+          </svg>
+          <div style="flex:1;">
+            <div style="font-size:11px;color:#5ecf5e;margin-bottom:4px;">your turn · 28s</div>
+            <div class="timer-bar-wrap"><div class="timer-bar" style="width:75%;background:#4ecb4e;"></div></div>
+          </div>
+        </div>
+
+        <div class="pile-area">
+          <div class="pile-slot">
+            <div class="card-back">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#3a3a6a" stroke-width="1.5"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/></svg>
+            </div>
+            <div class="pile-label">draw pile</div>
+            <div class="pile-sub">tap to draw</div>
+          </div>
+          <div style="color:#2a2a3a;font-size:20px;">⇄</div>
+          <div class="pile-slot">
+            <div class="card-face red">
+              <div class="cn tl" style="color:#c0392b;">J<br>♠</div>
+              <div>♠</div>
+              <div class="cn br" style="color:#c0392b;">J<br>♠</div>
+            </div>
+            <div class="pile-label">discard</div>
+            <div class="pile-sub">tap to take</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="player-zone">
+      <div class="hand-label">your hand</div>
+      <div class="hand-row">
+        <div class="hcard-wrap">
+          <div class="hcard known"><div class="eye-badge"><svg viewBox="0 0 10 7" fill="none" width="8" height="8"><ellipse cx="5" cy="3.5" rx="4" ry="2.5" stroke="white" stroke-width="1"/><circle cx="5" cy="3.5" r="1.2" fill="white"/></svg></div></div>
+          <div class="slot-lbl">A</div>
+        </div>
+        <div class="hcard-wrap"><div class="hcard"></div><div class="slot-lbl">B</div></div>
+        <div class="hcard-wrap">
+          <div class="hcard known"><div class="eye-badge"><svg viewBox="0 0 10 7" fill="none" width="8" height="8"><ellipse cx="5" cy="3.5" rx="4" ry="2.5" stroke="white" stroke-width="1"/><circle cx="5" cy="3.5" r="1.2" fill="white"/></svg></div></div>
+          <div class="slot-lbl">C</div>
+        </div>
+        <div class="hcard-wrap"><div class="hcard"></div><div class="slot-lbl">D</div></div>
+      </div>
+      <div class="hint-text">tap draw pile · tap discard then hand · tap hand card to burn</div>
+    </div>
+  </div>
+  <p class="annotation">Clean table — no action buttons. Subtle <strong>tap hints</strong> below hand. <strong>Gold border + eye</strong> = cards you know.</p>
+</div>
+
+<!-- ══════════════ DISCARD SWAP FLOW ══════════════ -->
+<div class="screen" id="screen-discard-flow">
+  <div class="phone phone-relative">
+    <div class="top-bar">
+      <span style="font-size:12px;color:#aaa;font-weight:500;">Round: 1</span>
+      <button class="check-btn">CHECK</button>
+    </div>
+    <div class="opponent-zone">
+      <div class="opp-card">
+        <div class="avatar">ML</div>
+        <div><div class="opp-name">Mila <span style="font-size:10px;color:#555;background:#222;padding:1px 5px;border-radius:4px;">BOT</span></div><div class="opp-meta">Score: 0</div></div>
+        <div class="opp-hand"><div class="mini-card"></div><div class="mini-card"></div><div class="mini-card"></div><div class="mini-card"></div></div>
+        <div class="count-badge">4</div>
+      </div>
+    </div>
+
+    <div class="table-center">
+      <div class="table-surface">
+        <div class="timer-row">
+          <svg width="36" height="36" viewBox="0 0 36 36">
+            <circle cx="18" cy="18" r="14" fill="none" stroke="#1a2a1a" stroke-width="2.5"/>
+            <circle cx="18" cy="18" r="14" fill="none" stroke="#4ecb4e" stroke-width="2.5"
+              stroke-dasharray="87.96" stroke-dashoffset="22" stroke-linecap="round"
+              transform="rotate(-90 18 18)"/>
+            <text x="18" y="22" text-anchor="middle" font-size="10" font-weight="600" fill="#4ecb4e">24</text>
+          </svg>
+          <div style="flex:1;">
+            <div style="font-size:11px;color:#c9a227;margin-bottom:4px;">now tap a hand card to swap</div>
+            <div class="timer-bar-wrap"><div class="timer-bar" style="width:62%;background:#4ecb4e;"></div></div>
+          </div>
+        </div>
+        <div class="pile-area">
+          <div class="pile-slot">
+            <div class="card-back" style="opacity:0.4;pointer-events:none;"></div>
+            <div class="pile-label" style="color:#333;">draw pile</div>
+          </div>
+          <div style="color:#2a2a3a;font-size:20px;">⇄</div>
+          <div class="pile-slot">
+            <div class="card-face red selected-discard">
+              <div class="cn tl" style="color:#c0392b;">J<br>♠</div>
+              <div>♠</div>
+              <div class="cn br" style="color:#c0392b;">J<br>♠</div>
+            </div>
+            <div class="pile-label" style="color:#c9a227;">selected</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="player-zone">
+      <div class="hand-label" style="color:#c9a227;">pick a slot to replace</div>
+      <div class="hand-row">
+        <div class="hcard-wrap">
+          <div class="hcard known swap-target"><div class="eye-badge"><svg viewBox="0 0 10 7" fill="none" width="8" height="8"><ellipse cx="5" cy="3.5" rx="4" ry="2.5" stroke="white" stroke-width="1"/><circle cx="5" cy="3.5" r="1.2" fill="white"/></svg></div></div>
+          <div class="slot-lbl">A</div>
+        </div>
+        <div class="hcard-wrap"><div class="hcard swap-target"></div><div class="slot-lbl">B</div></div>
+        <div class="hcard-wrap">
+          <div class="hcard known swap-target"><div class="eye-badge"><svg viewBox="0 0 10 7" fill="none" width="8" height="8"><ellipse cx="5" cy="3.5" rx="4" ry="2.5" stroke="white" stroke-width="1"/><circle cx="5" cy="3.5" r="1.2" fill="white"/></svg></div></div>
+          <div class="slot-lbl">C</div>
+        </div>
+        <div class="hcard-wrap"><div class="hcard swap-target"></div><div class="slot-lbl">D</div></div>
+      </div>
+      <div class="hint-text" style="color:#c9a22799;">tap a slot to place the discard card · tap discard again to cancel</div>
+    </div>
+  </div>
+  <p class="annotation">After tapping discard: card gets <strong>gold ring</strong>, draw pile dims, all hand slots pulse gold as valid targets. Timer label updates to guide next step.</p>
+</div>
+
+<!-- ══════════════ BURN CONFIRM ══════════════ -->
+<div class="screen" id="screen-burn">
+  <div class="phone phone-relative" style="position:relative;">
+    <div class="top-bar">
+      <span style="font-size:12px;color:#aaa;font-weight:500;">Round: 1</span>
+      <button class="check-btn">CHECK</button>
+    </div>
+    <div class="opponent-zone">
+      <div class="opp-card">
+        <div class="avatar">ML</div>
+        <div><div class="opp-name">Mila</div><div class="opp-meta">Score: 0</div></div>
+        <div class="opp-hand"><div class="mini-card"></div><div class="mini-card"></div><div class="mini-card"></div><div class="mini-card"></div></div>
+        <div class="count-badge">4</div>
+      </div>
+    </div>
+    <div class="table-center">
+      <div class="table-surface">
+        <div class="pile-area">
+          <div class="pile-slot"><div class="card-back" style="opacity:0.3;"></div><div class="pile-label" style="color:#333;">draw pile</div></div>
+          <div style="color:#2a2a3a;font-size:20px;">⇄</div>
+          <div class="pile-slot">
+            <div class="card-face red"><div class="cn tl" style="color:#c0392b;">J<br>♠</div><div>♠</div><div class="cn br" style="color:#c0392b;">J<br>♠</div></div>
+            <div class="pile-label">discard</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="player-zone">
+      <div class="hand-label">your hand</div>
+      <div class="hand-row">
+        <div class="hcard-wrap">
+          <div class="hcard known"><div class="eye-badge"><svg viewBox="0 0 10 7" fill="none" width="8" height="8"><ellipse cx="5" cy="3.5" rx="4" ry="2.5" stroke="white" stroke-width="1"/><circle cx="5" cy="3.5" r="1.2" fill="white"/></svg></div></div>
+          <div class="slot-lbl">A</div>
+        </div>
+        <div class="hcard-wrap"><div class="hcard burn-selected"></div><div class="slot-lbl" style="color:#cf5e5e;">B</div></div>
+        <div class="hcard-wrap"><div class="hcard known"><div class="eye-badge"><svg viewBox="0 0 10 7" fill="none" width="8" height="8"><ellipse cx="5" cy="3.5" rx="4" ry="2.5" stroke="white" stroke-width="1"/><circle cx="5" cy="3.5" r="1.2" fill="white"/></svg></div></div><div class="slot-lbl">C</div></div>
+        <div class="hcard-wrap"><div class="hcard"></div><div class="slot-lbl">D</div></div>
+      </div>
+    </div>
+
+    <div class="modal-overlay" style="position:absolute;">
+      <div class="modal-sheet">
+        <div class="modal-drag"></div>
+        <div class="modal-head"><span class="modal-icon">🔥</span><span class="modal-title">Burn card B?</span></div>
+        <div class="modal-desc">Rank must match the top discard to succeed.</div>
+
+        <div class="burn-card-preview">
+          <div>
+            <div style="font-size:10px;color:#555;text-align:center;margin-bottom:4px;">your card B</div>
+            <div class="burn-preview-card">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#3a3a6a" stroke-width="1.5"><rect x="3" y="4" width="18" height="16" rx="2"/></svg>
+            </div>
+          </div>
+          <div class="vs-badge">vs</div>
+          <div>
+            <div style="font-size:10px;color:#555;text-align:center;margin-bottom:4px;">top discard</div>
+            <div class="discard-preview" style="color:#c0392b;">
+              <div class="pcn tl" style="color:#c0392b;">J♠</div>
+              <div style="font-size:18px;">♠</div>
+              <div class="pcn br" style="color:#c0392b;">J♠</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="match-tag nomatch">card B is face-down — result unknown until burned</div>
+
+        <div style="background:#2a1a1a;border-radius:8px;padding:8px 10px;font-size:11px;color:#886060;margin-bottom:12px;">
+          If ranks don't match, you'll receive a penalty card (slot E added face-down).
+        </div>
+
+        <div class="modal-btns">
+          <button class="mbtn cancel">Cancel</button>
+          <button class="mbtn confirm">Burn it</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="annotation">Tapping an unknown card shows a <strong>burn confirmation sheet</strong>. Shows your card vs top discard, explains the penalty risk, and requires deliberate confirm.</p>
+</div>
+
+<!-- ══════════════ RED JACK ══════════════ -->
+<div class="screen" id="screen-red-j">
+  <div class="phone phone-relative" style="position:relative;">
+    <div class="top-bar">
+      <span style="font-size:12px;color:#aaa;font-weight:500;">Round: 1</span>
+      <button class="check-btn" style="opacity:0.4;">CHECK</button>
+    </div>
+    <div class="opponent-zone">
+      <div class="opp-card">
+        <div class="avatar">ML</div>
+        <div><div class="opp-name">Mila</div><div class="opp-meta">Score: 0</div></div>
+        <div class="opp-hand"><div class="mini-card"></div><div class="mini-card"></div><div class="mini-card"></div></div>
+        <div class="count-badge">3</div>
+      </div>
+    </div>
+    <div class="table-center" style="justify-content:flex-start;padding-top:10px;">
+      <div class="table-surface">
+        <div class="pile-area">
+          <div class="pile-slot"><div class="card-back" style="opacity:0.3;"></div><div class="pile-label" style="color:#333;">draw pile</div></div>
+          <div style="color:#2a2a3a;font-size:20px;">⇄</div>
+          <div class="pile-slot">
+            <div class="card-face red"><div class="cn tl" style="color:#c0392b;">J<br>♥</div><div style="color:#c0392b;">♥</div><div class="cn br" style="color:#c0392b;">J<br>♥</div></div>
+            <div class="pile-label">discard</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="player-zone">
+      <div class="hand-label">your hand</div>
+      <div class="hand-row">
+        <div class="hcard-wrap"><div class="hcard known"><div class="eye-badge"><svg viewBox="0 0 10 7" fill="none" width="8" height="8"><ellipse cx="5" cy="3.5" rx="4" ry="2.5" stroke="white" stroke-width="1"/><circle cx="5" cy="3.5" r="1.2" fill="white"/></svg></div></div><div class="slot-lbl">A</div></div>
+        <div class="hcard-wrap"><div class="hcard"></div><div class="slot-lbl">B</div></div>
+        <div class="hcard-wrap"><div class="hcard known"><div class="eye-badge"><svg viewBox="0 0 10 7" fill="none" width="8" height="8"><ellipse cx="5" cy="3.5" rx="4" ry="2.5" stroke="white" stroke-width="1"/><circle cx="5" cy="3.5" r="1.2" fill="white"/></svg></div></div><div class="slot-lbl">C</div></div>
+        <div class="hcard-wrap"><div class="hcard"></div><div class="slot-lbl">D</div></div>
+      </div>
+    </div>
+
+    <div class="modal-overlay" style="position:absolute;">
+      <div class="modal-sheet">
+        <div class="modal-drag"></div>
+        <div class="modal-head">
+          <span style="font-size:16px;color:#c0392b;">♥</span>
+          <span class="modal-title" style="color:#eee;">Red Jack — Blind Swap</span>
+        </div>
+        <div class="modal-desc">Swap one of your cards with an opponent's. Neither card is revealed.</div>
+
+        <div class="row-label">your card</div>
+        <div class="slot-grid" style="margin-bottom:10px;">
+          <div class="slot-choice sel">A</div>
+          <div class="slot-choice">B</div>
+          <div class="slot-choice">C</div>
+          <div class="slot-choice">D</div>
+        </div>
+
+        <div class="swap-arrow">↕</div>
+
+        <div class="row-label">opponent</div>
+        <div class="opp-select">
+          <div class="opp-pill sel"><div class="opp-dot"></div>Mila</div>
+        </div>
+
+        <div class="row-label">their slot</div>
+        <div class="slot-grid" style="margin-bottom:14px;">
+          <div class="slot-choice">A</div>
+          <div class="slot-choice blue-sel">B</div>
+          <div class="slot-choice">C</div>
+        </div>
+
+        <div class="modal-btns">
+          <button class="mbtn cancel">Skip</button>
+          <button class="mbtn confirm safe">Swap</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="annotation"><strong>Red tint</strong> on icon signals the card's suit. <strong>↕ arrow</strong> visually connects your slot to theirs. Opponent row only shows when multiple opponents exist. "Skip" available since swap is optional.</p>
+</div>
+
+<!-- ══════════════ RED QUEEN ══════════════ -->
+<div class="screen" id="screen-red-q">
+  <div class="phone phone-relative" style="position:relative;">
+    <div class="top-bar">
+      <span style="font-size:12px;color:#aaa;font-weight:500;">Round: 1</span>
+      <button class="check-btn" style="opacity:0.4;">CHECK</button>
+    </div>
+    <div class="opponent-zone">
+      <div class="opp-card">
+        <div class="avatar">ML</div>
+        <div><div class="opp-name">Mila</div><div class="opp-meta">Score: 0</div></div>
+        <div class="opp-hand"><div class="mini-card"></div><div class="mini-card"></div><div class="mini-card"></div><div class="mini-card"></div></div>
+        <div class="count-badge">4</div>
+      </div>
+    </div>
+    <div class="table-center" style="justify-content:flex-start;padding-top:10px;">
+      <div class="table-surface">
+        <div class="pile-area">
+          <div class="pile-slot"><div class="card-back" style="opacity:0.3;"></div><div class="pile-label" style="color:#333;">draw pile</div></div>
+          <div style="color:#2a2a3a;font-size:20px;">⇄</div>
+          <div class="pile-slot">
+            <div class="card-face red"><div class="cn tl" style="color:#c0392b;">Q<br>♦</div><div style="font-size:16px;color:#c0392b;">♦</div><div class="cn br" style="color:#c0392b;">Q<br>♦</div></div>
+            <div class="pile-label">discard</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="player-zone">
+      <div class="hand-label">your hand</div>
+      <div class="hand-row">
+        <div class="hcard-wrap"><div class="hcard known"><div class="eye-badge"><svg viewBox="0 0 10 7" fill="none" width="8" height="8"><ellipse cx="5" cy="3.5" rx="4" ry="2.5" stroke="white" stroke-width="1"/><circle cx="5" cy="3.5" r="1.2" fill="white"/></svg></div></div><div class="slot-lbl">A</div></div>
+        <div class="hcard-wrap"><div class="hcard"></div><div class="slot-lbl">B</div></div>
+        <div class="hcard-wrap"><div class="hcard known"><div class="eye-badge"><svg viewBox="0 0 10 7" fill="none" width="8" height="8"><ellipse cx="5" cy="3.5" rx="4" ry="2.5" stroke="white" stroke-width="1"/><circle cx="5" cy="3.5" r="1.2" fill="white"/></svg></div></div><div class="slot-lbl">C</div></div>
+        <div class="hcard-wrap"><div class="hcard"></div><div class="slot-lbl">D</div></div>
+      </div>
+    </div>
+
+    <div class="modal-overlay" style="position:absolute;">
+      <div class="modal-sheet">
+        <div class="modal-drag"></div>
+        <div class="modal-head">
+          <span style="font-size:16px;color:#c0392b;">♦</span>
+          <span class="modal-title" style="color:#eee;">Red Queen — Peek</span>
+        </div>
+        <div class="modal-desc">Choose one face-down card to peek at privately.</div>
+
+        <div class="peek-cards">
+          <div class="hcard-wrap">
+            <div class="peek-card known-face" style="color:#333;">
+              <div style="position:absolute;top:4px;left:5px;font-size:9px;font-weight:700;color:#333;">7<br>♣</div>
+              <div>♣</div>
+              <div style="position:absolute;bottom:4px;right:5px;font-size:9px;font-weight:700;transform:rotate(180deg);color:#333;">7<br>♣</div>
+              <div class="peek-reveal-badge">peeked</div>
+            </div>
+            <div class="slot-lbl" style="color:#c9a227;">A — known</div>
+          </div>
+          <div class="hcard-wrap">
+            <div class="peek-card unknown" style="border:2px solid #c9a227;box-shadow:0 0 0 1px #c9a22730;">
+              <div class="slot-tag" style="color:#c9a227;">B</div>
+            </div>
+            <div class="slot-lbl" style="color:#c9a227;">B — peek this?</div>
+          </div>
+          <div class="hcard-wrap">
+            <div class="peek-card unknown" style="border:1px solid #3a3a5a;">
+              <div class="slot-tag">C</div>
+            </div>
+            <div class="slot-lbl">C</div>
+          </div>
+          <div class="hcard-wrap">
+            <div class="peek-card unknown" style="border:1px solid #3a3a5a;">
+              <div class="slot-tag">D</div>
+            </div>
+            <div class="slot-lbl">D</div>
+          </div>
+        </div>
+
+        <div style="background:#1a1a0a;border:1px solid #2a2a1a;border-radius:8px;padding:8px 10px;font-size:11px;color:#666;margin-bottom:14px;">
+          Only you will see the card. It stays in its slot after peeking — the eye badge marks it as known.
+        </div>
+
+        <div class="modal-btns">
+          <button class="mbtn cancel">Skip</button>
+          <button class="mbtn confirm safe">Peek slot B</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="annotation">Cards already known show their face in the selector with a <strong>"peeked" badge</strong>. Unknown cards are dark with gold highlight on hover/selection. Confirm button names the chosen slot explicitly.</p>
+</div>
+
+<script>
+  function switchTab(id) {
+    const ids = ['main','discard-flow','burn','red-j','red-q'];
+    document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', ids[i] === id));
+    document.querySelectorAll('.screen').forEach(s => s.classList.toggle('active', s.id === 'screen-' + id));
+  }
+</script>

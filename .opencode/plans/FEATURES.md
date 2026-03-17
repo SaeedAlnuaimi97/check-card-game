@@ -415,7 +415,42 @@ Derived from PLAN.md. Features are grouped by domain and ordered by implementati
 
 ---
 
-**Total MVP Features:** 112  
+## UI Reskin
+
+Design system source of truth: `reskin/` folder (spec MD + two HTML mockups). Skill: `design-system`.
+
+### 37. High Priority Reskin (🔴)
+
+- [x] **RS-001**: Turn timer — replace thin progress bar with circular SVG countdown ring (36×36px, r=14); green > amber > red color transitions at 60%/30%; numeric seconds inside ring
+- [x] **RS-002**: Red King modal UX — numbered step indicator (Step 1 / Step 2); gold ring on selected drawn card; disable confirm until both selections made; all three option buttons neutral outline (no yellow bias)
+- [x] **RS-003**: CHECK button redesign — gold (`#c9a227`) top-bar button replacing current salmon style; confirmation tooltip on hover/tap explaining effect
+- [x] **RS-004**: Room code input distinct styling — uppercase monospace, gold typed text, letter-spacing; Join Room button disabled until characters typed
+
+### 38. Medium Priority Reskin (🟡)
+
+- [x] **RS-005**: Table center zone — visually distinct felt-surface area (`#13191a` bg, `#1a2a22` border, 14px radius) grouping draw pile, discard pile, and timer
+- [x] **RS-006**: Burn action feedback — success animation/banner ("✓ Burned!"); failure inline banner ("✗ No match! +1 penalty card"); penalty card slot highlighted on arrival
+- [x] **RS-007**: Known vs unknown card distinction — gold border + eye badge (14×14px gold circle with SVG eye icon) on cards the player has peeked at
+- [x] **RS-008**: Lobby slider labels — show `30` and `100` at track ends; Start Game button visually disabled until ≥2 players/bots present
+- [x] **RS-009**: Lobby dot color system + kick hover-only — green = human online, purple = bot, gray = empty; kick ✕ hidden at rest, red on hover
+- [x] **RS-010**: Menu sound default ON + Exit Game danger styling — sound toggle defaults to on (green); Exit Game uses full red/danger treatment with divider above
+
+### 39. Low Priority Reskin (🟢)
+
+- [x] **RS-011**: Landing page logo glow + focus states — radial glow pulse beneath logo; gold/purple inner glow on username input focus
+- [x] **RS-012**: Opponent card size + count badge — increase mini card visibility; count badge showing card count on each opponent panel
+- [x] **RS-013**: Polish animations — staggered card deal at round start; 3D flip on peek/round-end reveal; full-width CHECK announcement banner
+- [x] **RS-014**: Menu score summary panel — running scores for all players visible inside the in-game menu
+
+### 40. Multi-Player Layout (🔴)
+
+- [x] **RS-015**: Mobile slim opponent rows — replace card-based opponent display with 30px slim horizontal rows (turn pip, avatar, name, card count pips, score); active/danger states with 2px left accent bar
+- [x] **RS-016**: Mobile score bar — horizontal scrolling pill strip between opponent list and table; "You" pill in purple, opponent pills with colored avatar dots, danger pills in red
+- [x] **RS-017**: Desktop oval 3-column grid — CSS grid layout (1fr 1fr 1fr) with top arc opponents, left/right side opponents, center table surface, bottom hand zone, and score strip
+- [x] **RS-018**: Discard history strip — last 5 discards shown as mini cards inside table surface (mobile: 20×28px, desktop: 30×42px); newest at full opacity, older at 35%
+
+---
+
 **Total Phase 2 Features:** 54  
 **UX Improvements:** 17  
 **Bot, Bug Fixes & Stability:** 22  
@@ -427,5 +462,6 @@ Derived from PLAN.md. Features are grouped by domain and ordered by implementati
 **Round Transition Timer:** 2  
 **Round-End UI Polish:** 1  
 **Rejoin Stabilization:** 3  
-**Document Version:** 1.12  
-**Last Updated:** 2026-03-16
+**UI Reskin:** 18  
+**Document Version:** 1.14  
+**Last Updated:** 2026-03-17

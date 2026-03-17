@@ -1,0 +1,421 @@
+
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+.tabs {
+  display: flex; gap: 5px; padding: 1rem 1rem 0; flex-wrap: wrap;
+  border-bottom: 0.5px solid var(--color-border-tertiary);
+}
+.tab {
+  padding: 6px 13px; font-size: 12px; border-radius: 6px 6px 0 0;
+  border: 0.5px solid var(--color-border-tertiary); border-bottom: none;
+  background: var(--color-background-secondary);
+  color: var(--color-text-secondary); cursor: pointer;
+}
+.tab.active { background: var(--color-background-primary); color: var(--color-text-primary); font-weight: 500; }
+.screen { display: none; padding: 1rem; }
+.screen.active { display: block; }
+
+.phone {
+  width: 300px; margin: 0 auto;
+  background: #0f0f16; border-radius: 28px; border: 1px solid #2a2a3a;
+  overflow: hidden; display: flex; flex-direction: column;
+  min-height: 560px;
+}
+
+/* ── SHARED ── */
+.check-logo {
+  text-align: center; padding: 48px 20px 20px;
+  display: flex; flex-direction: column; align-items: center; gap: 0;
+}
+.logo-sub { font-size: 9px; letter-spacing: 0.2em; color: #8a7a5a; text-transform: uppercase; font-weight: 600; margin-bottom: -2px; }
+.logo-main {
+  font-size: 44px; font-weight: 900; color: #d4351c;
+  font-family: Georgia, serif; letter-spacing: 0.04em;
+  text-shadow: 0 2px 0 #8a1a0a, 0 3px 8px rgba(0,0,0,0.6);
+  border: 3px solid #c9a227; border-radius: 6px;
+  padding: 2px 18px 4px; line-height: 1;
+  background: linear-gradient(180deg, #2a1a00 0%, #1a1000 100%);
+}
+.logo-glow { width: 120px; height: 20px; background: radial-gradient(ellipse, #c9a22740 0%, transparent 70%); margin-top: -4px; }
+
+.conn-status {
+  display: flex; align-items: center; gap: 6px; justify-content: center;
+  font-size: 12px; color: #888; margin-bottom: 16px;
+}
+.conn-dot { width: 8px; height: 8px; border-radius: 50%; background: #4ecb4e; flex-shrink: 0; }
+
+.form-area { padding: 0 20px 28px; display: flex; flex-direction: column; gap: 10px; }
+.inp {
+  width: 100%; padding: 13px 14px; border-radius: 10px;
+  background: #1a1a28; border: 1.5px solid #3a3a5a;
+  color: #eee; font-size: 14px; outline: none;
+}
+.inp::placeholder { color: #444; }
+.inp:focus { border-color: #6a6aaa; }
+.inp.code-inp {
+  text-transform: uppercase; letter-spacing: 0.18em;
+  text-align: center; font-size: 15px; font-weight: 600; color: #c9a227;
+}
+.inp.code-inp::placeholder { letter-spacing: 0.12em; color: #3a3a4a; text-transform: uppercase; }
+
+.btn-primary {
+  width: 100%; padding: 13px; border-radius: 10px;
+  background: #4a8a5a; color: #e8f5ec;
+  font-size: 15px; font-weight: 600; border: none; cursor: pointer;
+}
+.btn-primary:hover { background: #3a7a4a; }
+.btn-primary.gold { background: #c9a227; color: #1a1200; }
+.btn-secondary {
+  width: 100%; padding: 12px; border-radius: 10px;
+  background: #1c1c2e; border: 1px solid #2a2a3a;
+  color: #888; font-size: 14px; cursor: pointer;
+}
+.btn-danger { background: transparent; border: 1px solid #5a2a2a; color: #cf7070; }
+
+.or-divider { display: flex; align-items: center; gap: 8px; }
+.or-line { flex: 1; height: 0.5px; background: #222; }
+.or-text { font-size: 11px; color: #444; }
+
+.how-link { text-align: center; font-size: 13px; color: #5a5a7a; cursor: pointer; padding-bottom: 8px; }
+.how-link:hover { color: #8a8aaa; }
+
+.welcome-row { text-align: center; font-size: 14px; color: #888; margin-bottom: 16px; }
+.welcome-name { color: #7a7aee; font-weight: 600; }
+.change-link { color: #4a4a6a; font-size: 13px; cursor: pointer; }
+.change-link:hover { color: #7a7aaa; }
+
+/* ── LOBBY ── */
+.lobby-body { padding: 18px 16px; display: flex; flex-direction: column; gap: 14px; flex: 1; }
+.lobby-title { font-size: 18px; font-weight: 700; color: #eee; text-align: center; }
+.lobby-sub { font-size: 12px; color: #555; text-align: center; margin-top: 2px; }
+
+.room-code-block { text-align: center; }
+.rc-label { font-size: 10px; color: #444; letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 6px; }
+.rc-row { display: flex; align-items: center; justify-content: center; gap: 8px; }
+.rc-code { font-size: 28px; font-weight: 800; color: #7a7aee; letter-spacing: 0.18em; }
+.rc-btn {
+  width: 32px; height: 32px; border-radius: 7px;
+  background: #1c1c2e; border: 0.5px solid #2a2a3a;
+  display: flex; align-items: center; justify-content: center; cursor: pointer;
+  color: #666; font-size: 13px;
+}
+
+.players-header { display: flex; justify-content: space-between; align-items: center; }
+.players-label { font-size: 12px; color: #888; font-weight: 600; }
+.players-count { font-size: 12px; color: #555; }
+
+.player-row {
+  display: flex; align-items: center; gap: 8px; padding: 9px 10px;
+  border-radius: 8px; background: #1c1c28; border: 0.5px solid #2a2a3a;
+}
+.player-row.you { border-color: #3a3a6a; }
+.player-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.player-dot.online { background: #4ecb4e; }
+.player-dot.bot { background: #7a7aee; }
+.player-dot.empty { background: #2a2a3a; }
+.player-name { font-size: 13px; color: #ccc; flex: 1; }
+.player-name.empty { color: #333; font-style: italic; }
+.badge {
+  font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 4px;
+  letter-spacing: 0.04em;
+}
+.badge.host { background: #3a2a00; color: #c9a227; border: 1px solid #c9a22760; }
+.badge.you { background: #1a1a3a; color: #7a7aee; border: 1px solid #3a3a7a; }
+.badge.easy { background: #1a3a2a; color: #5ecf5e; border: 1px solid #2a5a3a; }
+.badge.expert { background: #3a1a1a; color: #cf5e5e; border: 1px solid #5a2a2a; }
+.kick-btn { color: #3a2a2a; font-size: 14px; cursor: pointer; padding: 0 2px; }
+.kick-btn:hover { color: #cf5e5e; }
+
+.bot-section { display: flex; flex-direction: column; gap: 8px; }
+.bot-label { font-size: 11px; color: #555; }
+.bot-row { display: flex; gap: 6px; align-items: center; }
+.diff-btn {
+  padding: 5px 12px; border-radius: 6px;
+  border: 0.5px solid #2a2a3a; background: #1c1c28;
+  font-size: 12px; font-weight: 600; cursor: pointer; color: #555;
+}
+.diff-btn.easy-active { background: #1a3a2a; border-color: #2a5a3a; color: #5ecf5e; }
+.diff-btn.expert-active { background: #3a1a1a; border-color: #5a2a2a; color: #cf5e5e; }
+.add-bot-btn {
+  padding: 5px 12px; border-radius: 6px;
+  background: #1c1c28; border: 0.5px solid #2a2a3a;
+  color: #666; font-size: 12px; cursor: pointer;
+  display: flex; align-items: center; gap: 5px;
+}
+
+.score-section { display: flex; flex-direction: column; gap: 6px; }
+.score-label { display: flex; justify-content: space-between; font-size: 12px; }
+.score-left { color: #555; }
+.score-val { color: #c9a227; font-weight: 600; }
+.slider-track { height: 4px; background: #1a1a28; border-radius: 2px; position: relative; }
+.slider-fill { height: 100%; background: #4a8a5a; border-radius: 2px; width: 40%; }
+.slider-thumb {
+  width: 16px; height: 16px; border-radius: 50%;
+  background: #eee; border: 2px solid #4a8a5a;
+  position: absolute; top: -6px; left: 38%;
+}
+
+/* ── MENU ── */
+.top-bar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 14px; background: #13131a; border-bottom: 0.5px solid #1e1e2a;
+}
+.round-lbl { font-size: 12px; color: #aaa; font-weight: 500; }
+.check-btn-top {
+  padding: 4px 11px; border-radius: 6px;
+  background: #c9a227; color: #1a1200;
+  font-size: 11px; font-weight: 700; border: none;
+}
+.menu-icon { color: #555; font-size: 16px; cursor: pointer; }
+
+.menu-overlay {
+  flex: 1; background: rgba(0,0,0,0.55);
+  display: flex; align-items: center; justify-content: center; padding: 16px;
+}
+.menu-sheet {
+  width: 100%; background: #1c1c28;
+  border-radius: 14px; border: 0.5px solid #2a2a3a; overflow: hidden;
+}
+.menu-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 16px; border-bottom: 0.5px solid #222;
+}
+.menu-title { font-size: 16px; font-weight: 600; color: #eee; }
+.menu-close { color: #555; font-size: 18px; cursor: pointer; padding: 0 4px; }
+.menu-close:hover { color: #aaa; }
+
+.menu-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 13px 16px; border-bottom: 0.5px solid #1a1a24;
+  cursor: pointer;
+}
+.menu-item:hover { background: #22222e; }
+.menu-item-icon { font-size: 15px; color: #666; width: 20px; text-align: center; }
+.menu-item-text { font-size: 14px; color: #ccc; }
+.menu-item.danger .menu-item-icon { color: #7a3a3a; }
+.menu-item.danger .menu-item-text { color: #cf7070; }
+
+.menu-section-label {
+  font-size: 10px; color: #444; letter-spacing: 0.1em; text-transform: uppercase;
+  padding: 10px 16px 4px; font-weight: 600;
+}
+.menu-player-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 16px; border-bottom: 0.5px solid #1a1a24;
+}
+.menu-player-name { font-size: 13px; color: #aaa; flex: 1; }
+.kick-x { color: #3a2525; font-size: 16px; cursor: pointer; }
+.kick-x:hover { color: #cf5e5e; }
+
+.sound-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 16px; border-bottom: 0.5px solid #1a1a24;
+}
+.sound-label { font-size: 14px; color: #aaa; }
+.toggle {
+  width: 38px; height: 22px; border-radius: 11px;
+  background: #2a2a3a; border: 0.5px solid #3a3a4a;
+  position: relative; cursor: pointer;
+}
+.toggle-knob {
+  width: 16px; height: 16px; border-radius: 50%;
+  background: #555; position: absolute; top: 2px; left: 2px;
+  transition: left 0.2s;
+}
+.toggle.on { background: #3a6a4a; border-color: #4a8a5a; }
+.toggle.on .toggle-knob { left: 18px; background: #5ecf5e; }
+
+.player-bottom { padding: 8px 14px 10px; text-align: center; font-size: 11px; color: #333; }
+
+.annotation {
+  font-size: 11px; color: var(--color-text-secondary);
+  margin-top: 8px; text-align: center; line-height: 1.6;
+}
+.annotation strong { color: #c9a227; font-weight: 500; }
+</style>
+
+<div class="tabs">
+  <div class="tab active" onclick="sw('landing')">landing</div>
+  <div class="tab" onclick="sw('prelobby')">pre-lobby</div>
+  <div class="tab" onclick="sw('lobby')">lobby</div>
+  <div class="tab" onclick="sw('menu')">menu</div>
+</div>
+
+<!-- ══ LANDING ══ -->
+<div class="screen active" id="screen-landing">
+  <div class="phone">
+    <div class="check-logo" style="flex:1;justify-content:center;">
+      <div class="logo-sub">The Card Game</div>
+      <div class="logo-main">CHECK</div>
+      <div class="logo-glow"></div>
+    </div>
+    <div style="display:flex;flex-direction:column;align-items:center;gap:4px;margin-bottom:20px;">
+      <div class="conn-status"><div class="conn-dot"></div>Connected</div>
+    </div>
+    <div class="form-area">
+      <input class="inp" placeholder="Enter your username" />
+      <button class="btn-primary">Continue</button>
+      <div class="how-link">How to Play</div>
+    </div>
+  </div>
+  <p class="annotation">Logo reconstructed with CSS — serif bold + gold border + red lettering. <strong>Glow pulse</strong> under logo adds life. Form sits anchored at bottom with breathing room.</p>
+</div>
+
+<!-- ══ PRE-LOBBY ══ -->
+<div class="screen" id="screen-prelobby">
+  <div class="phone">
+    <div class="check-logo" style="flex:1;justify-content:center;">
+      <div class="logo-sub">The Card Game</div>
+      <div class="logo-main">CHECK</div>
+      <div class="logo-glow"></div>
+    </div>
+    <div style="display:flex;flex-direction:column;align-items:center;gap:4px;margin-bottom:20px;">
+      <div class="conn-status"><div class="conn-dot"></div>Connected</div>
+      <div class="welcome-row">Welcome, <span class="welcome-name">Sam</span> <span class="change-link">(change)</span></div>
+    </div>
+    <div class="form-area">
+      <button class="btn-primary">Create Room</button>
+      <div class="or-divider"><div class="or-line"></div><div class="or-text">OR</div><div class="or-line"></div></div>
+      <input class="inp code-inp" placeholder="ENTER ROOM CODE" />
+      <button class="btn-secondary">Join Room</button>
+      <div class="how-link">How to Play</div>
+    </div>
+  </div>
+  <p class="annotation">Username shown in <strong>purple</strong> with inline (change) link. Room code input styled with <strong>monospace uppercase</strong> and gold color to feel like a code entry field.</p>
+</div>
+
+<!-- ══ LOBBY ══ -->
+<div class="screen" id="screen-lobby">
+  <div class="phone">
+    <div class="lobby-body">
+      <div>
+        <div class="lobby-title">Room Lobby</div>
+        <div class="lobby-sub">Waiting for players…</div>
+      </div>
+
+      <div class="room-code-block">
+        <div class="rc-label">Room Code</div>
+        <div class="rc-row">
+          <div class="rc-code">2U8BGG</div>
+          <div class="rc-btn">⧉</div>
+          <div class="rc-btn">↗</div>
+        </div>
+      </div>
+
+      <div>
+        <div class="players-header" style="margin-bottom:8px;">
+          <div class="players-label">Players</div>
+          <div class="players-count">2 / 6</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px;">
+          <div class="player-row you">
+            <div class="player-dot online"></div>
+            <div class="player-name">Sam</div>
+            <span class="badge host">HOST</span>
+            <span class="badge you">YOU</span>
+          </div>
+          <div class="player-row">
+            <div class="player-dot bot"></div>
+            <div class="player-name">Greta</div>
+            <span class="badge easy">EASY</span>
+            <span class="kick-btn">✕</span>
+          </div>
+          <div class="player-row"><div class="player-dot empty"></div><div class="player-name empty">Empty slot</div></div>
+          <div class="player-row"><div class="player-dot empty"></div><div class="player-name empty">Empty slot</div></div>
+          <div class="player-row"><div class="player-dot empty"></div><div class="player-name empty">Empty slot</div></div>
+          <div class="player-row"><div class="player-dot empty"></div><div class="player-name empty">Empty slot</div></div>
+        </div>
+      </div>
+
+      <div class="bot-section">
+        <div class="bot-label">Add a bot opponent:</div>
+        <div class="bot-row">
+          <div class="diff-btn easy-active">Easy</div>
+          <div class="diff-btn">Expert</div>
+          <div class="add-bot-btn">
+            <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><rect x="2" y="5" width="10" height="7" rx="2" stroke="#666" stroke-width="1.2"/><circle cx="7" cy="4" r="2" stroke="#666" stroke-width="1.2"/><path d="M5 8h4" stroke="#666" stroke-width="1.2" stroke-linecap="round"/></svg>
+            Add Bot
+          </div>
+        </div>
+      </div>
+
+      <div class="score-section">
+        <div class="score-label">
+          <span class="score-left">Game ends at:</span>
+          <span class="score-val">70 points</span>
+        </div>
+        <div class="slider-track">
+          <div class="slider-fill"></div>
+          <div class="slider-thumb"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:10px;color:#333;margin-top:2px;">
+          <span>30</span><span>100</span>
+        </div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        <button class="btn-primary">Start Game</button>
+        <button class="btn-secondary btn-danger">Leave Room</button>
+      </div>
+    </div>
+  </div>
+  <p class="annotation">Slider shows <strong>min/max labels</strong>. Dot colors: <strong>green</strong> = human online, <strong>purple</strong> = bot, <strong>gray</strong> = empty. Kick ✕ only visible on non-host rows.</p>
+</div>
+
+<!-- ══ MENU ══ -->
+<div class="screen" id="screen-menu">
+  <div class="phone">
+    <div class="top-bar">
+      <span class="round-lbl">Round: 1</span>
+      <button class="check-btn-top">CHECK</button>
+      <span class="menu-icon">☰</span>
+    </div>
+
+    <div class="menu-overlay">
+      <div class="menu-sheet">
+        <div class="menu-head">
+          <span class="menu-title">Menu</span>
+          <span class="menu-close">✕</span>
+        </div>
+
+        <div class="menu-item">
+          <span class="menu-item-icon">ⓘ</span>
+          <span class="menu-item-text">How to Play</span>
+        </div>
+        <div class="menu-item">
+          <span class="menu-item-icon">⏸</span>
+          <span class="menu-item-text">Pause Game</span>
+        </div>
+
+        <div class="menu-section-label">Players</div>
+        <div class="menu-player-row">
+          <div class="player-dot bot" style="flex-shrink:0;"></div>
+          <div class="menu-player-name">Greta (Bot)</div>
+          <span class="kick-x">✕</span>
+        </div>
+
+        <div class="sound-row">
+          <span class="sound-label">Sound</span>
+          <div class="toggle on"><div class="toggle-knob"></div></div>
+        </div>
+
+        <div class="menu-item danger">
+          <span class="menu-item-icon">⏻</span>
+          <span class="menu-item-text">Exit Game</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="player-bottom">sadf | Score: 0</div>
+  </div>
+  <p class="annotation">Sound toggle is <strong>on by default</strong> (green). Exit Game uses <strong>danger red</strong> — destructive action. Kick ✕ uses hover-reveal pattern to avoid accidental taps.</p>
+</div>
+
+<script>
+function sw(id) {
+  const ids = ['landing','prelobby','lobby','menu'];
+  document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', ids[i] === id));
+  document.querySelectorAll('.screen').forEach(s => s.classList.toggle('active', s.id === 'screen-' + id));
+}
+</script>

@@ -43,6 +43,7 @@ pnpm-debug.log*
 # OS
 .DS_Store
 Thumbs.db
+*:Zone.Identifier
 
 # MongoDB
 data/

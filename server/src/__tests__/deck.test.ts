@@ -7,6 +7,7 @@ import {
   addToDiscard,
   reshuffleDiscard,
   createShuffledDeck,
+  createDebugDeck,
 } from '../game/Deck';
 import { Card, GameState } from '../types/game.types';
 
@@ -387,6 +388,66 @@ describe('reshuffleDiscard', () => {
     expect(gs.deck).toHaveLength(0);
     expect(gs.discardPile).toHaveLength(1);
     expect(gs.discardPile[0].id).toBe('only');
+  });
+});
+
+// ============================================================
+// createDebugDeck
+// ============================================================
+
+describe('createDebugDeck', () => {
+  it('returns exactly 20 cards', () => {
+    const deck = createDebugDeck();
+    expect(deck).toHaveLength(20);
+  });
+
+  it('contains all 13 ranks at least once', () => {
+    const deck = createDebugDeck();
+    const allRanks = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
+    const deckRanks = new Set(deck.map((c) => c.rank));
+    for (const rank of allRanks) {
+      expect(deckRanks.has(rank as Card['rank'])).toBe(true);
+    }
+  });
+
+  it('contains NO black face cards (J♠, J♣, Q♠, Q♣, K♠, K♣)', () => {
+    const deck = createDebugDeck();
+    const blackFaces = deck.filter(
+      (c) => ['J', 'Q', 'K'].includes(c.rank) && (c.suit === '♠' || c.suit === '♣'),
+    );
+    expect(blackFaces).toHaveLength(0);
+  });
+
+  it('contains all 6 red face cards (J♥, J♦, Q♥, Q♦, K♥, K♦)', () => {
+    const deck = createDebugDeck();
+    const redFaces = deck.filter(
+      (c) => ['J', 'Q', 'K'].includes(c.rank) && (c.suit === '♥' || c.suit === '♦'),
+    );
+    expect(redFaces).toHaveLength(6);
+  });
+
+  it('has unique card IDs', () => {
+    const deck = createDebugDeck();
+    const ids = deck.map((c) => c.id);
+    expect(new Set(ids).size).toBe(20);
+  });
+
+  it('correctly assigns isRed for all cards', () => {
+    const deck = createDebugDeck();
+    for (const card of deck) {
+      if (card.suit === '♥' || card.suit === '♦') {
+        expect(card.isRed).toBe(true);
+      } else {
+        expect(card.isRed).toBe(false);
+      }
+    }
+  });
+
+  it('assigns red 10 a value of 0', () => {
+    const deck = createDebugDeck();
+    const redTen = deck.find((c) => c.rank === '10' && c.isRed);
+    expect(redTen).toBeDefined();
+    expect(redTen!.value).toBe(0);
   });
 });
 
