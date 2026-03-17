@@ -175,3 +175,55 @@ export function reshuffleDiscard(gameState: GameState): void {
 export function createShuffledDeck(): Card[] {
   return shuffleDeck(initializeDeck());
 }
+
+// ============================================================
+// Debug Deck — 20-card deck for development/testing
+// ============================================================
+
+/**
+ * Creates a compact 20-card debug deck that:
+ * - Covers every card rank at least once
+ * - Includes ONLY red face cards (J♥, J♦, Q♥, Q♦, K♥, K♦) as action cards
+ * - Contains no black Jacks, Queens, or Kings
+ *
+ * Used when process.env.DEBUG_DECK === 'true' to speed up testing of
+ * special effects without wading through a full 54-card deck.
+ */
+export function createDebugDeck(): Card[] {
+  const cards: Array<[Suit, Rank]> = [
+    // Number cards — one of each rank, mixed suits
+    ['♥', 'A'],
+    ['♦', '2'],
+    ['♠', '3'],
+    ['♣', '4'],
+    ['♥', '5'],
+    ['♦', '6'],
+    ['♠', '7'],
+    ['♣', '8'],
+    ['♥', '9'],
+    ['♦', '10'], // red 10 = 0 pts
+    ['♠', '10'], // black 10 = 10 pts
+    // Extra number cards for hand variety
+    ['♣', 'A'],
+    ['♥', '2'],
+    ['♦', '5'],
+    // Red face cards ONLY (trigger special effects)
+    ['♥', 'J'],
+    ['♦', 'J'],
+    ['♥', 'Q'],
+    ['♦', 'Q'],
+    ['♥', 'K'],
+    ['♦', 'K'],
+  ];
+
+  let cardIndex = 0;
+  const deck: Card[] = cards.map(([suit, rank]) => ({
+    id: `debug-card-${cardIndex++}`,
+    suit,
+    rank,
+    value: getCardValue(suit, rank),
+    isRed: RED_SUITS.has(suit),
+  }));
+
+  return shuffleDeck(deck);
+}

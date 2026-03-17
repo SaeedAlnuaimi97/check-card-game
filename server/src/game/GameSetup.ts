@@ -8,7 +8,7 @@ import {
   PlayerState,
   SlotLabel,
 } from '../types/game.types';
-import { createShuffledDeck, drawFromDeck } from './Deck';
+import { createShuffledDeck, createDebugDeck, drawFromDeck } from './Deck';
 
 // ============================================================
 // Constants
@@ -105,7 +105,7 @@ export function initializeGameState(
   roundNumber = 1,
   targetScore = 70,
 ): GameState {
-  const deck = createShuffledDeck();
+  const deck = process.env.DEBUG_DECK === 'true' ? createDebugDeck() : createShuffledDeck();
 
   // Build initial scores map
   const scores: Record<string, number> = {};
@@ -203,9 +203,7 @@ export function addPlayerToActiveGame(
     hand: [],
     peekedSlots: [],
     totalScore: highestScore,
-    ...(playerInfo.isBot
-      ? { isBot: true, botDifficulty: playerInfo.botDifficulty ?? 'easy' }
-      : {}),
+    ...(playerInfo.isBot ? { isBot: true, botDifficulty: playerInfo.botDifficulty ?? 'easy' } : {}),
   };
 
   // Deal 4 cards to the new player

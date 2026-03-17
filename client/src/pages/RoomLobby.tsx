@@ -1,37 +1,64 @@
-import { FC, useEffect, useState } from 'react';
+import { FC, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
-  Badge,
   Box,
-  Button,
-  Heading,
   HStack,
-  IconButton,
   Input,
   Slider,
   SliderFilledTrack,
   SliderThumb,
   SliderTrack,
+  Spinner,
   Text,
   useClipboard,
   useToast,
   VStack,
 } from '@chakra-ui/react';
-import {
-  CopyOutlined,
-  ShareAltOutlined,
-  CloseOutlined,
-  RobotOutlined,
-  CheckOutlined,
-} from '@ant-design/icons';
+import { CheckOutlined } from '@ant-design/icons';
 import { useSocket } from '../context/SocketContext';
 
 const MIN_PLAYERS = 2;
 const MAX_PLAYERS = 6;
 
+// ────────────────────────────────────────────────────────────
+// Shared badge component matching the mockup exactly
+// ────────────────────────────────────────────────────────────
+interface PlayerBadgeProps {
+  type: 'host' | 'you' | 'easy' | 'expert' | 'ready' | 'notReady';
+}
+const PlayerBadge: FC<PlayerBadgeProps> = ({ type }) => {
+  const styles: Record<string, { bg: string; color: string; border: string; label: string }> = {
+    host: { bg: '#3a2a00', color: '#c9a227', border: '1px solid #c9a22760', label: 'HOST' },
+    you: { bg: '#1a1a3a', color: '#7a7aee', border: '1px solid #3a3a7a', label: 'YOU' },
+    easy: { bg: '#1a3a2a', color: '#5ecf5e', border: '1px solid #2a5a3a', label: 'EASY' },
+    expert: { bg: '#3a1a1a', color: '#cf5e5e', border: '1px solid #5a2a2a', label: 'EXPERT' },
+    ready: { bg: '#1a3a2a', color: '#5ecf5e', border: '1px solid #2a5a3a', label: 'READY' },
+    notReady: { bg: '#1a1a28', color: '#555', border: '1px solid #2a2a3a', label: 'NOT READY' },
+  };
+  const s = styles[type];
+  return (
+    <Box
+      as="span"
+      fontSize="10px"
+      fontWeight="700"
+      px="7px"
+      py="2px"
+      borderRadius="4px"
+      bg={s.bg}
+      color={s.color}
+      border={s.border}
+      letterSpacing="0.04em"
+      flexShrink={0}
+    >
+      {s.label}
+    </Box>
+  );
+};
+
 export const RoomLobby: FC = () => {
   const { code } = useParams<{ code: string }>();
   const {
+    isConnected,
     playerId,
     roomData,
     joinRoom,
@@ -53,6 +80,39 @@ export const RoomLobby: FC = () => {
   const [isJoining, setIsJoining] = useState(false);
 
   const roomCode = (code ?? '').toUpperCase();
+
+  // ----------------------------------------------------------
+  // Grace-period reconnect spinner
+  // Show a spinner instead of the join form when the player has stored
+  // credentials for this room, so the auto-rejoin from SocketContext has a
+  // chance to fire before we decide they are a new joiner.
+  // ----------------------------------------------------------
+  const hasStoredSession =
+    !!localStorage.getItem('playerId') &&
+    localStorage.getItem('roomCode')?.toUpperCase() === roomCode;
+
+  // isAwaitingRejoin: true until socket connects and the rejoin callback has
+  // had time to settle (roomData will be populated on success).
+  const [isAwaitingRejoin, setIsAwaitingRejoin] = useState(hasStoredSession && !isConnected);
+  const rejoinSettleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (!hasStoredSession) return;
+    if (isConnected) {
+      // Socket just connected — wait a short moment for the rejoinRoom callback
+      // to fire and set roomData before we decide to show the join form.
+      rejoinSettleTimer.current = setTimeout(() => setIsAwaitingRejoin(false), 2000);
+    }
+    return () => {
+      if (rejoinSettleTimer.current) clearTimeout(rejoinSettleTimer.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isConnected]);
+
+  // Once roomData arrives (rejoin succeeded), clear the waiting state immediately.
+  useEffect(() => {
+    if (roomData) setIsAwaitingRejoin(false);
+  }, [roomData]);
 
   // Redirect to home if no room code in URL
   useEffect(() => {
@@ -102,85 +162,137 @@ export const RoomLobby: FC = () => {
         position: 'top',
       });
     }
-    // On success, roomData will be set via SocketContext and we'll show the lobby
   };
 
   // ----------------------------------------------------------
   // Join-by-link view
   // ----------------------------------------------------------
-  if (!isInRoom) {
+
+  // Show spinner while waiting for the grace-period auto-rejoin to settle
+  if (!isInRoom && isAwaitingRejoin) {
     return (
       <Box
-        minH="100vh"
+        minH="100dvh"
         display="flex"
         alignItems="center"
         justifyContent="center"
-        bg="table.felt"
+        bg="#0f0f16"
         color="white"
-        p={4}
       >
-        <VStack spacing={8} w={{ base: '100%', sm: '400px' }}>
-          <VStack spacing={2}>
-            <Heading size="lg">Join Room</Heading>
-            <HStack spacing={2}>
-              <Text fontSize="sm" color="gray.400">
-                Room code:
-              </Text>
-              <Text
-                fontSize="sm"
-                fontWeight="bold"
-                color="brand.300"
-                letterSpacing="wider"
-                fontFamily="mono"
-              >
-                {roomCode}
-              </Text>
-            </HStack>
-          </VStack>
-
-          <VStack spacing={4} w="100%">
-            <Input
-              placeholder="Enter your username"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              maxLength={10}
-              size="lg"
-              bg="table.border"
-              border="1px solid"
-              borderColor="gray.600"
-              _hover={{ borderColor: 'gray.500' }}
-              _focus={{
-                borderColor: 'brand.400',
-                boxShadow: '0 0 0 1px var(--chakra-colors-brand-400)',
-              }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') handleJoin();
-              }}
-              autoFocus
-            />
-
-            <Button
-              colorScheme="purple"
-              size="lg"
-              w="100%"
-              onClick={handleJoin}
-              isLoading={isJoining}
-              isDisabled={!username.trim()}
-            >
-              Join Room
-            </Button>
-
-            <Button
-              variant="ghost"
-              color="gray.500"
-              size="sm"
-              onClick={() => navigate('/')}
-              _hover={{ color: 'gray.300' }}
-            >
-              Back to Home
-            </Button>
-          </VStack>
+        <VStack spacing={4}>
+          <Spinner size="xl" color="brand.400" thickness="4px" />
+          <Text fontSize="lg" color="gray.400">
+            Reconnecting...
+          </Text>
         </VStack>
+      </Box>
+    );
+  }
+
+  if (!isInRoom) {
+    return (
+      <Box
+        h="100dvh"
+        display="flex"
+        flexDirection="column"
+        bg="#0f0f16"
+        color="white"
+        overflow="hidden"
+      >
+        {/* Logo area */}
+        <Box
+          display="flex"
+          flexDirection="column"
+          alignItems="center"
+          flex={1}
+          justifyContent="center"
+          pt="48px"
+          pb="20px"
+          gap={0}
+        >
+          <Box
+            as="img"
+            src="/logo.png"
+            alt="Check"
+            h="200px"
+            maxW="80vw"
+            userSelect="none"
+            draggable="false"
+          />
+          <Box
+            w="200px"
+            h="20px"
+            mt="4px"
+            bg="radial-gradient(ellipse, #c9a22740 0%, transparent 70%)"
+          />
+        </Box>
+
+        {/* Connection / room code */}
+        <Box display="flex" flexDirection="column" alignItems="center" gap="4px" mb="20px">
+          <HStack spacing="6px" justify="center">
+            <Box w="8px" h="8px" borderRadius="full" bg="#4ecb4e" flexShrink={0} />
+            <Text fontSize="12px" color="#888">
+              Room:{' '}
+              <Box as="span" color="#7a7aee" fontWeight="700" letterSpacing="0.15em">
+                {roomCode}
+              </Box>
+            </Text>
+          </HStack>
+        </Box>
+
+        {/* Form */}
+        <Box px="20px" pb="28px" display="flex" flexDirection="column" gap="10px">
+          <Input
+            placeholder="Enter your username"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            maxLength={10}
+            bg="#1a1a28"
+            border="1.5px solid #3a3a5a"
+            borderRadius="10px"
+            color="#eee"
+            fontSize="14px"
+            px="14px"
+            py="13px"
+            h="auto"
+            _placeholder={{ color: '#444' }}
+            _hover={{ borderColor: '#3a3a5a' }}
+            _focus={{ borderColor: '#6a6aaa', boxShadow: 'none' }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') handleJoin();
+            }}
+            autoFocus
+          />
+          <Box
+            as="button"
+            w="100%"
+            py="13px"
+            borderRadius="10px"
+            bg={!username.trim() || isJoining ? '#2a5a3a' : '#4a8a5a'}
+            color="#e8f5ec"
+            fontSize="15px"
+            fontWeight="600"
+            border="none"
+            cursor={!username.trim() || isJoining ? 'not-allowed' : 'pointer'}
+            opacity={!username.trim() || isJoining ? 0.6 : 1}
+            onClick={handleJoin}
+          >
+            {isJoining ? 'Joining...' : 'Join Room'}
+          </Box>
+          <Box
+            as="button"
+            textAlign="center"
+            fontSize="13px"
+            color="#5a5a7a"
+            cursor="pointer"
+            bg="transparent"
+            border="none"
+            pb="8px"
+            onClick={() => navigate('/')}
+          >
+            Back to Home
+          </Box>
+        </Box>
       </Box>
     );
   }
@@ -211,17 +323,11 @@ export const RoomLobby: FC = () => {
         position: 'top',
       });
     }
-    // On success, the server will emit gameStarted and we'll navigate to game board
   };
 
   const handleCopy = () => {
     onCopy();
-    toast({
-      title: 'Room code copied!',
-      status: 'success',
-      duration: 1500,
-      position: 'top',
-    });
+    toast({ title: 'Room code copied!', status: 'success', duration: 1500, position: 'top' });
   };
 
   const handleShare = () => {
@@ -238,13 +344,23 @@ export const RoomLobby: FC = () => {
         });
       })
       .catch(() => {
-        toast({
-          title: 'Could not copy link',
-          status: 'error',
-          duration: 2000,
-          position: 'top',
-        });
+        toast({ title: 'Could not copy link', status: 'error', duration: 2000, position: 'top' });
       });
+  };
+
+  const handleRemoveBot = async (botPlayerId: string, botUsername: string) => {
+    const result = await removeBot(botPlayerId);
+    if (!result.success) {
+      toast({
+        title: 'Cannot remove bot',
+        description: result.error,
+        status: 'error',
+        duration: 3000,
+        position: 'top',
+      });
+    } else {
+      toast({ title: `${botUsername} removed`, status: 'info', duration: 2000, position: 'top' });
+    }
   };
 
   const handleKick = async (targetPlayerId: string, targetUsername: string) => {
@@ -280,279 +396,332 @@ export const RoomLobby: FC = () => {
     }
   };
 
-  const handleRemoveBot = async (botPlayerId: string, botUsername: string) => {
-    const result = await removeBot(botPlayerId);
-    if (!result.success) {
-      toast({
-        title: 'Cannot remove bot',
-        description: result.error,
-        status: 'error',
-        duration: 3000,
-        position: 'top',
-      });
-    } else {
-      toast({
-        title: `${botUsername} removed`,
-        status: 'info',
-        duration: 2000,
-        position: 'top',
-      });
-    }
-  };
-
   return (
-    <Box
-      minH="100vh"
-      display="flex"
-      alignItems="center"
-      justifyContent="center"
-      bg="table.felt"
-      color="white"
-      p={4}
-    >
-      <VStack spacing={8} w={{ base: '100%', sm: '450px' }}>
-        {/* Header */}
-        <VStack spacing={2}>
-          <Heading size="lg">Room Lobby</Heading>
-          <Text fontSize="sm" color="gray.400">
-            Waiting for players...
-          </Text>
-        </VStack>
-
-        {/* Room Code */}
-        <VStack spacing={2}>
-          <Text fontSize="sm" color="gray.500" textTransform="uppercase" letterSpacing="wider">
-            Room Code
-          </Text>
-          <HStack spacing={3}>
-            <Heading size="2xl" letterSpacing="0.3em" fontFamily="mono" color="brand.300">
-              {roomData.roomCode}
-            </Heading>
-            <IconButton
-              aria-label={hasCopied ? 'Copied' : 'Copy room code'}
-              size="sm"
-              variant="outline"
-              colorScheme="gray"
-              icon={<CopyOutlined />}
-              onClick={handleCopy}
-            />
-            <IconButton
-              aria-label="Copy invite link"
-              size="sm"
-              variant="outline"
-              colorScheme="purple"
-              icon={<ShareAltOutlined />}
-              onClick={handleShare}
-            />
-          </HStack>
-        </VStack>
-
-        {/* Player List */}
-        <VStack spacing={3} w="100%">
-          <HStack justify="space-between" w="100%">
-            <Text fontSize="sm" color="gray.500" fontWeight="bold">
-              Players
+    <Box minH="100dvh" bg="#0f0f16" color="white" display="flex" justifyContent="center" p={4}>
+      <Box w={{ base: '100%', sm: '360px' }}>
+        <VStack spacing={0} align="stretch" gap="14px" pt="18px" pb="24px">
+          {/* Title */}
+          <Box textAlign="center">
+            <Text fontSize="18px" fontWeight="700" color="#eee">
+              Room Lobby
             </Text>
-            <Text fontSize="sm" color="gray.500">
-              {roomData.players.length} / {MAX_PLAYERS}
+            <Text fontSize="12px" color="#555" mt="2px">
+              Waiting for players…
             </Text>
-          </HStack>
+          </Box>
 
-          {playerSlots.map((player, index) => (
-            <Box
-              key={index}
-              w="100%"
-              p={3}
-              bg={player ? 'surface.tonal10' : 'surface.tonal0'}
-              borderRadius="md"
-              border="1px solid"
-              borderColor={
-                player ? (player.isBot ? 'purple.700' : 'surface.tonal30') : 'surface.tonal20'
-              }
-              opacity={player ? 1 : 0.4}
+          {/* Room Code */}
+          <Box textAlign="center">
+            <Text
+              fontSize="10px"
+              color="#444"
+              letterSpacing="0.12em"
+              textTransform="uppercase"
+              mb="6px"
             >
-              <HStack justify="space-between">
-                <HStack spacing={3}>
+              Room Code
+            </Text>
+            <HStack justify="center" spacing="8px">
+              <Text fontSize="28px" fontWeight="800" color="#7a7aee" letterSpacing="0.18em">
+                {roomData.roomCode}
+              </Text>
+              {/* Copy button */}
+              <Box
+                as="button"
+                w="32px"
+                h="32px"
+                borderRadius="7px"
+                bg="#1c1c2e"
+                border="0.5px solid #2a2a3a"
+                display="flex"
+                alignItems="center"
+                justifyContent="center"
+                cursor="pointer"
+                color={hasCopied ? '#5ecf5e' : '#666'}
+                fontSize="13px"
+                onClick={handleCopy}
+                _hover={{ color: '#aaa' }}
+                title={hasCopied ? 'Copied!' : 'Copy room code'}
+              >
+                {hasCopied ? '✓' : '⧉'}
+              </Box>
+              {/* Share button */}
+              <Box
+                as="button"
+                w="32px"
+                h="32px"
+                borderRadius="7px"
+                bg="#1c1c2e"
+                border="0.5px solid #2a2a3a"
+                display="flex"
+                alignItems="center"
+                justifyContent="center"
+                cursor="pointer"
+                color="#666"
+                fontSize="13px"
+                onClick={handleShare}
+                _hover={{ color: '#aaa' }}
+                title="Copy invite link"
+              >
+                ↗
+              </Box>
+            </HStack>
+          </Box>
+
+          {/* Player List */}
+          <Box>
+            <HStack justify="space-between" mb="8px">
+              <Text fontSize="12px" color="#888" fontWeight="600">
+                Players
+              </Text>
+              <Text fontSize="12px" color="#555">
+                {roomData.players.length} / {MAX_PLAYERS}
+              </Text>
+            </HStack>
+            <VStack spacing={0} gap="6px">
+              {playerSlots.map((player, index) => (
+                <Box
+                  key={index}
+                  w="100%"
+                  px="10px"
+                  py="9px"
+                  borderRadius="8px"
+                  bg="#1c1c28"
+                  border="0.5px solid"
+                  borderColor={
+                    player ? (player.id === playerId ? '#3a3a6a' : '#2a2a3a') : '#2a2a3a'
+                  }
+                  opacity={player ? 1 : 0.5}
+                  display="flex"
+                  alignItems="center"
+                  gap="8px"
+                >
+                  {/* Status dot */}
                   <Box
-                    w={3}
-                    h={3}
+                    w="8px"
+                    h="8px"
                     borderRadius="full"
-                    bg={
-                      player
-                        ? player.isBot
-                          ? 'purple.400'
-                          : player.isReady || player.id === roomData.host
-                            ? 'success.a10'
-                            : 'warning.a10'
-                        : 'surface.tonal30'
-                    }
+                    flexShrink={0}
+                    bg={player ? (player.isBot ? '#7a7aee' : '#4ecb4e') : '#2a2a3a'}
                   />
+                  {/* Name */}
                   <Text
-                    fontWeight={player ? 'medium' : 'normal'}
-                    color={player ? 'white' : 'gray.600'}
+                    fontSize="13px"
+                    color={player ? '#ccc' : '#333'}
+                    fontStyle={player ? 'normal' : 'italic'}
+                    flex={1}
+                    noOfLines={1}
                   >
                     {player ? player.username : 'Empty slot'}
                   </Text>
-                </HStack>
-
-                <HStack spacing={2}>
-                  {player && player.id === roomData.host && (
-                    <Badge colorScheme="yellow" fontSize="xs">
-                      Host
-                    </Badge>
-                  )}
-                  {player && player.isBot && (
-                    <Badge colorScheme="purple" fontSize="xs">
-                      {player.botDifficulty ?? 'bot'}
-                    </Badge>
-                  )}
-                  {player && !player.isBot && player.id !== roomData.host && (
-                    <Badge
-                      colorScheme={player.isReady ? 'green' : 'gray'}
-                      fontSize="xs"
-                      variant={player.isReady ? 'solid' : 'outline'}
-                    >
-                      {player.isReady ? 'Ready' : 'Not Ready'}
-                    </Badge>
-                  )}
-                  {player && player.id === playerId && (
-                    <Badge colorScheme="purple" fontSize="xs">
-                      You
-                    </Badge>
-                  )}
-                  {/* Remove bot button: only visible to host for bot slots */}
-                  {isHost && player?.isBot && (
-                    <IconButton
-                      aria-label={`Remove ${player.username}`}
-                      size="xs"
-                      variant="ghost"
-                      colorScheme="purple"
-                      icon={<CloseOutlined />}
-                      onClick={() => handleRemoveBot(player.id, player.username)}
-                    />
-                  )}
-                  {/* Kick button: only visible to host for non-bot, non-self players */}
-                  {isHost && player && !player.isBot && player.id !== playerId && (
-                    <IconButton
-                      aria-label={`Kick ${player.username}`}
-                      size="xs"
-                      variant="ghost"
-                      colorScheme="red"
-                      icon={<CloseOutlined />}
-                      onClick={() => handleKick(player.id, player.username)}
-                    />
-                  )}
-                </HStack>
-              </HStack>
-            </Box>
-          ))}
-        </VStack>
-
-        {/* Actions */}
-        <VStack spacing={3} w="100%">
-          {isHost && (
-            <>
-              {/* Add Bot (F-300/F-301) */}
-              {roomData.players.length < MAX_PLAYERS && (
-                <VStack spacing={1} w="100%" align="flex-start">
-                  <Text fontSize="sm" color="gray.400" fontWeight="medium">
-                    Add a bot opponent:
-                  </Text>
-                  <HStack w="100%">
-                    <HStack spacing={1}>
-                      <Button
-                        size="sm"
-                        variant={botDifficulty === 'easy' ? 'solid' : 'outline'}
-                        colorScheme={botDifficulty === 'easy' ? 'green' : 'gray'}
-                        onClick={() => setBotDifficulty('easy')}
+                  {/* Badges */}
+                  <HStack spacing="4px" flexShrink={0}>
+                    {player && player.id === roomData.host && <PlayerBadge type="host" />}
+                    {player && player.isBot && (
+                      <PlayerBadge type={player.botDifficulty === 'expert' ? 'expert' : 'easy'} />
+                    )}
+                    {player && !player.isBot && player.id !== roomData.host && (
+                      <PlayerBadge type={player.isReady ? 'ready' : 'notReady'} />
+                    )}
+                    {player && player.id === playerId && <PlayerBadge type="you" />}
+                    {/* Kick/Remove — plain ✕ text */}
+                    {isHost && player?.isBot && (
+                      <Box
+                        as="span"
+                        fontSize="14px"
+                        color="#3a2a2a"
+                        cursor="pointer"
+                        px="2px"
+                        flexShrink={0}
+                        onClick={() => handleRemoveBot(player.id, player.username)}
+                        _hover={{ color: '#cf5e5e' }}
                       >
-                        Easy
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant={botDifficulty === 'expert' ? 'solid' : 'outline'}
-                        colorScheme={botDifficulty === 'expert' ? 'orange' : 'gray'}
-                        onClick={() => setBotDifficulty('expert')}
+                        ✕
+                      </Box>
+                    )}
+                    {isHost && player && !player.isBot && player.id !== playerId && (
+                      <Box
+                        as="span"
+                        fontSize="14px"
+                        color="#3a2a2a"
+                        cursor="pointer"
+                        px="2px"
+                        flexShrink={0}
+                        onClick={() => handleKick(player.id, player.username)}
+                        _hover={{ color: '#cf5e5e' }}
                       >
-                        Expert
-                      </Button>
-                    </HStack>
-                    <Button
-                      size="sm"
-                      colorScheme="purple"
-                      leftIcon={<RobotOutlined />}
-                      onClick={handleAddBot}
-                    >
-                      Add Bot
-                    </Button>
-                  </HStack>
-                </VStack>
-              )}
-
-              {/* Target Score (F-310) */}
-              <VStack spacing={1} w="100%" align="flex-start">
-                <HStack w="100%" justify="space-between">
-                  <Text fontSize="sm" color="gray.400" fontWeight="medium">
-                    Game ends at:
-                  </Text>
-                  <HStack spacing={1}>
-                    <Text fontSize="sm" fontWeight="bold" color="white">
-                      {targetScore}
-                    </Text>
-                    <Text fontSize="sm" color="gray.400">
-                      points
-                    </Text>
-                    {targetScore !== 70 && (
-                      <Text fontSize="xs" color="warning.a10">
-                        (default: 70)
-                      </Text>
+                        ✕
+                      </Box>
                     )}
                   </HStack>
-                </HStack>
-                <Slider
-                  min={50}
-                  max={150}
-                  step={5}
-                  value={targetScore}
-                  onChange={(val) => setTargetScore(val)}
-                  colorScheme="green"
-                >
-                  <SliderTrack bg="surface.tonal20">
-                    <SliderFilledTrack />
-                  </SliderTrack>
-                  <SliderThumb boxSize={5} />
-                </Slider>
-              </VStack>
+                </Box>
+              ))}
+            </VStack>
+          </Box>
 
-              <Button
-                colorScheme="green"
-                size="lg"
+          {/* Host-only controls */}
+          {isHost && (
+            <>
+              {/* Add Bot section */}
+              {roomData.players.length < MAX_PLAYERS && (
+                <Box display="flex" flexDirection="column" gap="8px">
+                  <Text fontSize="11px" color="#555">
+                    Add a bot opponent:
+                  </Text>
+                  <HStack spacing="6px">
+                    {/* Difficulty buttons */}
+                    <Box
+                      as="button"
+                      px="12px"
+                      py="5px"
+                      borderRadius="6px"
+                      border="0.5px solid"
+                      borderColor={botDifficulty === 'easy' ? '#2a5a3a' : '#2a2a3a'}
+                      bg={botDifficulty === 'easy' ? '#1a3a2a' : '#1c1c28'}
+                      color={botDifficulty === 'easy' ? '#5ecf5e' : '#555'}
+                      fontSize="12px"
+                      fontWeight="600"
+                      cursor="pointer"
+                      onClick={() => setBotDifficulty('easy')}
+                    >
+                      Easy
+                    </Box>
+                    <Box
+                      as="button"
+                      px="12px"
+                      py="5px"
+                      borderRadius="6px"
+                      border="0.5px solid"
+                      borderColor={botDifficulty === 'expert' ? '#5a2a2a' : '#2a2a3a'}
+                      bg={botDifficulty === 'expert' ? '#3a1a1a' : '#1c1c28'}
+                      color={botDifficulty === 'expert' ? '#cf5e5e' : '#555'}
+                      fontSize="12px"
+                      fontWeight="600"
+                      cursor="pointer"
+                      onClick={() => setBotDifficulty('expert')}
+                    >
+                      Expert
+                    </Box>
+                    {/* Add Bot button */}
+                    <Box
+                      as="button"
+                      px="12px"
+                      py="5px"
+                      borderRadius="6px"
+                      bg="#1c1c28"
+                      border="0.5px solid #2a2a3a"
+                      color="#666"
+                      fontSize="12px"
+                      cursor="pointer"
+                      display="flex"
+                      alignItems="center"
+                      gap="5px"
+                      onClick={handleAddBot}
+                      _hover={{ color: '#aaa' }}
+                    >
+                      <svg width="13" height="13" viewBox="0 0 14 14" fill="none">
+                        <rect
+                          x="2"
+                          y="5"
+                          width="10"
+                          height="7"
+                          rx="2"
+                          stroke="#666"
+                          strokeWidth="1.2"
+                        />
+                        <circle cx="7" cy="4" r="2" stroke="#666" strokeWidth="1.2" />
+                        <path d="M5 8h4" stroke="#666" strokeWidth="1.2" strokeLinecap="round" />
+                      </svg>
+                      Add Bot
+                    </Box>
+                  </HStack>
+                </Box>
+              )}
+
+              {/* Target Score slider */}
+              <Box display="flex" flexDirection="column" gap="6px">
+                <HStack justify="space-between">
+                  <Text fontSize="12px" color="#555">
+                    Game ends at:
+                  </Text>
+                  <Text fontSize="12px" color="#c9a227" fontWeight="600">
+                    {targetScore} points
+                  </Text>
+                </HStack>
+                <HStack spacing="8px" align="center">
+                  <Text fontSize="10px" color="#333" minW="20px" textAlign="right">
+                    50
+                  </Text>
+                  <Box flex={1}>
+                    <Slider
+                      min={50}
+                      max={150}
+                      step={5}
+                      value={targetScore}
+                      onChange={(val) => setTargetScore(val)}
+                      colorScheme="green"
+                    >
+                      <SliderTrack bg="#1a1a28" h="4px" borderRadius="2px">
+                        <SliderFilledTrack bg="#4a8a5a" />
+                      </SliderTrack>
+                      <SliderThumb boxSize={4} bg="#eee" border="2px solid #4a8a5a" />
+                    </Slider>
+                  </Box>
+                  <Text fontSize="10px" color="#333" minW="24px">
+                    150
+                  </Text>
+                </HStack>
+              </Box>
+
+              {/* Start Game */}
+              <Box
+                as="button"
                 w="100%"
+                py="13px"
+                borderRadius="10px"
+                bg={canStart ? '#4a8a5a' : '#2a5a3a'}
+                color="#e8f5ec"
+                fontSize="15px"
+                fontWeight="600"
+                border="none"
+                cursor={canStart ? 'pointer' : 'not-allowed'}
+                opacity={canStart ? 1 : 0.6}
                 onClick={handleStart}
-                isDisabled={!canStart}
+                sx={{ '&:hover:not([disabled])': { background: canStart ? '#3a7a4a' : '#2a5a3a' } }}
               >
                 {roomData.players.length < MIN_PLAYERS
                   ? `Need ${MIN_PLAYERS - roomData.players.length} more player${MIN_PLAYERS - roomData.players.length !== 1 ? 's' : ''}`
                   : !allPlayersReady
                     ? 'Waiting for players to ready up...'
                     : 'Start Game'}
-              </Button>
+              </Box>
             </>
           )}
 
+          {/* Non-host: Ready button */}
           {!isHost && (
             <>
-              <Button
-                colorScheme={
-                  roomData.players.find((p) => p.id === playerId)?.isReady ? 'green' : 'yellow'
-                }
-                size="lg"
+              <Box
+                as="button"
                 w="100%"
-                leftIcon={
-                  roomData.players.find((p) => p.id === playerId)?.isReady ? (
-                    <CheckOutlined />
-                  ) : undefined
+                py="13px"
+                borderRadius="10px"
+                bg={
+                  roomData.players.find((p) => p.id === playerId)?.isReady ? '#1a3a2a' : '#4a8a5a'
                 }
+                color="#e8f5ec"
+                fontSize="15px"
+                fontWeight="600"
+                border={
+                  roomData.players.find((p) => p.id === playerId)?.isReady
+                    ? '1px solid #2a5a3a'
+                    : 'none'
+                }
+                cursor="pointer"
+                display="flex"
+                alignItems="center"
+                justifyContent="center"
+                gap="8px"
                 onClick={async () => {
                   const result = await toggleReady();
                   if (!result.success) {
@@ -566,19 +735,33 @@ export const RoomLobby: FC = () => {
                   }
                 }}
               >
+                {roomData.players.find((p) => p.id === playerId)?.isReady && <CheckOutlined />}
                 {roomData.players.find((p) => p.id === playerId)?.isReady ? 'Ready!' : 'Ready Up'}
-              </Button>
-              <Text fontSize="sm" color="gray.500" textAlign="center">
+              </Box>
+              <Text fontSize="12px" color="#555" textAlign="center">
                 Waiting for host to start the game...
               </Text>
             </>
           )}
 
-          <Button variant="outline" colorScheme="red" size="md" w="100%" onClick={handleLeave}>
+          {/* Leave Room — btn-danger */}
+          <Box
+            as="button"
+            w="100%"
+            py="12px"
+            borderRadius="10px"
+            bg="transparent"
+            border="1px solid #5a2a2a"
+            color="#cf7070"
+            fontSize="14px"
+            cursor="pointer"
+            onClick={handleLeave}
+            _hover={{ bg: 'rgba(90,42,42,0.2)' }}
+          >
             Leave Room
-          </Button>
+          </Box>
         </VStack>
-      </VStack>
+      </Box>
     </Box>
   );
 };

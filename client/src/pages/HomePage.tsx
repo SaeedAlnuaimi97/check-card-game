@@ -2,9 +2,7 @@ import { useState, FC } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Box,
-  Button,
   HStack,
-  Image,
   Input,
   Modal,
   ModalBody,
@@ -43,6 +41,47 @@ const SUITS: Array<{ suit: CardType['suit']; isRed: boolean }> = [
   { suit: '♠', isRed: false },
   { suit: '♣', isRed: false },
 ];
+
+// ============================================================
+// Logo component — uses logo.png image
+// ============================================================
+
+const CheckLogo: FC = () => (
+  <Box
+    display="flex"
+    flexDirection="column"
+    alignItems="center"
+    gap={0}
+    flex={1}
+    justifyContent="center"
+    pt="48px"
+    pb="20px"
+  >
+    <Box
+      as="img"
+      src="/logo.png"
+      alt="Check"
+      h="200px"
+      maxW="80vw"
+      userSelect="none"
+      draggable="false"
+    />
+    {/* Gold glow under logo */}
+    <Box
+      w="120px"
+      h="20px"
+      mt="4px"
+      bg="radial-gradient(ellipse, #c9a22740 0%, transparent 70%)"
+      sx={{
+        '@keyframes logoPulse': {
+          '0%, 100%': { opacity: 0.6 },
+          '50%': { opacity: 1 },
+        },
+        animation: 'logoPulse 3s ease-in-out infinite',
+      }}
+    />
+  </Box>
+);
 
 export const HomePage: FC = () => {
   const [username, setUsername] = useState('');
@@ -118,156 +157,220 @@ export const HomePage: FC = () => {
     <Box
       h="100dvh"
       display="flex"
-      alignItems="center"
-      justifyContent="center"
-      bg="table.felt"
+      flexDirection="column"
+      bg="#0f0f16"
       color="white"
-      p={4}
       overflow="hidden"
     >
-      <VStack spacing={8} w={{ base: '100%', sm: '400px' }}>
-        {/* Logo */}
-        <Image
-          src="/logo.png"
-          alt="Check Card Game Logo"
-          w={{ base: '220px', sm: '280px', md: '320px' }}
-          objectFit="contain"
-          filter="drop-shadow(0 0 24px rgba(108, 85, 201, 0.3))"
-        />
+      {/* Logo — flex:1, vertically centered */}
+      <CheckLogo />
 
-        {/* Connection status */}
-        <HStack spacing={2}>
-          <Box w={2} h={2} borderRadius="full" bg={isConnected ? 'green.400' : 'red.400'} />
-          <Text fontSize="sm" color="gray.500">
+      {/* Connection status row */}
+      <Box display="flex" flexDirection="column" alignItems="center" gap="4px" mb="20px">
+        <HStack spacing="6px" justify="center">
+          <Box
+            w="8px"
+            h="8px"
+            borderRadius="full"
+            bg={isConnected ? '#4ecb4e' : '#cf5e5e'}
+            flexShrink={0}
+          />
+          <Text fontSize="12px" color="#888">
             {isConnected ? 'Connected' : 'Connecting...'}
           </Text>
         </HStack>
 
+        {/* Welcome row — shown after username confirmed */}
+        {usernameConfirmed && (
+          <HStack spacing="4px" justify="center">
+            <Text fontSize="14px" color="#888">
+              Welcome,{' '}
+              <Box as="span" color="#7a7aee" fontWeight="600">
+                {username.trim()}
+              </Box>
+            </Text>
+            <Box
+              as="span"
+              fontSize="13px"
+              color="#4a4a6a"
+              cursor="pointer"
+              onClick={handleChangeClick}
+              _hover={{ color: '#7a7aaa' }}
+            >
+              (change)
+            </Box>
+          </HStack>
+        )}
+      </Box>
+
+      {/* Form area — pinned to bottom */}
+      <Box
+        px="20px"
+        pb="28px"
+        display="flex"
+        flexDirection="column"
+        gap="10px"
+        maxW="480px"
+        mx="auto"
+        w="100%"
+      >
         {!usernameConfirmed ? (
           /* Step 1: Username entry */
-          <VStack spacing={4} w="100%">
+          <>
             <Input
               placeholder="Enter your username"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               maxLength={10}
-              size="lg"
-              bg="table.border"
-              border="1px solid"
-              borderColor="gray.600"
-              _hover={{ borderColor: 'gray.500' }}
-              _focus={{
-                borderColor: 'brand.400',
-                boxShadow: '0 0 0 1px var(--chakra-colors-brand-400)',
-              }}
+              bg="#1a1a28"
+              border="1.5px solid #3a3a5a"
+              borderRadius="10px"
+              color="#eee"
+              fontSize="14px"
+              px="14px"
+              py="13px"
+              h="auto"
+              _placeholder={{ color: '#444' }}
+              _hover={{ borderColor: '#3a3a5a' }}
+              _focus={{ borderColor: '#6a6aaa', boxShadow: 'none', outline: 'none' }}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') handleConfirmUsername();
               }}
               autoFocus
             />
-            <Button
-              colorScheme="green"
-              size="lg"
+            <Box
+              as="button"
               w="100%"
+              px="0"
+              py="13px"
+              borderRadius="10px"
+              bg={!isConnected || !username.trim() ? '#2a5a3a' : '#4a8a5a'}
+              color="#e8f5ec"
+              fontSize="15px"
+              fontWeight="600"
+              border="none"
+              cursor={!isConnected || !username.trim() ? 'not-allowed' : 'pointer'}
+              opacity={!isConnected || !username.trim() ? 0.6 : 1}
+              _hover={{}}
               onClick={handleConfirmUsername}
-              isDisabled={!isConnected || !username.trim()}
+              sx={{
+                '&:hover:not([disabled])': { background: '#3a7a4a' },
+              }}
             >
               Continue
-            </Button>
-          </VStack>
+            </Box>
+            <Box
+              as="button"
+              textAlign="center"
+              fontSize="13px"
+              color="#5a5a7a"
+              cursor="pointer"
+              bg="transparent"
+              border="none"
+              pb="8px"
+              onClick={onHowToPlayOpen}
+              _hover={{ color: '#8a8aaa' }}
+            >
+              How to Play
+            </Box>
+          </>
         ) : (
           /* Step 2: Create or Join */
-          <VStack spacing={6} w="100%">
-            {/* Greeting */}
-            <HStack spacing={2}>
-              <Text fontSize="md" color="gray.400">
-                Welcome,
-              </Text>
-              <Text fontSize="md" fontWeight="bold" color="brand.300">
-                {username.trim()}
-              </Text>
-              <Button
-                variant="link"
-                size="sm"
-                color="gray.500"
-                onClick={handleChangeClick}
-                _hover={{ color: 'gray.300' }}
-              >
-                (change)
-              </Button>
-            </HStack>
-
-            {/* Create Room */}
-            <Button
-              colorScheme="green"
-              size="lg"
+          <>
+            {/* Create Room — btn-primary green */}
+            <Box
+              as="button"
               w="100%"
+              py="13px"
+              borderRadius="10px"
+              bg={!isConnected || isCreating ? '#2a5a3a' : '#4a8a5a'}
+              color="#e8f5ec"
+              fontSize="15px"
+              fontWeight="600"
+              border="none"
+              cursor={!isConnected || isCreating ? 'not-allowed' : 'pointer'}
+              opacity={!isConnected || isCreating ? 0.7 : 1}
               onClick={handleCreateRoom}
-              isLoading={isCreating}
-              isDisabled={!isConnected}
+              sx={{
+                '&:hover:not([disabled])': { background: '#3a7a4a' },
+              }}
             >
-              Create Room
-            </Button>
+              {isCreating ? 'Creating...' : 'Create Room'}
+            </Box>
 
-            {/* Divider */}
-            <HStack w="100%" spacing={4}>
-              <Box flex={1} h="1px" bg="gray.600" />
-              <Text fontSize="sm" color="gray.500">
+            {/* OR Divider */}
+            <HStack spacing="8px">
+              <Box flex={1} h="0.5px" bg="#222" />
+              <Text fontSize="11px" color="#444">
                 OR
               </Text>
-              <Box flex={1} h="1px" bg="gray.600" />
+              <Box flex={1} h="0.5px" bg="#222" />
             </HStack>
 
-            {/* Join Room */}
-            <VStack spacing={4} w="100%">
-              <Input
-                placeholder="Enter room code"
-                value={roomCode}
-                onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
-                maxLength={6}
-                size="lg"
-                bg="table.border"
-                border="1px solid"
-                borderColor="gray.600"
-                textTransform="uppercase"
-                letterSpacing="wider"
-                textAlign="center"
-                fontWeight="bold"
-                _hover={{ borderColor: 'gray.500' }}
-                _focus={{
-                  borderColor: 'brand.400',
-                  boxShadow: '0 0 0 1px var(--chakra-colors-brand-400)',
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleJoinRoom();
-                }}
-                autoFocus
-              />
-              <Button
-                colorScheme="purple"
-                size="lg"
-                w="100%"
-                onClick={handleJoinRoom}
-                isLoading={isJoining}
-                isDisabled={!isConnected || !roomCode.trim()}
-              >
-                Join Room
-              </Button>
-            </VStack>
-          </VStack>
-        )}
+            {/* Room code input */}
+            <Input
+              placeholder="ENTER ROOM CODE"
+              value={roomCode}
+              onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
+              maxLength={6}
+              bg="#1a1a28"
+              border="1.5px solid #3a3a5a"
+              borderRadius="10px"
+              color={roomCode ? '#c9a227' : '#eee'}
+              fontSize="15px"
+              fontWeight="600"
+              px="14px"
+              py="13px"
+              h="auto"
+              textTransform="uppercase"
+              letterSpacing="0.18em"
+              textAlign="center"
+              _placeholder={{
+                color: '#3a3a4a',
+                letterSpacing: '0.12em',
+                textTransform: 'uppercase',
+              }}
+              _hover={{ borderColor: '#3a3a5a' }}
+              _focus={{ borderColor: '#6a6aaa', boxShadow: 'none', outline: 'none' }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleJoinRoom();
+              }}
+            />
 
-        {/* How to Play button */}
-        <Button
-          variant="ghost"
-          color="gray.500"
-          size="sm"
-          onClick={onHowToPlayOpen}
-          _hover={{ color: 'gray.200' }}
-        >
-          How to Play
-        </Button>
-      </VStack>
+            {/* Join Room — btn-secondary */}
+            <Box
+              as="button"
+              w="100%"
+              py="12px"
+              borderRadius="10px"
+              bg="#1c1c2e"
+              border="1px solid #2a2a3a"
+              color="#888"
+              fontSize="14px"
+              cursor={!isConnected || !roomCode.trim() || isJoining ? 'not-allowed' : 'pointer'}
+              opacity={!isConnected || !roomCode.trim() || isJoining ? 0.6 : 1}
+              onClick={handleJoinRoom}
+            >
+              {isJoining ? 'Joining...' : 'Join Room'}
+            </Box>
+
+            <Box
+              as="button"
+              textAlign="center"
+              fontSize="13px"
+              color="#5a5a7a"
+              cursor="pointer"
+              bg="transparent"
+              border="none"
+              pb="8px"
+              onClick={onHowToPlayOpen}
+              _hover={{ color: '#8a8aaa' }}
+            >
+              How to Play
+            </Box>
+          </>
+        )}
+      </Box>
 
       {/* How to Play Modal */}
       <Modal
@@ -278,8 +381,8 @@ export const HomePage: FC = () => {
         motionPreset="slideInBottom"
       >
         <ModalOverlay bg="blackAlpha.800" />
-        <ModalContent bg="table.border" color="white" mx={4}>
-          <ModalHeader borderBottom="1px solid" borderColor="surface.tonal30" fontSize="lg">
+        <ModalContent bg="#1c1c28" color="white" mx={4} border="0.5px solid #2a2a3a">
+          <ModalHeader borderBottom="1px solid #2a2a3a" fontSize="lg">
             How to Play — Check - The Card Game
           </ModalHeader>
           <ModalCloseButton />
@@ -287,17 +390,17 @@ export const HomePage: FC = () => {
             <VStack align="stretch" spacing={4}>
               {/* Goal + Setup */}
               <Box>
-                <Text fontWeight="bold" color="brand.300" mb={1}>
+                <Text fontWeight="bold" color="#7a7aee" mb={1}>
                   Goal
                 </Text>
                 <Text color="gray.300">
-                  Lowest hand total wins each round. First player to reach score target points loses the
-                  game.
+                  Lowest hand total wins each round. First player to reach score target points loses
+                  the game.
                 </Text>
               </Box>
 
               <Box>
-                <Text fontWeight="bold" color="brand.300" mb={1}>
+                <Text fontWeight="bold" color="#7a7aee" mb={1}>
                   Setup
                 </Text>
                 <Text color="gray.300">
@@ -308,16 +411,16 @@ export const HomePage: FC = () => {
 
               {/* Card Values */}
               <Box>
-                <Text fontWeight="bold" color="brand.300" mb={2}>
+                <Text fontWeight="bold" color="#7a7aee" mb={2}>
                   Card Values
                 </Text>
                 <Table size="sm" variant="simple">
                   <Thead>
                     <Tr>
-                      <Th color="gray.400" borderColor="surface.tonal30">
+                      <Th color="gray.400" borderColor="#2a2a3a">
                         Card
                       </Th>
-                      <Th color="gray.400" borderColor="surface.tonal30" isNumeric>
+                      <Th color="gray.400" borderColor="#2a2a3a" isNumeric>
                         Points
                       </Th>
                     </Tr>
@@ -331,10 +434,10 @@ export const HomePage: FC = () => {
                       ['J, Q, K (red)', '10 + special effect'],
                     ].map(([card, pts]) => (
                       <Tr key={card}>
-                        <Td color="gray.300" borderColor="surface.tonal30">
+                        <Td color="gray.300" borderColor="#2a2a3a">
                           {card}
                         </Td>
-                        <Td color="warning.a10" borderColor="surface.tonal30" isNumeric>
+                        <Td color="#c9a227" borderColor="#2a2a3a" isNumeric>
                           {pts}
                         </Td>
                       </Tr>
@@ -345,7 +448,7 @@ export const HomePage: FC = () => {
 
               {/* Your Turn */}
               <Box>
-                <Text fontWeight="bold" color="brand.300" mb={2}>
+                <Text fontWeight="bold" color="#7a7aee" mb={2}>
                   On Your Turn — pick one:
                 </Text>
                 <VStack align="stretch" spacing={1}>
@@ -360,7 +463,7 @@ export const HomePage: FC = () => {
                       'Play a hand card matching the top discard. Match = card removed. Miss = penalty card added.',
                     ],
                   ].map(([title, desc]) => (
-                    <Box key={title} bg="surface.tonal20" px={3} py={2} borderRadius="md">
+                    <Box key={title} bg="#1a1a28" px={3} py={2} borderRadius="md">
                       <Text fontWeight="semibold" color="white" display="inline">
                         {title} —{' '}
                       </Text>
@@ -374,12 +477,12 @@ export const HomePage: FC = () => {
 
               {/* Special Effects */}
               <Box>
-                <Text fontWeight="bold" color="brand.300" mb={2}>
+                <Text fontWeight="bold" color="#7a7aee" mb={2}>
                   Red Face Card Effects
                 </Text>
                 <VStack align="stretch" spacing={2}>
                   {FACE_CARDS.map(({ rank, effect }) => (
-                    <Box key={rank} bg="surface.tonal20" px={3} py={2} borderRadius="md">
+                    <Box key={rank} bg="#1a1a28" px={3} py={2} borderRadius="md">
                       <HStack spacing={2} align="center" flexWrap="wrap">
                         {SUITS.map(({ suit, isRed }) => {
                           const cardObj: CardType = {
@@ -406,7 +509,7 @@ export const HomePage: FC = () => {
 
               {/* Check + Scoring */}
               <Box>
-                <Text fontWeight="bold" color="brand.300" mb={1}>
+                <Text fontWeight="bold" color="#7a7aee" mb={1}>
                   Calling CHECK
                 </Text>
                 <Text color="gray.300">
@@ -416,7 +519,7 @@ export const HomePage: FC = () => {
               </Box>
 
               <Box>
-                <Text fontWeight="bold" color="brand.300" mb={1}>
+                <Text fontWeight="bold" color="#7a7aee" mb={1}>
                   Scoring
                 </Text>
                 <Text color="gray.300">

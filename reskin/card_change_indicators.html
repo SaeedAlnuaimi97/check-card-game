@@ -1,0 +1,343 @@
+
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body { font-family: var(--font-sans); }
+
+.page { padding: 1rem; display: flex; flex-direction: column; gap: 1.5rem; }
+
+.section-label {
+  font-size: 11px; color: var(--color-text-secondary);
+  text-transform: uppercase; letter-spacing: 0.08em; font-weight: 500;
+  margin-bottom: 10px;
+}
+
+.options-row {
+  display: flex; gap: 16px; flex-wrap: wrap;
+}
+
+.option-block {
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  cursor: pointer;
+}
+.option-label {
+  font-size: 12px; color: var(--color-text-secondary); text-align: center; max-width: 80px; line-height: 1.4;
+}
+.option-label strong { color: var(--color-text-primary); font-weight: 500; display: block; margin-bottom: 2px; }
+
+/* BASE CARD */
+.card {
+  width: 52px; height: 72px; border-radius: 8px;
+  background: #2a2a4a; border: 1.5px solid #3a3a5a;
+  position: relative; overflow: visible;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; user-select: none;
+}
+.card.known { border-color: #c9a227; }
+.eye-b {
+  position: absolute; top: 3px; right: 3px;
+  width: 13px; height: 13px; background: #c9a227;
+  border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  z-index: 2;
+}
+
+/* ── OPTION A: corner pip flash ── */
+.pip {
+  position: absolute; bottom: 5px; left: 5px;
+  width: 10px; height: 10px; border-radius: 50%;
+  background: #5ecf5e; opacity: 0;
+  z-index: 3;
+}
+.card.anim-pip .pip {
+  animation: pipFlash 1.5s ease-out forwards;
+}
+@keyframes pipFlash {
+  0%   { opacity: 0; transform: scale(0.4); }
+  15%  { opacity: 1; transform: scale(1.2); }
+  35%  { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(0.8); }
+}
+
+/* ── OPTION B: border pulse ── */
+.card.anim-border {
+  animation: borderPulse 1.5s ease-out forwards;
+}
+@keyframes borderPulse {
+  0%   { border-color: #3a3a5a; }
+  20%  { border-color: #5ecf5e; border-width: 2px; }
+  60%  { border-color: #5ecf5e; border-width: 2px; }
+  100% { border-color: #3a3a5a; border-width: 1.5px; }
+}
+.card.known.anim-border {
+  animation: borderPulseKnown 1.5s ease-out forwards;
+}
+@keyframes borderPulseKnown {
+  0%   { border-color: #c9a227; }
+  20%  { border-color: #5ecf5e; border-width: 2px; }
+  60%  { border-color: #5ecf5e; border-width: 2px; }
+  100% { border-color: #c9a227; border-width: 1.5px; }
+}
+
+/* ── OPTION C: top edge bar ── */
+.top-bar-ind {
+  position: absolute; top: 0; left: 6px; right: 6px;
+  height: 3px; border-radius: 0 0 3px 3px;
+  background: #5ecf5e; opacity: 0;
+  z-index: 3;
+}
+.card.anim-topbar .top-bar-ind {
+  animation: topbarFlash 1.5s ease-out forwards;
+}
+@keyframes topbarFlash {
+  0%   { opacity: 0; }
+  15%  { opacity: 1; }
+  60%  { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* ── OPTION D: ripple ring ── */
+.ripple-ring {
+  position: absolute; inset: -6px;
+  border-radius: 12px;
+  border: 2px solid #5ecf5e;
+  opacity: 0;
+  z-index: 3;
+  pointer-events: none;
+}
+.card.anim-ripple .ripple-ring {
+  animation: rippleOut 1.5s ease-out forwards;
+}
+@keyframes rippleOut {
+  0%   { opacity: 0; inset: -1px; border-width: 2px; }
+  20%  { opacity: 0.9; inset: -4px; border-width: 1.5px; }
+  100% { opacity: 0; inset: -10px; border-width: 1px; }
+}
+
+/* ── OPTION E: swap icon flash ── */
+.swap-icon {
+  position: absolute; bottom: -8px; left: 50%;
+  transform: translateX(-50%);
+  background: #5ecf5e; color: #0a2a0a;
+  font-size: 9px; font-weight: 700;
+  padding: 2px 5px; border-radius: 4px;
+  opacity: 0; white-space: nowrap;
+  z-index: 4;
+}
+.card.anim-icon .swap-icon {
+  animation: iconPop 1.5s ease-out forwards;
+}
+@keyframes iconPop {
+  0%   { opacity: 0; transform: translateX(-50%) translateY(4px); }
+  20%  { opacity: 1; transform: translateX(-50%) translateY(0); }
+  70%  { opacity: 1; transform: translateX(-50%) translateY(0); }
+  100% { opacity: 0; transform: translateX(-50%) translateY(-4px); }
+}
+
+/* ── OPTION F: background flash ── */
+.card.anim-bgflash {
+  animation: bgFlash 1.5s ease-out forwards;
+}
+@keyframes bgFlash {
+  0%   { background: #2a2a4a; }
+  20%  { background: #1a3a2a; }
+  70%  { background: #1a3a2a; }
+  100% { background: #2a2a4a; }
+}
+
+/* replay btn */
+.replay-all {
+  padding: 7px 16px; border-radius: 7px;
+  background: var(--color-background-secondary);
+  border: 0.5px solid var(--color-border-secondary);
+  color: var(--color-text-secondary); font-size: 13px; cursor: pointer;
+  align-self: flex-start;
+}
+.replay-all:hover { background: var(--color-background-primary); }
+
+.divider { height: 0.5px; background: var(--color-border-tertiary); }
+
+.context-label {
+  font-size: 12px; color: var(--color-text-secondary); margin-bottom: 10px; line-height: 1.6;
+}
+
+/* mini opponent strip for context demo */
+.mini-opp-row {
+  display: flex; align-items: center; gap: 8px;
+  background: #1a1a26; border-radius: 8px; padding: 6px 10px;
+  border: 0.5px solid #2a2a3a; width: fit-content;
+}
+.mini-av {
+  width: 20px; height: 20px; border-radius: 50%;
+  background: #1a3a2a; color: #5ecf5e;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 8px; font-weight: 700;
+}
+.mini-name { font-size: 11px; color: #bbb; }
+.mini-cards { display: flex; gap: 3px; }
+.mini-card-sm {
+  width: 16px; height: 22px; border-radius: 3px;
+  background: #2a2a4a; border: 1px solid #3a3a5a;
+  position: relative; overflow: visible;
+}
+.mini-card-sm .top-bar-ind { height: 2px; left: 2px; right: 2px; }
+.mini-card-sm .pip { width: 7px; height: 7px; bottom: 3px; left: 3px; }
+.mini-card-sm .ripple-ring { inset: -4px; border-radius: 6px; }
+</style>
+
+<div class="page">
+
+  <div>
+    <div class="section-label">6 options — click any card to preview · replay button resets all</div>
+    <div class="options-row" id="optionsRow">
+
+      <!-- A: corner pip -->
+      <div class="option-block">
+        <div class="card" id="cardA" onclick="trigger('cardA','anim-pip')">
+          <div class="pip"></div>
+          <div class="eye-b"><svg width="7" height="7" viewBox="0 0 10 7" fill="none"><ellipse cx="5" cy="3.5" rx="4" ry="2.5" stroke="white" stroke-width="1"/><circle cx="5" cy="3.5" r="1.2" fill="white"/></svg></div>
+        </div>
+        <div class="option-label"><strong>A — corner pip</strong>small green dot flashes bottom-left</div>
+      </div>
+
+      <!-- B: border pulse -->
+      <div class="option-block">
+        <div class="card known" id="cardB" onclick="trigger('cardB','anim-border')">
+          <div class="eye-b"><svg width="7" height="7" viewBox="0 0 10 7" fill="none"><ellipse cx="5" cy="3.5" rx="4" ry="2.5" stroke="white" stroke-width="1"/><circle cx="5" cy="3.5" r="1.2" fill="white"/></svg></div>
+        </div>
+        <div class="option-label"><strong>B — border pulse</strong>border briefly turns green then reverts</div>
+      </div>
+
+      <!-- C: top edge bar -->
+      <div class="option-block">
+        <div class="card known" id="cardC" onclick="trigger('cardC','anim-topbar')">
+          <div class="top-bar-ind"></div>
+          <div class="eye-b"><svg width="7" height="7" viewBox="0 0 10 7" fill="none"><ellipse cx="5" cy="3.5" rx="4" ry="2.5" stroke="white" stroke-width="1"/><circle cx="5" cy="3.5" r="1.2" fill="white"/></svg></div>
+        </div>
+        <div class="option-label"><strong>C — top bar</strong>thin green bar fades in/out along top edge</div>
+      </div>
+
+      <!-- D: ripple ring -->
+      <div class="option-block">
+        <div class="card" id="cardD" onclick="trigger('cardD','anim-ripple')">
+          <div class="ripple-ring"></div>
+        </div>
+        <div class="option-label"><strong>D — ripple ring</strong>ring expands outward and fades</div>
+      </div>
+
+      <!-- E: label pop -->
+      <div class="option-block" style="padding-bottom: 18px;">
+        <div class="card" id="cardE" onclick="trigger('cardE','anim-icon')">
+          <div class="swap-icon">swapped</div>
+        </div>
+        <div class="option-label"><strong>E — label pop</strong>"swapped" tag floats up from card</div>
+      </div>
+
+      <!-- F: bg flash -->
+      <div class="option-block">
+        <div class="card" id="cardF" onclick="trigger('cardF','anim-bgflash')">
+          <div class="eye-b" style="opacity:0;"></div>
+        </div>
+        <div class="option-label"><strong>F — bg flash</strong>card interior briefly goes green</div>
+      </div>
+
+    </div>
+  </div>
+
+  <button class="replay-all" onclick="replayAll()">↺ replay all at once</button>
+
+  <div class="divider"></div>
+
+  <!-- Context: how it looks on opponent slim rows -->
+  <div>
+    <div class="section-label">how A, B, C look on opponent rows (slim mobile view)</div>
+    <div class="context-label">The indicator also needs to work on the small 16×22px opponent card backs.</div>
+
+    <div style="display:flex;flex-direction:column;gap:10px;">
+
+      <div style="display:flex;align-items:center;gap:10px;">
+        <div style="font-size:11px;color:var(--color-text-secondary);width:14px;">A</div>
+        <div class="mini-opp-row">
+          <div class="mini-av">AL</div>
+          <div class="mini-name">Alex</div>
+          <div class="mini-cards">
+            <div class="mini-card-sm" id="miniA1" onclick="triggerMini('miniA1','anim-pip')"><div class="pip"></div></div>
+            <div class="mini-card-sm" id="miniA2" onclick="triggerMini('miniA2','anim-pip')"><div class="pip"></div></div>
+            <div class="mini-card-sm" id="miniA3" onclick="triggerMini('miniA3','anim-pip')"><div class="pip"></div></div>
+            <div class="mini-card-sm" id="miniA4" onclick="triggerMini('miniA4','anim-pip')"><div class="pip"></div></div>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:10px;">
+        <div style="font-size:11px;color:var(--color-text-secondary);width:14px;">C</div>
+        <div class="mini-opp-row">
+          <div class="mini-av">AL</div>
+          <div class="mini-name">Alex</div>
+          <div class="mini-cards">
+            <div class="mini-card-sm" id="miniC1" onclick="triggerMini('miniC1','anim-topbar')"><div class="top-bar-ind"></div></div>
+            <div class="mini-card-sm" id="miniC2" onclick="triggerMini('miniC2','anim-topbar')"><div class="top-bar-ind"></div></div>
+            <div class="mini-card-sm" id="miniC3" onclick="triggerMini('miniC3','anim-topbar')"><div class="top-bar-ind"></div></div>
+            <div class="mini-card-sm" id="miniC4" onclick="triggerMini('miniC4','anim-topbar')"><div class="top-bar-ind"></div></div>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:10px;">
+        <div style="font-size:11px;color:var(--color-text-secondary);width:14px;">D</div>
+        <div class="mini-opp-row">
+          <div class="mini-av">AL</div>
+          <div class="mini-name">Alex</div>
+          <div class="mini-cards">
+            <div class="mini-card-sm" style="overflow:visible;" id="miniD1" onclick="triggerMini('miniD1','anim-ripple')"><div class="ripple-ring"></div></div>
+            <div class="mini-card-sm" style="overflow:visible;" id="miniD2" onclick="triggerMini('miniD2','anim-ripple')"><div class="ripple-ring"></div></div>
+            <div class="mini-card-sm" style="overflow:visible;" id="miniD3" onclick="triggerMini('miniD3','anim-ripple')"><div class="ripple-ring"></div></div>
+            <div class="mini-card-sm" style="overflow:visible;" id="miniD4" onclick="triggerMini('miniD4','anim-ripple')"><div class="ripple-ring"></div></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <div style="font-size:11px;color:var(--color-text-secondary);line-height:1.8;">
+    <strong style="color:var(--color-text-primary);font-weight:500;">Recommendation:</strong>
+    C (top bar) works best across both sizes — subtle on large cards, still readable on small ones. D (ripple) is the most dramatic and communicates "change" most clearly but can overlap neighboring cards in slim rows. B (border pulse) is the cleanest on large cards but barely visible at mini size.
+  </div>
+
+</div>
+
+<script>
+function trigger(id, cls) {
+  const el = document.getElementById(id);
+  el.classList.remove(cls);
+  void el.offsetWidth;
+  el.classList.add(cls);
+  el.addEventListener('animationend', () => el.classList.remove(cls), { once: true });
+}
+function triggerMini(id, cls) {
+  const el = document.getElementById(id);
+  el.classList.remove(cls);
+  void el.offsetWidth;
+  el.classList.add(cls);
+  el.addEventListener('animationend', () => el.classList.remove(cls), { once: true });
+}
+function replayAll() {
+  const pairs = [
+    ['cardA','anim-pip'],['cardB','anim-border'],['cardC','anim-topbar'],
+    ['cardD','anim-ripple'],['cardE','anim-icon'],['cardF','anim-bgflash'],
+    ['miniA2','anim-pip'],['miniC3','anim-topbar'],['miniD1','anim-ripple']
+  ];
+  pairs.forEach(([id, cls]) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.classList.remove(cls);
+    void el.offsetWidth;
+    el.classList.add(cls);
+    el.addEventListener('animationend', () => el.classList.remove(cls), { once: true });
+  });
+}
+// auto-play on load
+setTimeout(replayAll, 400);
+</script>

@@ -8,6 +8,7 @@ const config: ThemeConfig = {
 const theme = extendTheme({
   config,
   colors: {
+    // Legacy tokens kept for backward compat with existing components
     brand: {
       50: '#c1b0e8',
       100: '#b19ee2',
@@ -25,16 +26,22 @@ const theme = extendTheme({
       highlight: '#d7ac61',
     },
     card: {
-      red: '#d94a4a',
+      red: '#c0392b',
       black: '#121212',
-      back: '#6c55c9',
-      selected: '#d7ac61',
+      back: '#2a2a4a',
+      backBorder: '#3a3a5a',
+      selected: '#c9a227',
     },
-    table: {
-      felt: '#1b1922',
-      border: '#302e37',
-    },
+    // New reskin tokens
+    base: { bg: '#0f0f14', bgAlt: '#0f0f16' },
     surface: {
+      primary: '#13131a',
+      secondary: '#1c1c26',
+      modal: '#1c1c28',
+      tertiary: '#16162a',
+      tableFelt: '#13191a',
+      tableCenter: '#0d0d12',
+      // Legacy
       a0: '#121212',
       a10: '#282828',
       a20: '#3f3f3f',
@@ -48,19 +55,32 @@ const theme = extendTheme({
       tonal40: '#77757c',
       tonal50: '#908f94',
     },
+    border: { default: '#2a2a3a', felt: '#1a2a22' },
+    gold: { default: '#c9a227', bg: '#1f1a0a', dim: '#c9a22740' },
+    purple: { default: '#7a7aee' },
+    timer: { green: '#4ecb4e', amber: '#c9a227', red: '#cf5e5e' },
+    burn: { red: '#cf5e5e', redDim: '#cf5e5e40', bg: '#2a1a1a' },
+    swap: { blue: '#5eb8cf', blueDim: '#5eb8cf40', bg: '#0a1a1f' },
+    btn: { green: '#4a8a5a', greenHover: '#3a7a4a', secondary: '#1c1c2e' },
+    danger: { border: '#5a2a2a', text: '#cf7070' },
+    // Legacy semantic tokens
+    table: {
+      felt: '#0f0f14',
+      border: '#1c1c28',
+    },
     success: {
       a0: '#22946e',
-      a10: '#47d5a6',
+      a10: '#5ecf5e',
       a20: '#9ae8ce',
     },
     warning: {
       a0: '#a87a2a',
-      a10: '#d7ac61',
+      a10: '#c9a227',
       a20: '#ecd7b2',
     },
-    danger: {
+    dangerLegacy: {
       a0: '#9c2121',
-      a10: '#d94a4a',
+      a10: '#cf5e5e',
       a20: '#eb9e9e',
     },
     info: {
@@ -76,8 +96,8 @@ const theme = extendTheme({
   styles: {
     global: {
       body: {
-        bg: '#1b1922',
-        color: 'gray.100',
+        bg: '#0f0f14',
+        color: '#eee',
       },
     },
   },
