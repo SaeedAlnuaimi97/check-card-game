@@ -1,0 +1,586 @@
+
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+.tabs {
+  display: flex; gap: 5px; padding: 1rem 1rem 0; flex-wrap: wrap;
+  border-bottom: 0.5px solid var(--color-border-tertiary);
+}
+.tab {
+  padding: 6px 13px; font-size: 12px; border-radius: 6px 6px 0 0;
+  border: 0.5px solid var(--color-border-tertiary); border-bottom: none;
+  background: var(--color-background-secondary);
+  color: var(--color-text-secondary); cursor: pointer;
+}
+.tab.active { background: var(--color-background-primary); color: var(--color-text-primary); font-weight: 500; }
+.screen { display: none; padding: 1rem; }
+.screen.active { display: block; }
+
+.phone {
+  width: 300px; margin: 0 auto;
+  background: #0f0f16; border-radius: 28px; border: 1px solid #2a2a3a;
+  overflow: hidden; display: flex; flex-direction: column;
+  min-height: 600px; position: relative;
+}
+.top-bar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 9px 13px; background: #13131a; border-bottom: 0.5px solid #1e1e2a; flex-shrink: 0;
+}
+.round-lbl { font-size: 11px; color: #aaa; font-weight: 500; }
+.check-btn { padding: 3px 10px; border-radius: 5px; background: #c9a227; color: #1a1200; font-size: 11px; font-weight: 700; border: none; }
+
+.game-bg {
+  flex: 1; display: flex; flex-direction: column;
+  background: #0a0a10; padding: 10px 12px; gap: 8px; opacity: 0.35; pointer-events: none;
+}
+.fake-table {
+  background: #12181a; border-radius: 10px; border: 0.5px solid #1a2a22;
+  padding: 10px; display: flex; justify-content: center; gap: 20px; align-items: center;
+}
+.fake-card-back { width: 44px; height: 60px; border-radius: 6px; background: #2a2a4a; border: 1px solid #3a3a5a; }
+.fake-card-face {
+  width: 44px; height: 60px; border-radius: 6px;
+  background: #fff; border: 1px solid #ddd;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 700; color: #c0392b;
+}
+.fake-hand { display: flex; gap: 6px; justify-content: center; padding: 6px 0; }
+.fake-hcard { width: 44px; height: 60px; border-radius: 6px; background: #2a2a4a; border: 1px solid #3a3a5a; }
+.fake-hcard.gold { border-color: #c9a227; }
+
+/* ── SHEET ── */
+.sheet-backdrop {
+  position: absolute; inset: 0; background: rgba(0,0,0,0.6);
+  display: flex; align-items: flex-end; border-radius: 28px;
+}
+.sheet {
+  width: 100%; background: #1c1c28;
+  border-radius: 16px 16px 0 0; border-top: 0.5px solid #2a2a3a; overflow: hidden;
+}
+.drag-handle { width: 32px; height: 3px; background: #2a2a3a; border-radius: 2px; margin: 10px auto 0; }
+.sheet-header { padding: 10px 16px 0; display: flex; flex-direction: column; gap: 3px; }
+.sheet-title-row { display: flex; align-items: center; gap: 8px; }
+.sheet-title { font-size: 15px; font-weight: 600; color: #eee; }
+.sheet-desc { font-size: 11px; color: #555; padding: 0 0 10px; border-bottom: 0.5px solid #22222e; }
+
+/* ── DRAWN CARDS ── */
+.drawn-section { padding: 10px 16px 0; }
+.section-label { font-size: 10px; color: #444; text-transform: uppercase; letter-spacing: 0.07em; font-weight: 500; margin-bottom: 8px; }
+
+.drawn-cards-row { display: flex; gap: 12px; justify-content: center; }
+.drawn-card-wrap { display: flex; flex-direction: column; align-items: center; gap: 5px; }
+.drawn-card {
+  width: 56px; height: 78px; border-radius: 8px;
+  background: #fff; border: 2px solid transparent;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  position: relative; font-weight: 700; font-size: 20px; cursor: pointer;
+  transition: border-color 0.12s, box-shadow 0.12s, transform 0.12s;
+}
+.drawn-card:hover { transform: translateY(-2px); }
+.drawn-card.red { color: #c0392b; }
+.drawn-card.black { color: #222; }
+.drawn-card.selected { border-color: #c9a227; box-shadow: 0 0 0 1px #c9a22730; transform: translateY(-4px); }
+.drawn-card.return { border-color: #2a2a3a; opacity: 0.45; transform: none; cursor: default; }
+.dc { position: absolute; font-size: 10px; font-weight: 700; line-height: 1.2; }
+.dc.tl { top: 4px; left: 5px; }
+.dc.br { bottom: 4px; right: 5px; transform: rotate(180deg); }
+.drawn-label { font-size: 10px; text-align: center; font-weight: 500; }
+.drawn-label.keep { color: #c9a227; }
+.drawn-label.ret { color: #333; }
+.drawn-label.neutral { color: #666; }
+
+/* ── OPTION PILLS ── */
+.option-pills { display: flex; gap: 6px; padding: 10px 16px 0; }
+.opt-pill {
+  flex: 1; padding: 8px 6px; border-radius: 9px; text-align: center; cursor: pointer;
+  border: 1px solid #2a2a3a; background: #16162a;
+  display: flex; flex-direction: column; gap: 2px;
+  transition: border-color 0.12s, background 0.12s;
+}
+.opt-pill:hover { border-color: #3a3a5a; background: #1c1c2e; }
+.opt-pill.active { border-color: #c9a227; background: #1f1a0a; }
+.opt-pill-title { font-size: 11px; font-weight: 600; color: #888; }
+.opt-pill.active .opt-pill-title { color: #c9a227; }
+.opt-pill-sub { font-size: 9px; color: #333; line-height: 1.3; }
+.opt-pill.active .opt-pill-sub { color: #7a6020; }
+
+/* ── HAND REPLACE AREA ── */
+.hand-replace { padding: 10px 16px 0; }
+.replace-row { display: flex; gap: 6px; }
+.rep-card-wrap { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.rep-card {
+  width: 44px; height: 62px; border-radius: 7px;
+  background: #22223a; border: 1.5px solid #3a3a5a;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; position: relative;
+  transition: border-color 0.12s, background 0.12s;
+}
+.rep-card:hover { border-color: #5a5a8a; }
+.rep-card.known { border-color: #c9a22780; }
+.rep-card.selected-replace { border-color: #cf5e5e; background: #1e0f0f; box-shadow: 0 0 0 1px #cf5e5e30; }
+.rep-card.disabled { opacity: 0.25; pointer-events: none; }
+.eye-b {
+  position: absolute; top: 2px; right: 2px; width: 12px; height: 12px;
+  background: #c9a227; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+}
+.slot-lbl { font-size: 10px; color: #555; font-weight: 500; }
+.slot-lbl.red { color: #cf5e5e; }
+.slot-lbl.gold { color: #c9a227; }
+
+.replace-hint { font-size: 10px; color: #3a3a4a; margin-top: 6px; line-height: 1.5; }
+
+/* ── SUMMARY BOX ── */
+.summary-box {
+  margin: 10px 16px 0; padding: 9px 11px;
+  border-radius: 8px; border: 0.5px solid #2a3a1a;
+  background: #141f0f;
+}
+.summary-row { display: flex; align-items: center; gap: 8px; }
+.summary-icon { font-size: 12px; }
+.summary-text { font-size: 11px; color: #5a8a4a; line-height: 1.5; }
+.summary-text strong { color: #7ab85a; font-weight: 500; }
+
+/* return box */
+.return-box {
+  margin: 10px 16px 0; padding: 9px 11px;
+  border-radius: 8px; border: 0.5px solid #1a2a3a;
+  background: #0f141f;
+}
+.return-text { font-size: 11px; color: #3a5a7a; line-height: 1.5; }
+.return-text strong { color: #5a7a9a; font-weight: 500; }
+
+/* ── ACTIONS ── */
+.sheet-actions { padding: 12px 16px 16px; display: flex; gap: 8px; margin-top: 10px; }
+.btn-cancel { flex: 1; padding: 10px; border-radius: 9px; background: #16162a; border: 0.5px solid #2a2a3a; color: #555; font-size: 13px; font-weight: 600; cursor: pointer; }
+.btn-confirm {
+  flex: 2; padding: 10px; border-radius: 9px; border: none;
+  font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.btn-confirm.gold { background: #c9a227; color: #1a1200; }
+.btn-confirm.dim { background: #1e1e2e; color: #333; border: 0.5px solid #2a2a3a; cursor: not-allowed; }
+
+/* sub-tabs */
+.subtabs { display: flex; gap: 5px; margin-bottom: 12px; justify-content: center; flex-wrap: wrap; }
+.subtab {
+  padding: 5px 10px; border-radius: 6px; font-size: 10px; font-weight: 600;
+  text-align: center; cursor: pointer; border: 0.5px solid #2a2a3a;
+  background: #16162a; color: #444;
+}
+.subtab.active { background: #1e1e2e; color: #aaa; border-color: #3a3a5a; }
+
+.annotation {
+  font-size: 11px; color: var(--color-text-secondary);
+  margin-top: 8px; text-align: center; line-height: 1.8;
+}
+.annotation strong { color: #c9a227; font-weight: 500; }
+</style>
+
+<div class="tabs">
+  <div class="tab active" onclick="sw('return')">return both</div>
+  <div class="tab" onclick="sw('keep1')">keep 1</div>
+  <div class="tab" onclick="sw('keep2')">keep 2</div>
+</div>
+
+<!-- ══════════════ RETURN BOTH ══════════════ -->
+<div class="screen active" id="screen-return">
+  <div class="phone">
+    <div class="top-bar"><span class="round-lbl">Round: 1</span><button class="check-btn">CHECK</button></div>
+    <div class="game-bg">
+      <div class="fake-table"><div class="fake-card-back"></div><div class="fake-card-face">♣</div></div>
+      <div class="fake-hand"><div class="fake-hcard gold"></div><div class="fake-hcard"></div><div class="fake-hcard gold"></div><div class="fake-hcard"></div></div>
+    </div>
+    <div class="sheet-backdrop">
+      <div class="sheet">
+        <div class="drag-handle"></div>
+        <div class="sheet-header">
+          <div class="sheet-title-row">
+            <span style="font-size:15px;color:#c0392b;">♣</span>
+            <span class="sheet-title">Red King — Draw 2</span>
+          </div>
+          <div class="sheet-desc">You drew 2 cards privately. Choose what to do with them.</div>
+        </div>
+
+        <div class="drawn-section">
+          <div class="section-label">your 2 drawn cards</div>
+          <div class="drawn-cards-row">
+            <div class="drawn-card-wrap">
+              <div class="drawn-card red return">
+                <div class="dc tl" style="color:#c0392b;">6<br>♦</div>
+                <span>♦</span>
+                <div class="dc br" style="color:#c0392b;">6<br>♦</div>
+              </div>
+              <div class="drawn-label ret">returning</div>
+            </div>
+            <div class="drawn-card-wrap">
+              <div class="drawn-card black return">
+                <div class="dc tl">2<br>♣</div>
+                <span style="font-size:18px;">♣</span>
+                <div class="dc br">2<br>♣</div>
+              </div>
+              <div class="drawn-label ret">returning</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="option-pills">
+          <div class="opt-pill active" onclick="sw('return')">
+            <div class="opt-pill-title">Return both</div>
+            <div class="opt-pill-sub">hand unchanged</div>
+          </div>
+          <div class="opt-pill" onclick="sw('keep1')">
+            <div class="opt-pill-title">Keep 1</div>
+            <div class="opt-pill-sub">replace 1 hand card</div>
+          </div>
+          <div class="opt-pill" onclick="sw('keep2')">
+            <div class="opt-pill-title">Keep 2</div>
+            <div class="opt-pill-sub">replace 2 hand cards</div>
+          </div>
+        </div>
+
+        <div class="return-box">
+          <div class="return-text">Both cards will be <strong>shuffled back</strong> into the draw pile at random positions. Your hand stays exactly as it was.</div>
+        </div>
+
+        <div class="sheet-actions">
+          <div style="flex:1;"></div>
+          <button class="btn-confirm gold" style="flex:2;">Confirm — return both</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="annotation">
+    <strong>Return both</strong> — no hand changes, cards shuffled back randomly.<br>
+    No cancel button here — you must choose one of the three options. All three are shown as equal pills with no misleading default highlight.
+  </p>
+</div>
+
+<!-- ══════════════ KEEP 1 ══════════════ -->
+<div class="screen" id="screen-keep1">
+
+  <div class="subtabs">
+    <div class="subtab active" id="k1-step1" onclick="setKeep1('pick-drawn')">pick drawn card</div>
+    <div class="subtab" id="k1-step2" onclick="setKeep1('pick-hand')">pick hand slot</div>
+    <div class="subtab" id="k1-step3" onclick="setKeep1('ready')">ready</div>
+  </div>
+
+  <div class="phone">
+    <div class="top-bar"><span class="round-lbl">Round: 1</span><button class="check-btn">CHECK</button></div>
+    <div class="game-bg">
+      <div class="fake-table"><div class="fake-card-back"></div><div class="fake-card-face">♣</div></div>
+      <div class="fake-hand"><div class="fake-hcard gold"></div><div class="fake-hcard"></div><div class="fake-hcard gold"></div><div class="fake-hcard"></div></div>
+    </div>
+    <div class="sheet-backdrop">
+      <div class="sheet">
+        <div class="drag-handle"></div>
+        <div class="sheet-header">
+          <div class="sheet-title-row">
+            <span style="font-size:15px;color:#c0392b;">♣</span>
+            <span class="sheet-title">Red King — Draw 2</span>
+          </div>
+          <div class="sheet-desc" id="k1desc">Step 1 — tap the drawn card you want to keep.</div>
+        </div>
+
+        <div class="drawn-section">
+          <div class="section-label">drawn cards — tap to keep</div>
+          <div class="drawn-cards-row">
+            <div class="drawn-card-wrap">
+              <div class="drawn-card red" id="k1card1" onclick="setKeep1('pick-hand')">
+                <div class="dc tl" style="color:#c0392b;">6<br>♦</div>
+                <span>♦</span>
+                <div class="dc br" style="color:#c0392b;">6<br>♦</div>
+              </div>
+              <div class="drawn-label neutral" id="k1label1">6♦ · 6 pts</div>
+            </div>
+            <div class="drawn-card-wrap">
+              <div class="drawn-card black" id="k1card2" onclick="setKeep1('pick-hand')">
+                <div class="dc tl">2<br>♣</div>
+                <span style="font-size:18px;">♣</span>
+                <div class="dc br">2<br>♣</div>
+              </div>
+              <div class="drawn-label neutral" id="k1label2">2♣ · 2 pts</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="option-pills">
+          <div class="opt-pill" onclick="sw('return')"><div class="opt-pill-title">Return both</div><div class="opt-pill-sub">hand unchanged</div></div>
+          <div class="opt-pill active" onclick="sw('keep1')"><div class="opt-pill-title">Keep 1</div><div class="opt-pill-sub">replace 1 hand card</div></div>
+          <div class="opt-pill" onclick="sw('keep2')"><div class="opt-pill-title">Keep 2</div><div class="opt-pill-sub">replace 2 hand cards</div></div>
+        </div>
+
+        <!-- hand selector (hidden until step 2) -->
+        <div class="hand-replace" id="k1handArea" style="display:none;">
+          <div class="section-label">step 2 — pick a hand slot to replace</div>
+          <div class="replace-row">
+            <div class="rep-card-wrap">
+              <div class="rep-card known" id="k1h-A" onclick="selectHandSlot('k1','A')">
+                <div class="eye-b"><svg width="7" height="7" viewBox="0 0 10 7" fill="none"><ellipse cx="5" cy="3.5" rx="4" ry="2.5" stroke="white" stroke-width="1"/><circle cx="5" cy="3.5" r="1.2" fill="white"/></svg></div>
+              </div>
+              <div class="slot-lbl" id="k1sl-A">A</div>
+            </div>
+            <div class="rep-card-wrap">
+              <div class="rep-card" id="k1h-B" onclick="selectHandSlot('k1','B')"></div>
+              <div class="slot-lbl" id="k1sl-B">B</div>
+            </div>
+            <div class="rep-card-wrap">
+              <div class="rep-card known" id="k1h-C" onclick="selectHandSlot('k1','C')">
+                <div class="eye-b"><svg width="7" height="7" viewBox="0 0 10 7" fill="none"><ellipse cx="5" cy="3.5" rx="4" ry="2.5" stroke="white" stroke-width="1"/><circle cx="5" cy="3.5" r="1.2" fill="white"/></svg></div>
+              </div>
+              <div class="slot-lbl" id="k1sl-C">C</div>
+            </div>
+            <div class="rep-card-wrap">
+              <div class="rep-card" id="k1h-D" onclick="selectHandSlot('k1','D')"></div>
+              <div class="slot-lbl" id="k1sl-D">D</div>
+            </div>
+          </div>
+          <div class="replace-hint" id="k1hint">The replaced card goes to the discard pile. The other drawn card returns to the deck.</div>
+        </div>
+
+        <div class="summary-box" id="k1summary" style="display:none;">
+          <div class="summary-row">
+            <span class="summary-icon">✓</span>
+            <span class="summary-text" id="k1summaryText">Keep <strong>6♦</strong>, discard slot <strong>B</strong>. 2♣ returns to deck.</span>
+          </div>
+        </div>
+
+        <div class="sheet-actions">
+          <div style="flex:1;"></div>
+          <button class="btn-confirm dim" id="k1confirmBtn" style="flex:2;">Select a card first</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="annotation">
+    <strong>Step 1:</strong> tap which drawn card to keep (point values shown to help decide).<br>
+    <strong>Step 2:</strong> tap a hand slot to replace — it goes to discard, the unkept card returns to deck.<br>
+    Summary box confirms the exchange before committing.
+  </p>
+</div>
+
+<!-- ══════════════ KEEP 2 ══════════════ -->
+<div class="screen" id="screen-keep2">
+
+  <div class="subtabs">
+    <div class="subtab active" id="k2-step1" onclick="setKeep2('pick-slots')">pick 2 hand slots</div>
+    <div class="subtab" id="k2-step2" onclick="setKeep2('ready')">ready</div>
+  </div>
+
+  <div class="phone">
+    <div class="top-bar"><span class="round-lbl">Round: 1</span><button class="check-btn">CHECK</button></div>
+    <div class="game-bg">
+      <div class="fake-table"><div class="fake-card-back"></div><div class="fake-card-face">♣</div></div>
+      <div class="fake-hand"><div class="fake-hcard gold"></div><div class="fake-hcard"></div><div class="fake-hcard gold"></div><div class="fake-hcard"></div></div>
+    </div>
+    <div class="sheet-backdrop">
+      <div class="sheet">
+        <div class="drag-handle"></div>
+        <div class="sheet-header">
+          <div class="sheet-title-row">
+            <span style="font-size:15px;color:#c0392b;">♣</span>
+            <span class="sheet-title">Red King — Draw 2</span>
+          </div>
+          <div class="sheet-desc" id="k2desc">Both drawn cards stay. Pick 2 hand slots to replace — those cards go to the discard pile.</div>
+        </div>
+
+        <div class="drawn-section">
+          <div class="section-label">both keeping</div>
+          <div class="drawn-cards-row">
+            <div class="drawn-card-wrap">
+              <div class="drawn-card red selected">
+                <div class="dc tl" style="color:#c0392b;">6<br>♦</div>
+                <span>♦</span>
+                <div class="dc br" style="color:#c0392b;">6<br>♦</div>
+              </div>
+              <div class="drawn-label keep">keeping · 6 pts</div>
+            </div>
+            <div class="drawn-card-wrap">
+              <div class="drawn-card black selected">
+                <div class="dc tl">2<br>♣</div>
+                <span style="font-size:18px;">♣</span>
+                <div class="dc br">2<br>♣</div>
+              </div>
+              <div class="drawn-label keep">keeping · 2 pts</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="option-pills">
+          <div class="opt-pill" onclick="sw('return')"><div class="opt-pill-title">Return both</div><div class="opt-pill-sub">hand unchanged</div></div>
+          <div class="opt-pill" onclick="sw('keep1')"><div class="opt-pill-title">Keep 1</div><div class="opt-pill-sub">replace 1 hand card</div></div>
+          <div class="opt-pill active" onclick="sw('keep2')"><div class="opt-pill-title">Keep 2</div><div class="opt-pill-sub">replace 2 hand cards</div></div>
+        </div>
+
+        <div class="hand-replace">
+          <div class="section-label" id="k2slotLabel">pick 2 slots to discard — <span id="k2count" style="color:#c9a227;">0 / 2 selected</span></div>
+          <div class="replace-row">
+            <div class="rep-card-wrap">
+              <div class="rep-card known selected-replace" id="k2h-A" onclick="toggleKeep2Slot('A')">
+                <div class="eye-b"><svg width="7" height="7" viewBox="0 0 10 7" fill="none"><ellipse cx="5" cy="3.5" rx="4" ry="2.5" stroke="white" stroke-width="1"/><circle cx="5" cy="3.5" r="1.2" fill="white"/></svg></div>
+              </div>
+              <div class="slot-lbl red" id="k2sl-A">A ✕</div>
+            </div>
+            <div class="rep-card-wrap">
+              <div class="rep-card selected-replace" id="k2h-B" onclick="toggleKeep2Slot('B')"></div>
+              <div class="slot-lbl red" id="k2sl-B">B ✕</div>
+            </div>
+            <div class="rep-card-wrap">
+              <div class="rep-card known" id="k2h-C" onclick="toggleKeep2Slot('C')">
+                <div class="eye-b"><svg width="7" height="7" viewBox="0 0 10 7" fill="none"><ellipse cx="5" cy="3.5" rx="4" ry="2.5" stroke="white" stroke-width="1"/><circle cx="5" cy="3.5" r="1.2" fill="white"/></svg></div>
+              </div>
+              <div class="slot-lbl" id="k2sl-C">C</div>
+            </div>
+            <div class="rep-card-wrap">
+              <div class="rep-card" id="k2h-D" onclick="toggleKeep2Slot('D')"></div>
+              <div class="slot-lbl" id="k2sl-D">D</div>
+            </div>
+          </div>
+          <div class="replace-hint">Both selected cards go to the discard pile. 6♦ and 2♣ take those slots.</div>
+        </div>
+
+        <div class="summary-box" id="k2summary" style="display:none;">
+          <div class="summary-row">
+            <span class="summary-icon">✓</span>
+            <span class="summary-text" id="k2summaryText">Keep <strong>6♦</strong> in slot A and <strong>2♣</strong> in slot B. Discarded cards go to discard pile.</span>
+          </div>
+        </div>
+
+        <div class="sheet-actions">
+          <div style="flex:1;"></div>
+          <button class="btn-confirm dim" id="k2confirmBtn" style="flex:2;">Select 2 slots</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="annotation">
+    <strong>Keep 2</strong> — both drawn cards are already confirmed as keeping.<br>
+    Player picks exactly <strong>2 hand slots</strong> to discard. Counter shows progress (0/2 → 1/2 → 2/2).<br>
+    Drawn cards are assigned to the freed slots in order.
+  </p>
+</div>
+
+<script>
+function sw(id) {
+  const ids = ['return','keep1','keep2'];
+  document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', ids[i] === id));
+  document.querySelectorAll('.screen').forEach(s => s.classList.toggle('active', s.id === 'screen-' + id));
+}
+
+/* ── KEEP 1 ── */
+function setKeep1(state) {
+  ['pick-drawn','pick-hand','ready'].forEach((s,i) => {
+    document.getElementById('k1-step' + (i+1)).classList.toggle('active', s === state);
+  });
+  const c1 = document.getElementById('k1card1');
+  const c2 = document.getElementById('k1card2');
+  const l1 = document.getElementById('k1label1');
+  const l2 = document.getElementById('k1label2');
+  const handArea = document.getElementById('k1handArea');
+  const summary = document.getElementById('k1summary');
+  const confirmBtn = document.getElementById('k1confirmBtn');
+  const desc = document.getElementById('k1desc');
+
+  if (state === 'pick-drawn') {
+    c1.className = 'drawn-card red'; c2.className = 'drawn-card black';
+    l1.textContent = '6♦ · 6 pts'; l1.className = 'drawn-label neutral';
+    l2.textContent = '2♣ · 2 pts'; l2.className = 'drawn-label neutral';
+    handArea.style.display = 'none'; summary.style.display = 'none';
+    confirmBtn.textContent = 'Select a card first'; confirmBtn.className = 'btn-confirm dim';
+    desc.textContent = 'Step 1 — tap the drawn card you want to keep.';
+  } else if (state === 'pick-hand') {
+    c1.className = 'drawn-card red selected';
+    c2.className = 'drawn-card black return';
+    l1.textContent = 'keeping'; l1.className = 'drawn-label keep';
+    l2.textContent = 'returning'; l2.className = 'drawn-label ret';
+    handArea.style.display = 'block'; summary.style.display = 'none';
+    confirmBtn.textContent = 'Select a hand slot'; confirmBtn.className = 'btn-confirm dim';
+    desc.textContent = 'Step 2 — tap a hand slot to replace with 6♦.';
+    ['A','B','C','D'].forEach(s => {
+      document.getElementById('k1h-' + s).className = document.getElementById('k1h-' + s).className.replace(' selected-replace','').replace('selected-replace','').trim();
+      if (s === 'A' || s === 'C') document.getElementById('k1h-' + s).className = 'rep-card known';
+      else document.getElementById('k1h-' + s).className = 'rep-card';
+      document.getElementById('k1sl-' + s).className = 'slot-lbl';
+      document.getElementById('k1sl-' + s).textContent = s;
+    });
+  } else {
+    c1.className = 'drawn-card red selected';
+    c2.className = 'drawn-card black return';
+    l1.textContent = 'keeping'; l1.className = 'drawn-label keep';
+    l2.textContent = 'returning'; l2.className = 'drawn-label ret';
+    handArea.style.display = 'block';
+    document.getElementById('k1h-B').className = 'rep-card selected-replace';
+    document.getElementById('k1sl-B').className = 'slot-lbl red';
+    document.getElementById('k1sl-B').textContent = 'B ✕';
+    summary.style.display = 'block';
+    document.getElementById('k1summaryText').innerHTML = 'Keep <strong>6♦</strong> in slot B. 2♣ returns to deck. Old slot B goes to discard.';
+    confirmBtn.textContent = 'Confirm'; confirmBtn.className = 'btn-confirm gold';
+    desc.textContent = 'Ready — confirm to complete the exchange.';
+  }
+}
+
+function selectHandSlot(prefix, slot) {
+  ['A','B','C','D'].forEach(s => {
+    const el = document.getElementById(prefix + 'h-' + s);
+    const hasKnown = el.classList.contains('known');
+    el.className = (hasKnown ? 'rep-card known' : 'rep-card');
+    document.getElementById(prefix + 'sl-' + s).className = 'slot-lbl';
+    document.getElementById(prefix + 'sl-' + s).textContent = s;
+  });
+  const target = document.getElementById(prefix + 'h-' + slot);
+  target.className = target.className + ' selected-replace';
+  document.getElementById(prefix + 'sl-' + slot).className = 'slot-lbl red';
+  document.getElementById(prefix + 'sl-' + slot).textContent = slot + ' ✕';
+  setKeep1('ready');
+}
+
+/* ── KEEP 2 ── */
+let k2selected = ['A','B'];
+function setKeep2(state) {
+  ['pick-slots','ready'].forEach((s,i) => {
+    document.getElementById('k2-step' + (i+1)).classList.toggle('active', s === state);
+  });
+  if (state === 'ready') {
+    document.getElementById('k2summary').style.display = 'block';
+    document.getElementById('k2confirmBtn').textContent = 'Confirm';
+    document.getElementById('k2confirmBtn').className = 'btn-confirm gold';
+  } else {
+    document.getElementById('k2summary').style.display = 'none';
+    document.getElementById('k2confirmBtn').textContent = 'Select 2 slots';
+    document.getElementById('k2confirmBtn').className = 'btn-confirm dim';
+  }
+}
+
+function toggleKeep2Slot(slot) {
+  const idx = k2selected.indexOf(slot);
+  if (idx > -1) {
+    k2selected.splice(idx, 1);
+  } else {
+    if (k2selected.length < 2) k2selected.push(slot);
+  }
+  ['A','B','C','D'].forEach(s => {
+    const el = document.getElementById('k2h-' + s);
+    const lbl = document.getElementById('k2sl-' + s);
+    const isKnown = (s === 'A' || s === 'C');
+    const isSel = k2selected.includes(s);
+    el.className = (isKnown ? 'rep-card known' : 'rep-card') + (isSel ? ' selected-replace' : '');
+    lbl.className = 'slot-lbl' + (isSel ? ' red' : '');
+    lbl.textContent = s + (isSel ? ' ✕' : '');
+  });
+  const count = k2selected.length;
+  document.getElementById('k2count').textContent = count + ' / 2 selected';
+  const confirmBtn = document.getElementById('k2confirmBtn');
+  const summary = document.getElementById('k2summary');
+  if (count === 2) {
+    confirmBtn.textContent = 'Confirm'; confirmBtn.className = 'btn-confirm gold';
+    summary.style.display = 'block';
+    document.getElementById('k2summaryText').innerHTML = 'Keep <strong>6♦</strong> in slot ' + k2selected[0] + ' and <strong>2♣</strong> in slot ' + k2selected[1] + '. Both old cards go to discard pile.';
+    document.getElementById('k2-step2').classList.add('active');
+    document.getElementById('k2-step1').classList.remove('active');
+  } else {
+    confirmBtn.textContent = count === 1 ? 'Select 1 more slot' : 'Select 2 slots';
+    confirmBtn.className = 'btn-confirm dim';
+    summary.style.display = 'none';
+    document.getElementById('k2-step1').classList.add('active');
+    document.getElementById('k2-step2').classList.remove('active');
+  }
+}
+</script>

@@ -61,7 +61,7 @@ const CheckLogo: FC = () => (
       as="img"
       src="/logo.png"
       alt="Check"
-      h="200px"
+      h={{ base: '200px', md: '400px' }}
       maxW="80vw"
       userSelect="none"
       draggable="false"

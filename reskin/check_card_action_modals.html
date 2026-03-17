@@ -1,0 +1,657 @@
+
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+.tabs {
+  display: flex; gap: 5px; padding: 1rem 1rem 0; flex-wrap: wrap;
+  border-bottom: 0.5px solid var(--color-border-tertiary);
+}
+.tab {
+  padding: 6px 13px; font-size: 12px; border-radius: 6px 6px 0 0;
+  border: 0.5px solid var(--color-border-tertiary); border-bottom: none;
+  background: var(--color-background-secondary);
+  color: var(--color-text-secondary); cursor: pointer;
+}
+.tab.active { background: var(--color-background-primary); color: var(--color-text-primary); font-weight: 500; }
+.screen { display: none; padding: 1rem; }
+.screen.active { display: block; }
+
+/* ── PHONE SHELL ── */
+.phone {
+  width: 300px; margin: 0 auto;
+  background: #0f0f16; border-radius: 28px; border: 1px solid #2a2a3a;
+  overflow: hidden; display: flex; flex-direction: column;
+  min-height: 600px; position: relative;
+}
+.top-bar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 9px 13px; background: #13131a; border-bottom: 0.5px solid #1e1e2a; flex-shrink: 0;
+}
+.round-lbl { font-size: 11px; color: #aaa; font-weight: 500; }
+.check-btn { padding: 3px 10px; border-radius: 5px; background: #c9a227; color: #1a1200; font-size: 11px; font-weight: 700; border: none; }
+
+/* dimmed game behind modal */
+.game-bg {
+  flex: 1; display: flex; flex-direction: column;
+  background: #0a0a10; padding: 10px 12px;
+  gap: 8px; opacity: 0.35; pointer-events: none;
+}
+.fake-table {
+  background: #12181a; border-radius: 10px; border: 0.5px solid #1a2a22;
+  padding: 10px; display: flex; justify-content: center; gap: 20px; align-items: center;
+}
+.fake-card-back { width: 44px; height: 60px; border-radius: 6px; background: #2a2a4a; border: 1px solid #3a3a5a; }
+.fake-card-face {
+  width: 44px; height: 60px; border-radius: 6px;
+  background: #fff; border: 1px solid #ddd;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 700; color: #c0392b;
+}
+.fake-hand { display: flex; gap: 6px; justify-content: center; padding: 6px 0; }
+.fake-hcard { width: 44px; height: 60px; border-radius: 6px; background: #2a2a4a; border: 1px solid #3a3a5a; }
+.fake-hcard.gold { border-color: #c9a227; }
+
+/* ── BOTTOM SHEET ── */
+.sheet-backdrop {
+  position: absolute; inset: 0;
+  background: rgba(0,0,0,0.55);
+  display: flex; align-items: flex-end;
+  border-radius: 28px;
+}
+.sheet {
+  width: 100%; background: #1c1c28;
+  border-radius: 16px 16px 0 0;
+  border-top: 0.5px solid #2a2a3a;
+  overflow: hidden;
+}
+.drag-handle { width: 32px; height: 3px; background: #2a2a3a; border-radius: 2px; margin: 10px auto 0; }
+
+/* sheet header */
+.sheet-header {
+  padding: 10px 16px 0;
+  display: flex; flex-direction: column; gap: 3px;
+}
+.sheet-title-row { display: flex; align-items: center; gap: 8px; }
+.sheet-icon { font-size: 15px; }
+.sheet-title { font-size: 15px; font-weight: 600; color: #eee; }
+.sheet-desc { font-size: 11px; color: #555; padding: 0 0 10px; border-bottom: 0.5px solid #22222e; }
+
+/* ── SHARED CARD COMPONENTS ── */
+.hand-selector { padding: 12px 16px 0; }
+.selector-label { font-size: 10px; color: #444; text-transform: uppercase; letter-spacing: 0.07em; font-weight: 500; margin-bottom: 8px; }
+.card-row { display: flex; gap: 8px; }
+.sel-card-wrap { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.sel-card {
+  width: 46px; height: 64px; border-radius: 7px;
+  background: #22223a; border: 1.5px solid #3a3a5a;
+  position: relative; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: border-color 0.12s, background 0.12s;
+}
+.sel-card:hover { border-color: #5a5a8a; }
+.sel-card.known { border-color: #c9a22780; }
+.sel-card.selected-burn { border-color: #cf5e5e; background: #1e0f0f; box-shadow: 0 0 0 1px #cf5e5e30; }
+.sel-card.selected-blue { border-color: #5eb8cf; background: #0a1a1f; box-shadow: 0 0 0 1px #5eb8cf30; }
+.sel-card.selected-gold { border-color: #c9a227; background: #1f1a0a; box-shadow: 0 0 0 1px #c9a22730; }
+.sel-card.disabled { opacity: 0.3; pointer-events: none; }
+
+.eye-b {
+  position: absolute; top: 3px; right: 3px;
+  width: 12px; height: 12px; background: #c9a227;
+  border-radius: 50%; display: flex; align-items: center; justify-content: center;
+}
+.slot-lbl { font-size: 10px; color: #555; font-weight: 500; }
+.slot-lbl.active { color: #cf5e5e; }
+.slot-lbl.blue { color: #5eb8cf; }
+.slot-lbl.gold { color: #c9a227; }
+
+/* face-up card for revealed/drawn cards */
+.face-card {
+  width: 46px; height: 64px; border-radius: 7px;
+  background: #fff; border: 1.5px solid #ddd;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  position: relative; font-weight: 700; font-size: 16px; cursor: pointer;
+}
+.face-card .fc { position: absolute; font-size: 9px; font-weight: 700; line-height: 1.2; }
+.face-card .fc.tl { top: 3px; left: 4px; }
+.face-card .fc.br { bottom: 3px; right: 4px; transform: rotate(180deg); }
+.face-card.red { color: #c0392b; }
+.face-card.black { color: #222; }
+.face-card.selected-gold { border-color: #c9a227; box-shadow: 0 0 0 1px #c9a22730; }
+
+/* reveal flash for peek */
+.face-card.revealed {
+  animation: revealPop 0.3s ease-out;
+}
+@keyframes revealPop {
+  0% { transform: scaleX(0); }
+  100% { transform: scaleX(1); }
+}
+
+/* ── BURN SPECIFIC ── */
+.burn-comparison {
+  padding: 10px 16px 0;
+  display: flex; align-items: center; gap: 10px;
+}
+.burn-col { display: flex; flex-direction: column; align-items: center; gap: 5px; }
+.burn-col-label { font-size: 9px; color: #444; text-transform: uppercase; letter-spacing: 0.06em; }
+.vs-sep {
+  flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px;
+}
+.vs-text { font-size: 11px; color: #333; font-weight: 600; }
+.match-line { font-size: 10px; text-align: center; font-weight: 600; }
+.match-line.unknown { color: #555; }
+.match-line.match { color: #5ecf5e; }
+.match-line.nomatch { color: #cf5e5e; }
+
+.risk-box {
+  margin: 10px 16px 0; padding: 8px 10px;
+  background: #1e1616; border: 0.5px solid #3a2020; border-radius: 8px;
+}
+.risk-text { font-size: 11px; color: #7a4a4a; line-height: 1.5; }
+.risk-text strong { color: #cf7070; font-weight: 500; }
+
+/* ── PEEK SPECIFIC ── */
+.peek-instruction {
+  padding: 10px 16px 0;
+  font-size: 12px; color: #666; line-height: 1.5;
+}
+.peek-revealed-box {
+  margin: 10px 16px 0; padding: 10px 12px;
+  background: #14200f; border: 0.5px solid #2a4020; border-radius: 8px;
+  display: flex; align-items: center; gap: 10px;
+}
+.peek-card-large {
+  width: 52px; height: 72px; border-radius: 8px;
+  background: #fff; border: 2px solid #c9a227;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  position: relative; font-weight: 700; font-size: 20px; flex-shrink: 0;
+}
+.peek-card-large .fc { position: absolute; font-size: 10px; font-weight: 700; line-height: 1.2; }
+.peek-card-large .fc.tl { top: 3px; left: 4px; }
+.peek-card-large .fc.br { bottom: 3px; right: 4px; transform: rotate(180deg); }
+.peek-info { display: flex; flex-direction: column; gap: 4px; }
+.peek-info-title { font-size: 12px; color: #5ecf5e; font-weight: 500; }
+.peek-info-val { font-size: 11px; color: #888; }
+.peek-info-note { font-size: 10px; color: #3a5a3a; line-height: 1.4; }
+
+/* ── SWAP SPECIFIC ── */
+.swap-section { padding: 10px 16px 0; }
+.swap-arrow-row {
+  display: flex; align-items: center; justify-content: center;
+  gap: 8px; padding: 6px 0;
+  font-size: 18px; color: #2a3a4a;
+}
+.opp-list-sel { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+.opp-pill {
+  display: flex; align-items: center; gap: 5px;
+  padding: 5px 10px; border-radius: 20px;
+  border: 1px solid #2a2a3a; background: #16162a;
+  font-size: 11px; color: #666; cursor: pointer;
+}
+.opp-pill.selected { border-color: #5eb8cf; color: #5eb8cf; background: #0a1a1f; }
+.opp-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+
+/* ── BOTTOM ACTIONS ── */
+.sheet-actions {
+  padding: 12px 16px 16px;
+  display: flex; gap: 8px; margin-top: 10px;
+}
+.btn-cancel {
+  flex: 1; padding: 10px; border-radius: 9px;
+  background: #16162a; border: 0.5px solid #2a2a3a;
+  color: #555; font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.btn-confirm {
+  flex: 2; padding: 10px; border-radius: 9px;
+  border: none; font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.btn-confirm.red { background: #cf5e5e; color: #fff; }
+.btn-confirm.gold { background: #c9a227; color: #1a1200; }
+.btn-confirm.disabled {
+  background: #1e1e2e; color: #333; border: 0.5px solid #2a2a3a; cursor: not-allowed;
+}
+.btn-skip {
+  flex: 1; padding: 10px; border-radius: 9px;
+  background: transparent; border: 0.5px solid #2a2a3a;
+  color: #555; font-size: 13px; font-weight: 500; cursor: pointer;
+}
+
+.annotation {
+  font-size: 11px; color: var(--color-text-secondary);
+  margin-top: 8px; text-align: center; line-height: 1.8;
+}
+.annotation strong { color: #c9a227; font-weight: 500; }
+
+/* sub-tabs for burn states */
+.subtabs { display: flex; gap: 5px; padding: 0 16px; margin-top: 10px; }
+.subtab {
+  flex: 1; padding: 5px 8px; border-radius: 6px; font-size: 10px; font-weight: 600;
+  text-align: center; cursor: pointer; border: 0.5px solid #2a2a3a;
+  background: #16162a; color: #444;
+}
+.subtab.active { background: #1e1e2e; color: #aaa; border-color: #3a3a5a; }
+</style>
+
+<div class="tabs">
+  <div class="tab active" onclick="sw('burn')">burn</div>
+  <div class="tab" onclick="sw('peek')">red queen — peek</div>
+  <div class="tab" onclick="sw('swap')">red jack — swap</div>
+</div>
+
+<!-- ══════════════ BURN ══════════════ -->
+<div class="screen active" id="screen-burn">
+
+  <div style="display:flex;gap:8px;margin-bottom:12px;justify-content:center;">
+    <div class="subtab active" id="st-unknown" onclick="setBurnState('unknown')">card unknown</div>
+    <div class="subtab" id="st-known-match" onclick="setBurnState('known-match')">known · ranks match</div>
+    <div class="subtab" id="st-known-nomatch" onclick="setBurnState('known-nomatch')">known · no match</div>
+  </div>
+
+  <div class="phone" id="burnPhone">
+    <div class="top-bar">
+      <span class="round-lbl">Round: 1</span>
+      <button class="check-btn">CHECK</button>
+    </div>
+    <div class="game-bg">
+      <div class="fake-table">
+        <div class="fake-card-back"></div>
+        <div class="fake-card-face">♠</div>
+      </div>
+      <div class="fake-hand">
+        <div class="fake-hcard gold"></div>
+        <div class="fake-hcard" style="border-color:#cf5e5e;background:#1e0f0f;"></div>
+        <div class="fake-hcard gold"></div>
+        <div class="fake-hcard"></div>
+      </div>
+    </div>
+
+    <div class="sheet-backdrop">
+      <div class="sheet">
+        <div class="drag-handle"></div>
+        <div class="sheet-header">
+          <div class="sheet-title-row">
+            <span class="sheet-icon">🔥</span>
+            <span class="sheet-title">Burn slot B?</span>
+          </div>
+          <div class="sheet-desc">Rank must match the top discard card. Wrong rank = penalty card added.</div>
+        </div>
+
+        <!-- comparison area -->
+        <div class="burn-comparison">
+          <div class="burn-col">
+            <div class="burn-col-label">your card (B)</div>
+            <!-- unknown state -->
+            <div id="burnYourCard">
+              <div class="sel-card selected-burn" style="cursor:default;">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3a3a6a" stroke-width="1.5"><path d="M12 3C7 3 3 8 3 12s4 9 9 9 9-4 9-9-4-9-9-9z"/><path d="M12 8v4m0 4h.01" stroke="#3a3a6a" stroke-width="1.5" stroke-linecap="round"/></svg>
+              </div>
+            </div>
+            <div id="burnYourLabel" style="font-size:10px;color:#cf5e5e;">unknown</div>
+          </div>
+          <div class="vs-sep">
+            <div class="vs-text">vs</div>
+            <div class="match-line unknown" id="burnMatchLine">rank unknown</div>
+          </div>
+          <div class="burn-col">
+            <div class="burn-col-label">top discard</div>
+            <div class="face-card black">
+              <div class="fc tl">J<br>♠</div>
+              <span>♠</span>
+              <div class="fc br">J<br>♠</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="risk-box" id="burnRiskBox">
+          <div class="risk-text" id="burnRiskText">Card B is <strong>face-down</strong> — you don't know its rank. If it doesn't match J, you'll receive a <strong>penalty card</strong> added face-down as slot E.</div>
+        </div>
+
+        <div class="sheet-actions">
+          <button class="btn-cancel">Cancel</button>
+          <button class="btn-confirm red" id="burnConfirmBtn">Burn it</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <p class="annotation">
+    Three states: <strong>unknown</strong> (face-down, shows risk warning) · <strong>known match</strong> (confident burn) · <strong>known no-match</strong> (confirm disabled with clear warning).<br>
+    Burn is always a deliberate choice — the modal never auto-confirms.
+  </p>
+</div>
+
+<!-- ══════════════ PEEK (RED QUEEN) ══════════════ -->
+<div class="screen" id="screen-peek">
+
+  <div style="display:flex;gap:8px;margin-bottom:12px;justify-content:center;">
+    <div class="subtab active" id="st-peek-select" onclick="setPeekState('select')">selecting slot</div>
+    <div class="subtab" id="st-peek-revealed" onclick="setPeekState('revealed')">card revealed</div>
+  </div>
+
+  <div class="phone">
+    <div class="top-bar">
+      <span class="round-lbl">Round: 1</span>
+      <button class="check-btn">CHECK</button>
+    </div>
+    <div class="game-bg">
+      <div class="fake-table">
+        <div class="fake-card-back"></div>
+        <div class="fake-card-face" style="color:#c0392b;">♦</div>
+      </div>
+      <div class="fake-hand">
+        <div class="fake-hcard gold"></div>
+        <div class="fake-hcard"></div>
+        <div class="fake-hcard gold"></div>
+        <div class="fake-hcard"></div>
+      </div>
+    </div>
+
+    <div class="sheet-backdrop">
+      <div class="sheet">
+        <div class="drag-handle"></div>
+        <div class="sheet-header">
+          <div class="sheet-title-row">
+            <span class="sheet-icon" style="color:#c0392b;">♦</span>
+            <span class="sheet-title">Red Queen — Peek</span>
+          </div>
+          <div class="sheet-desc" id="peekDesc">Choose one of your face-down cards to peek at privately. Only you will see it.</div>
+        </div>
+
+        <!-- SELECT state -->
+        <div id="peekSelectArea">
+          <div class="hand-selector">
+            <div class="selector-label">your hand — tap a slot to peek</div>
+            <div class="card-row">
+              <!-- A: already known, shown slightly differently -->
+              <div class="sel-card-wrap">
+                <div class="sel-card known" style="opacity:0.5;" title="already known">
+                  <div class="eye-b"><svg width="7" height="7" viewBox="0 0 10 7" fill="none"><ellipse cx="5" cy="3.5" rx="4" ry="2.5" stroke="white" stroke-width="1"/><circle cx="5" cy="3.5" r="1.2" fill="white"/></svg></div>
+                </div>
+                <div class="slot-lbl" style="color:#333;">A</div>
+              </div>
+              <div class="sel-card-wrap">
+                <div class="sel-card selected-gold" onclick="setPeekState('revealed')" id="peekSlotB"></div>
+                <div class="slot-lbl gold">B ←</div>
+              </div>
+              <div class="sel-card-wrap">
+                <div class="sel-card known" style="opacity:0.5;">
+                  <div class="eye-b"><svg width="7" height="7" viewBox="0 0 10 7" fill="none"><ellipse cx="5" cy="3.5" rx="4" ry="2.5" stroke="white" stroke-width="1"/><circle cx="5" cy="3.5" r="1.2" fill="white"/></svg></div>
+                </div>
+                <div class="slot-lbl" style="color:#333;">C</div>
+              </div>
+              <div class="sel-card-wrap">
+                <div class="sel-card"></div>
+                <div class="slot-lbl">D</div>
+              </div>
+            </div>
+          </div>
+          <div style="padding:8px 16px 0;font-size:10px;color:#3a3a4a;line-height:1.5;">
+            Slots A and C are already known — they are dimmed. Only unknown slots can be peeked.
+          </div>
+        </div>
+
+        <!-- REVEALED state (hidden initially) -->
+        <div id="peekRevealedArea" style="display:none;">
+          <div class="peek-revealed-box">
+            <div class="peek-card-large red">
+              <div class="fc tl" style="color:#c0392b;">7<br>♥</div>
+              <span>♥</span>
+              <div class="fc br" style="color:#c0392b;">7<br>♥</div>
+            </div>
+            <div class="peek-info">
+              <div class="peek-info-title">Slot B is 7♥</div>
+              <div class="peek-info-val">Value: 7 points</div>
+              <div class="peek-info-note">Only you can see this. The card stays in slot B. It is now marked as known.</div>
+            </div>
+          </div>
+          <div style="padding:8px 16px 0;font-size:10px;color:#3a5a3a;line-height:1.5;">
+            Slot B will receive an eye badge after you dismiss this.
+          </div>
+        </div>
+
+        <div class="sheet-actions" id="peekActions">
+          <button class="btn-skip">Skip</button>
+          <button class="btn-confirm disabled" id="peekConfirmBtn">Select a slot</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <p class="annotation">
+    <strong>Already-known slots</strong> are dimmed and untappable — peek is wasted on them.<br>
+    Selecting a slot activates the confirm button. On confirm, card flips to reveal privately.<br>
+    <strong>Revealed state</strong> shows rank, suit, point value, and a note that it stays in place.
+  </p>
+</div>
+
+<!-- ══════════════ SWAP (RED JACK) ══════════════ -->
+<div class="screen" id="screen-swap">
+
+  <div style="display:flex;gap:8px;margin-bottom:12px;justify-content:center;">
+    <div class="subtab active" id="st-swap-1" onclick="setSwapState('step1')">step 1 — your slot</div>
+    <div class="subtab" id="st-swap-2" onclick="setSwapState('step2')">step 2 — their slot</div>
+    <div class="subtab" id="st-swap-3" onclick="setSwapState('confirm')">ready to swap</div>
+  </div>
+
+  <div class="phone">
+    <div class="top-bar">
+      <span class="round-lbl">Round: 1</span>
+      <button class="check-btn">CHECK</button>
+    </div>
+    <div class="game-bg">
+      <div class="fake-table">
+        <div class="fake-card-back"></div>
+        <div class="fake-card-face" style="color:#c0392b;">♥</div>
+      </div>
+      <div class="fake-hand">
+        <div class="fake-hcard gold"></div>
+        <div class="fake-hcard" style="border-color:#5eb8cf;background:#0a1a1f;"></div>
+        <div class="fake-hcard gold"></div>
+        <div class="fake-hcard"></div>
+      </div>
+    </div>
+
+    <div class="sheet-backdrop">
+      <div class="sheet">
+        <div class="drag-handle"></div>
+        <div class="sheet-header">
+          <div class="sheet-title-row">
+            <span class="sheet-icon" style="color:#c0392b;">♥</span>
+            <span class="sheet-title">Red Jack — Blind Swap</span>
+          </div>
+          <div class="sheet-desc" id="swapDesc">Swap one of your cards with any opponent's card. Neither card is revealed.</div>
+        </div>
+
+        <!-- STEP 1: pick your slot -->
+        <div id="swapStep1">
+          <div class="hand-selector">
+            <div class="selector-label">step 1 — choose your slot</div>
+            <div class="card-row">
+              <div class="sel-card-wrap">
+                <div class="sel-card known" onclick="setSwapState('step2')">
+                  <div class="eye-b"><svg width="7" height="7" viewBox="0 0 10 7" fill="none"><ellipse cx="5" cy="3.5" rx="4" ry="2.5" stroke="white" stroke-width="1"/><circle cx="5" cy="3.5" r="1.2" fill="white"/></svg></div>
+                </div>
+                <div class="slot-lbl">A</div>
+              </div>
+              <div class="sel-card-wrap">
+                <div class="sel-card selected-blue" style="cursor:default;"></div>
+                <div class="slot-lbl blue">B</div>
+              </div>
+              <div class="sel-card-wrap">
+                <div class="sel-card known" onclick="setSwapState('step2')">
+                  <div class="eye-b"><svg width="7" height="7" viewBox="0 0 10 7" fill="none"><ellipse cx="5" cy="3.5" rx="4" ry="2.5" stroke="white" stroke-width="1"/><circle cx="5" cy="3.5" r="1.2" fill="white"/></svg></div>
+                </div>
+                <div class="slot-lbl">C</div>
+              </div>
+              <div class="sel-card-wrap">
+                <div class="sel-card"></div>
+                <div class="slot-lbl">D</div>
+              </div>
+            </div>
+          </div>
+          <div style="padding:8px 16px 0;font-size:10px;color:#3a3a4a;line-height:1.5;">
+            Tip: swapping a known card you want to shed can be strategic. Swapping an unknown card is a gamble.
+          </div>
+        </div>
+
+        <!-- STEP 2: pick opponent + their slot -->
+        <div id="swapStep2" style="display:none;">
+          <div class="swap-section">
+            <div class="selector-label">step 2 — pick an opponent</div>
+            <div class="opp-list-sel">
+              <div class="opp-pill selected"><div class="opp-dot"></div>Mila</div>
+              <div class="opp-pill"><div class="opp-dot" style="background:#cf5e5e;"></div>Jo</div>
+              <div class="opp-pill"><div class="opp-dot" style="background:#c9a227;"></div>Nao</div>
+            </div>
+          </div>
+          <div class="swap-section" style="margin-top:10px;">
+            <div class="selector-label">their slot</div>
+            <div class="card-row">
+              <div class="sel-card-wrap">
+                <div class="sel-card"></div>
+                <div class="slot-lbl">A</div>
+              </div>
+              <div class="sel-card-wrap">
+                <div class="sel-card selected-blue" style="cursor:default;"></div>
+                <div class="slot-lbl blue">B</div>
+              </div>
+              <div class="sel-card-wrap">
+                <div class="sel-card"></div>
+                <div class="slot-lbl">C</div>
+              </div>
+            </div>
+            <div style="margin-top:8px;font-size:10px;color:#3a3a4a;line-height:1.5;">
+              Mila has 3 cards. You cannot see their values — this is a blind swap.
+            </div>
+          </div>
+        </div>
+
+        <!-- CONFIRM state -->
+        <div id="swapConfirm" style="display:none;">
+          <div style="padding:12px 16px 0;display:flex;align-items:center;gap:12px;">
+            <div style="display:flex;flex-direction:column;align-items:center;gap:4px;">
+              <div style="font-size:9px;color:#444;text-transform:uppercase;letter-spacing:0.06em;">your slot B</div>
+              <div class="sel-card selected-blue" style="cursor:default;width:46px;height:64px;border-radius:7px;"></div>
+            </div>
+            <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;">
+              <div style="font-size:18px;color:#2a3a4a;">⇄</div>
+              <div style="font-size:10px;color:#333;text-align:center;">blind</div>
+            </div>
+            <div style="display:flex;flex-direction:column;align-items:center;gap:4px;">
+              <div style="font-size:9px;color:#444;text-transform:uppercase;letter-spacing:0.06em;">Mila's slot B</div>
+              <div class="sel-card" style="cursor:default;width:46px;height:64px;border-radius:7px;border-color:#5eb8cf80;"></div>
+            </div>
+          </div>
+          <div style="margin:8px 16px 0;padding:8px 10px;background:#0a1a1f;border:0.5px solid #1a3a4a;border-radius:8px;">
+            <div style="font-size:11px;color:#4a7a8a;line-height:1.5;">Neither you nor Mila will see what was swapped. The cards move silently.</div>
+          </div>
+        </div>
+
+        <div class="sheet-actions" id="swapActions">
+          <button class="btn-skip">Skip</button>
+          <button class="btn-confirm disabled" id="swapConfirmBtn">Choose a slot first</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <p class="annotation">
+    <strong>3-step flow:</strong> your slot → opponent + their slot → confirm summary.<br>
+    <strong>Skip always available</strong> — swap is optional per the rules.<br>
+    Confirm shows a side-by-side summary before committing. Neither card is ever revealed.
+  </p>
+</div>
+
+<script>
+function sw(id) {
+  const ids = ['burn','peek','swap'];
+  document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', ids[i] === id));
+  document.querySelectorAll('.screen').forEach(s => s.classList.toggle('active', s.id === 'screen-' + id));
+}
+
+/* ── BURN STATES ── */
+function setBurnState(state) {
+  ['unknown','known-match','known-nomatch'].forEach(s => {
+    document.getElementById('st-' + s).classList.toggle('active', s === state);
+  });
+  const yourCard = document.getElementById('burnYourCard');
+  const yourLabel = document.getElementById('burnYourLabel');
+  const matchLine = document.getElementById('burnMatchLine');
+  const riskBox = document.getElementById('burnRiskBox');
+  const riskText = document.getElementById('burnRiskText');
+  const confirmBtn = document.getElementById('burnConfirmBtn');
+
+  if (state === 'unknown') {
+    yourCard.innerHTML = `<div class="sel-card selected-burn" style="cursor:default;display:flex;align-items:center;justify-content:center;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3a3a6a" stroke-width="1.5"><circle cx="12" cy="12" r="9"/><path d="M12 8v4m0 4h.01" stroke="#3a3a6a" stroke-width="1.5" stroke-linecap="round"/></svg></div>`;
+    yourLabel.textContent = 'unknown'; yourLabel.style.color = '#cf5e5e';
+    matchLine.textContent = 'rank unknown'; matchLine.className = 'match-line unknown';
+    riskBox.style.background = '#1e1616'; riskBox.style.borderColor = '#3a2020';
+    riskText.innerHTML = 'Card B is <strong>face-down</strong> — you don\'t know its rank. If it doesn\'t match J, you\'ll receive a <strong>penalty card</strong> added face-down as slot E.';
+    riskText.style.color = '#7a4a4a';
+    confirmBtn.textContent = 'Burn it'; confirmBtn.className = 'btn-confirm red';
+  } else if (state === 'known-match') {
+    yourCard.innerHTML = `<div class="face-card black selected-gold" style="cursor:default;width:46px;height:64px;"><div class="fc tl">J<br>♣</div><span>♣</span><div class="fc br">J<br>♣</div></div>`;
+    yourLabel.textContent = 'J♣ — known'; yourLabel.style.color = '#5ecf5e';
+    matchLine.textContent = '✓ ranks match'; matchLine.className = 'match-line match';
+    riskBox.style.background = '#14200f'; riskBox.style.borderColor = '#2a4020';
+    riskText.innerHTML = 'J♣ matches J♠ — this burn will <strong>succeed</strong>. Slot B will be removed from your hand.';
+    riskText.style.color = '#4a7a4a';
+    confirmBtn.textContent = 'Confirm burn'; confirmBtn.className = 'btn-confirm gold';
+  } else {
+    yourCard.innerHTML = `<div class="face-card red selected-burn" style="cursor:default;width:46px;height:64px;"><div class="fc tl" style="color:#c0392b;">5<br>♦</div><span style="font-size:15px;">♦</span><div class="fc br" style="color:#c0392b;">5<br>♦</div></div>`;
+    yourLabel.textContent = '5♦ — known'; yourLabel.style.color = '#cf5e5e';
+    matchLine.textContent = '✗ no match'; matchLine.className = 'match-line nomatch';
+    riskBox.style.background = '#1e1616'; riskBox.style.borderColor = '#3a2020';
+    riskText.innerHTML = '5♦ does not match J♠. Burning this card <strong>will fail</strong> — you\'ll keep slot B and receive a <strong>penalty card</strong> as slot E. Choose a different action.';
+    riskText.style.color = '#7a4a4a';
+    confirmBtn.textContent = 'Burn anyway'; confirmBtn.className = 'btn-confirm disabled';
+  }
+}
+
+/* ── PEEK STATES ── */
+function setPeekState(state) {
+  ['select','revealed'].forEach(s => {
+    document.getElementById('st-peek-' + s).classList.toggle('active', s === state);
+  });
+  const selectArea = document.getElementById('peekSelectArea');
+  const revealArea = document.getElementById('peekRevealedArea');
+  const confirmBtn = document.getElementById('peekConfirmBtn');
+  const desc = document.getElementById('peekDesc');
+  if (state === 'select') {
+    selectArea.style.display = 'block'; revealArea.style.display = 'none';
+    confirmBtn.textContent = 'Select a slot'; confirmBtn.className = 'btn-confirm disabled';
+    desc.textContent = 'Choose one of your face-down cards to peek at privately. Only you will see it.';
+  } else {
+    selectArea.style.display = 'none'; revealArea.style.display = 'block';
+    confirmBtn.textContent = 'Got it'; confirmBtn.className = 'btn-confirm gold';
+    desc.textContent = 'Slot B revealed — only you can see this.';
+  }
+}
+
+/* ── SWAP STATES ── */
+function setSwapState(state) {
+  ['step1','step2','confirm'].forEach((s,i) => {
+    document.getElementById('st-swap-' + (i+1)).classList.toggle('active', s === state);
+  });
+  const s1 = document.getElementById('swapStep1');
+  const s2 = document.getElementById('swapStep2');
+  const sc = document.getElementById('swapConfirm');
+  const confirmBtn = document.getElementById('swapConfirmBtn');
+  const desc = document.getElementById('swapDesc');
+  s1.style.display = 'none'; s2.style.display = 'none'; sc.style.display = 'none';
+  if (state === 'step1') {
+    s1.style.display = 'block';
+    confirmBtn.textContent = 'Choose a slot first'; confirmBtn.className = 'btn-confirm disabled';
+    desc.textContent = 'Swap one of your cards with any opponent\'s card. Neither card is revealed.';
+  } else if (state === 'step2') {
+    s2.style.display = 'block';
+    confirmBtn.textContent = 'Choose their slot'; confirmBtn.className = 'btn-confirm disabled';
+    desc.textContent = 'Step 2 — pick an opponent and one of their slots.';
+  } else {
+    sc.style.display = 'block';
+    confirmBtn.textContent = 'Swap'; confirmBtn.className = 'btn-confirm gold';
+    desc.textContent = 'Confirm the blind swap — neither card will be revealed.';
+  }
+}
+</script>
