@@ -918,7 +918,8 @@ export const GameBoard: FC = () => {
         position: 'top',
       });
     }
-  }, [lastBurnResult, playerId, gameState?.players, toast]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lastBurnResult, playerId, toast]);
 
   // Red Jack swap toast notification
   useEffect(() => {
