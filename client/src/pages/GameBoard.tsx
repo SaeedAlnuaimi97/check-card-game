@@ -601,6 +601,8 @@ export const GameBoard: FC = () => {
     clearRoundEndData,
     clearGameEndData,
     undoTakeDiscard,
+    sendReaction,
+    lastReaction,
   } = useSocket();
   const toast = useToast();
 
@@ -628,6 +630,15 @@ export const GameBoard: FC = () => {
 
   // Burn confirmation modal state
   const [pendingBurnSlot, setPendingBurnSlot] = useState<string | null>(null);
+
+  // Reaction button UI state
+  const [reactionTrayOpen, setReactionTrayOpen] = useState(false);
+  const [reactionCooling, setReactionCooling] = useState(false);
+  const [reactionCooldownSec, setReactionCooldownSec] = useState(0);
+  const reactionBtnRef = useRef<HTMLDivElement>(null);
+  // Float emojis keyed by opponent playerId → list of active floats
+  const [floatEmojis, setFloatEmojis] = useState<{ id: number; emoji: string; left: number }[]>([]);
+  const floatIdRef = useRef(0);
 
   // Game menu modal
   const { isOpen: isMenuOpen, onOpen: onMenuOpen, onClose: onMenuClose } = useDisclosure();
@@ -671,6 +682,8 @@ export const GameBoard: FC = () => {
       prevRoundNumberRef.current = gameState.roundNumber;
       prevDiscardTopIdRef.current = '';
       setDiscardHistory([]);
+      // Flush all stale toasts from the previous round
+      toast.closeAll();
       return;
     }
     if (pile.length === 0) return;
@@ -694,6 +707,18 @@ export const GameBoard: FC = () => {
 
   // F-308: Burn shake animation — slot currently animating
   const [burningSlot, setBurningSlot] = useState<string | null>(null);
+
+  // Reaction: trigger float emoji when a reaction is received
+  useEffect(() => {
+    if (!lastReaction) return;
+    const floatId = ++floatIdRef.current;
+    const left = 15 + Math.random() * 55;
+    setFloatEmojis((prev) => [...prev, { id: floatId, emoji: lastReaction.emoji, left }]);
+    const timer = setTimeout(() => {
+      setFloatEmojis((prev) => prev.filter((f) => f.id !== floatId));
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, [lastReaction]);
 
   // Trigger red flash when a red face card special effect activates
   useEffect(() => {
@@ -1083,6 +1108,43 @@ export const GameBoard: FC = () => {
   }, [leaveRoom, navigate]);
 
   // ----------------------------------------------------------
+  // Reaction button handlers
+  // ----------------------------------------------------------
+  const handleSendReaction = useCallback(
+    async (emoji: string) => {
+      if (reactionCooling) return;
+      setReactionTrayOpen(false);
+      setReactionCooling(true);
+      setReactionCooldownSec(3);
+      await sendReaction(emoji);
+      // Countdown 3→0
+      let cd = 3;
+      const iv = setInterval(() => {
+        cd--;
+        setReactionCooldownSec(cd);
+        if (cd <= 0) {
+          clearInterval(iv);
+          setReactionCooling(false);
+          setReactionCooldownSec(0);
+        }
+      }, 1000);
+    },
+    [reactionCooling, sendReaction],
+  );
+
+  // Close reaction tray on outside click
+  useEffect(() => {
+    if (!reactionTrayOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (reactionBtnRef.current && !reactionBtnRef.current.contains(e.target as Node)) {
+        setReactionTrayOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [reactionTrayOpen]);
+
+  // ----------------------------------------------------------
   // Special Effect modal state
   // ----------------------------------------------------------
 
@@ -1352,6 +1414,134 @@ export const GameBoard: FC = () => {
                 CHECK
               </Button>
             </Tooltip>
+          )}
+
+          {/* ── Reaction button — visible during active gameplay only ── */}
+          {gameState.phase === 'playing' && (
+            <Box ref={reactionBtnRef} position="relative" flexShrink={0}>
+              {/* Main circular button */}
+              <Box
+                as="button"
+                w="28px"
+                h="28px"
+                borderRadius="full"
+                bg={reactionTrayOpen ? '#2a2a3e' : '#1e1e2e'}
+                border={reactionTrayOpen ? '1px solid #5a5a8a' : '1px solid #3a3a5a'}
+                display="flex"
+                alignItems="center"
+                justifyContent="center"
+                fontSize="14px"
+                cursor={reactionCooling ? 'default' : 'pointer'}
+                userSelect="none"
+                position="relative"
+                flexShrink={0}
+                transition="background 0.15s, transform 0.1s"
+                _hover={reactionCooling ? {} : { bg: '#2a2a3e', transform: 'scale(1.1)' }}
+                onClick={() => {
+                  if (reactionCooling) return;
+                  setReactionTrayOpen((o) => !o);
+                }}
+              >
+                {reactionCooling ? (
+                  <>
+                    {/* SVG arc cooldown ring */}
+                    <Box
+                      as="svg"
+                      position="absolute"
+                      inset="-3px"
+                      w="34px"
+                      h="34px"
+                      viewBox="0 0 34 34"
+                      pointerEvents="none"
+                    >
+                      <circle
+                        cx="17"
+                        cy="17"
+                        r="13"
+                        fill="none"
+                        stroke="#7a7aee"
+                        strokeWidth="2"
+                        strokeDasharray="82"
+                        strokeLinecap="round"
+                        style={{
+                          transformOrigin: '50% 50%',
+                          transform: 'rotate(-90deg)',
+                          strokeDashoffset: `${82 - (82 * (3 - reactionCooldownSec)) / 3}`,
+                          transition: 'stroke-dashoffset 1s linear',
+                        }}
+                      />
+                    </Box>
+                    <Box as="span" fontSize="10px" color="#888" fontWeight="600">
+                      {reactionCooldownSec}
+                    </Box>
+                  </>
+                ) : (
+                  <Box as="span">{reactionTrayOpen ? '✕' : '😄'}</Box>
+                )}
+              </Box>
+
+              {/* Dropdown tray */}
+              {reactionTrayOpen && (
+                <Box
+                  position="absolute"
+                  top="calc(100% + 8px)"
+                  right={0}
+                  bg="#1e1e2e"
+                  border="1px solid #3a3a5a"
+                  borderRadius="20px"
+                  px="8px"
+                  py="6px"
+                  display="flex"
+                  gap="4px"
+                  alignItems="center"
+                  zIndex={40}
+                  filter="drop-shadow(0 4px 12px rgba(0,0,0,0.4))"
+                  sx={{
+                    '&::before': {
+                      content: '""',
+                      position: 'absolute',
+                      top: '-6px',
+                      right: '9px',
+                      borderLeft: '6px solid transparent',
+                      borderRight: '6px solid transparent',
+                      borderBottom: '6px solid #3a3a5a',
+                    },
+                    '&::after': {
+                      content: '""',
+                      position: 'absolute',
+                      top: '-5px',
+                      right: '10px',
+                      borderLeft: '5px solid transparent',
+                      borderRight: '5px solid transparent',
+                      borderBottom: '5px solid #1e1e2e',
+                    },
+                  }}
+                >
+                  {(['🖕', '😛', '🥲'] as const).map((emoji) => (
+                    <Box
+                      key={emoji}
+                      as="button"
+                      w="38px"
+                      h="38px"
+                      borderRadius="full"
+                      bg="transparent"
+                      border="none"
+                      fontSize="22px"
+                      display="flex"
+                      alignItems="center"
+                      justifyContent="center"
+                      cursor="pointer"
+                      transition="transform 0.12s, background 0.1s"
+                      _hover={{ transform: 'scale(1.25)', bg: '#2a2a42' }}
+                      _active={{ transform: 'scale(0.95)' }}
+                      onClick={() => handleSendReaction(emoji)}
+                    >
+                      {emoji}
+                    </Box>
+                  ))}
+                </Box>
+              )}
+            </Box>
           )}
 
           {isDesktop ? (
@@ -1785,7 +1975,7 @@ export const GameBoard: FC = () => {
       )}
       {/* ── MOBILE: OPPONENT SLIM ROWS ── */}
       {!isDesktop && (
-        <Box bg="#0d0d14" flexShrink={0}>
+        <Box bg="#0d0d14" flexShrink={0} position="relative">
           {/* Section header */}
           <Box display="flex" justifyContent="space-between" px="10px" pt="6px" pb="2px">
             <Box fontSize="9px" color="#333" textTransform="uppercase" letterSpacing="0.08em">
@@ -1808,6 +1998,26 @@ export const GameBoard: FC = () => {
               modifiedSlots={modifiedSlots}
             />
           ))}
+          {/* Float emoji zone — reactions animate up over the opponent area */}
+          <Box position="absolute" inset={0} pointerEvents="none" overflow="visible" zIndex={20}>
+            {floatEmojis.map((f) => (
+              <motion.div
+                key={f.id}
+                style={{
+                  position: 'absolute',
+                  bottom: '4px',
+                  left: `${f.left}%`,
+                  fontSize: '28px',
+                  pointerEvents: 'none',
+                }}
+                initial={{ opacity: 0, y: 0, scale: 0.5 }}
+                animate={{ opacity: [0, 1, 1, 0], y: [0, -8, -22, -58], scale: [0.5, 1.3, 1, 0.8] }}
+                transition={{ duration: 1.8, ease: 'easeOut' }}
+              >
+                {f.emoji}
+              </motion.div>
+            ))}
+          </Box>
         </Box>
       )}
       {/* ── MOBILE: SCORE BAR ── */}
@@ -2526,7 +2736,38 @@ export const GameBoard: FC = () => {
               flexDirection="column"
               overflowX="clip"
               overflowY="visible"
+              position="relative"
             >
+              {/* Desktop float emoji zone — reactions animate up over the table */}
+              <Box
+                position="absolute"
+                inset={0}
+                pointerEvents="none"
+                overflow="visible"
+                zIndex={20}
+              >
+                {floatEmojis.map((f) => (
+                  <motion.div
+                    key={f.id}
+                    style={{
+                      position: 'absolute',
+                      bottom: '20%',
+                      left: `${f.left}%`,
+                      fontSize: '32px',
+                      pointerEvents: 'none',
+                    }}
+                    initial={{ opacity: 0, y: 0, scale: 0.5 }}
+                    animate={{
+                      opacity: [0, 1, 1, 0],
+                      y: [0, -10, -30, -80],
+                      scale: [0.5, 1.4, 1, 0.8],
+                    }}
+                    transition={{ duration: 1.8, ease: 'easeOut' }}
+                  >
+                    {f.emoji}
+                  </motion.div>
+                ))}
+              </Box>
               {/* 3-col grid */}
               <Box
                 display="grid"

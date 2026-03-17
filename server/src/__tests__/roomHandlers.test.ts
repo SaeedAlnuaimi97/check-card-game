@@ -1725,4 +1725,73 @@ describe('roomHandlers', () => {
       );
     });
   });
+
+  // ----------------------------------------------------------
+  // sendReaction
+  // ----------------------------------------------------------
+  describe('sendReaction', () => {
+    let roomCode: string;
+    let playerId: string;
+
+    beforeEach(async () => {
+      // Create a room with two players in a playing state
+      const cb1 = vi.fn();
+      await emitEvent('createRoom', { username: 'Alice' }, cb1);
+      roomCode = cb1.mock.calls[0][0].roomCode;
+      playerId = cb1.mock.calls[0][0].playerId;
+
+      // Manually set room to playing so sendReaction is valid
+      rooms[roomCode].status = 'playing';
+    });
+
+    it('broadcasts reactionReceived to the room on valid emoji', async () => {
+      const callback = vi.fn();
+      await emitEvent('sendReaction', { roomCode, playerId, emoji: '😛' }, callback);
+
+      expect(callback).toHaveBeenCalledWith({ success: true });
+      expect(mockIO.to).toHaveBeenCalledWith(roomCode);
+      expect(mockIO._toEmit).toHaveBeenCalledWith('reactionReceived', {
+        fromPlayerId: playerId,
+        emoji: '😛',
+      });
+    });
+
+    it('rejects invalid emoji', async () => {
+      const callback = vi.fn();
+      await emitEvent('sendReaction', { roomCode, playerId, emoji: '🍕' }, callback);
+
+      expect(callback).toHaveBeenCalledWith({ success: false, error: 'Invalid emoji' });
+      expect(mockIO._toEmit).not.toHaveBeenCalledWith('reactionReceived', expect.anything());
+    });
+
+    it('rejects when room is not in playing state', async () => {
+      rooms[roomCode].status = 'lobby';
+      const callback = vi.fn();
+      await emitEvent('sendReaction', { roomCode, playerId, emoji: '🖕' }, callback);
+
+      expect(callback).toHaveBeenCalledWith({ success: false, error: 'Game not active' });
+    });
+
+    it('rejects unknown room code', async () => {
+      const callback = vi.fn();
+      await emitEvent('sendReaction', { roomCode: 'ZZZZ', playerId, emoji: '🥲' }, callback);
+
+      expect(callback).toHaveBeenCalledWith(expect.objectContaining({ success: false }));
+    });
+
+    it('rejects player not in the room', async () => {
+      const callback = vi.fn();
+      await emitEvent('sendReaction', { roomCode, playerId: 'stranger', emoji: '😛' }, callback);
+
+      expect(callback).toHaveBeenCalledWith({ success: false, error: 'Player not in room' });
+    });
+
+    it('accepts all three allowed emojis', async () => {
+      for (const emoji of ['🖕', '😛', '🥲'] as const) {
+        const cb = vi.fn();
+        await emitEvent('sendReaction', { roomCode, playerId, emoji }, cb);
+        expect(cb).toHaveBeenCalledWith({ success: true });
+      }
+    });
+  });
 });
