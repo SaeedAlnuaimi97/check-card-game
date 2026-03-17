@@ -23,6 +23,12 @@ const CORS_ORIGIN = process.env.CLIENT_URL || true;
 const app = express();
 const server = http.createServer(app);
 
+// Trust the Azure App Service / reverse proxy so that express-rate-limit
+// can read the real client IP from X-Forwarded-For correctly.
+if (IS_PRODUCTION) {
+  app.set('trust proxy', 1);
+}
+
 // ============================================================
 // Security & compression middleware (F-262)
 // ============================================================
