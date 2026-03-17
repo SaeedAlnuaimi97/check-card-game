@@ -30,7 +30,7 @@ import type { SlotLabel } from '../types/player.types';
 // Debug Mode
 // ============================================================
 
-export const DEBUG_MODE = false;
+export const DEBUG_MODE = true;
 
 // ============================================================
 // Types

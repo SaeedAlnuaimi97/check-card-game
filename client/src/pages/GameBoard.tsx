@@ -15,7 +15,6 @@ import {
   VStack,
   HStack,
   Badge,
-  Progress,
   Tooltip,
   useBreakpointValue,
   useDisclosure,
@@ -1268,47 +1267,6 @@ export const GameBoard: FC = () => {
         )}
       </AnimatePresence>
       {/* Pause overlay removed — pause/resume handled via menu modal & header badge */}
-      {/* Peek overlay / countdown */}
-      {isPeeking && peekedCards && peekedCards.length > 0 && (
-        <Box
-          position="fixed"
-          top={0}
-          left={0}
-          right={0}
-          bottom={0}
-          zIndex={10}
-          display="flex"
-          alignItems="center"
-          justifyContent="center"
-          bg="blackAlpha.700"
-        >
-          <VStack
-            spacing={2}
-            bg="table.border"
-            px={6}
-            py={4}
-            borderRadius="lg"
-            border="1px solid"
-            borderColor="warning.a10"
-            shadow="dark-lg"
-          >
-            <Text fontSize="md" color="warning.a10" fontWeight="bold">
-              Memorize your cards!
-            </Text>
-            <Progress
-              value={peekProgress}
-              size="sm"
-              colorScheme="yellow"
-              w="200px"
-              borderRadius="full"
-              bg="surface.tonal20"
-            />
-            <Text fontSize="xs" color="surface.tonal40">
-              {Math.ceil((peekProgress / 100) * (PEEK_DURATION_MS / 1000))}s remaining
-            </Text>
-          </VStack>
-        </Box>
-      )}
       {/* Score / Round info */}
       <Flex
         px={{ base: 4, md: 5 }}
@@ -2283,21 +2241,52 @@ export const GameBoard: FC = () => {
           transition="border-color 0.3s, box-shadow 0.3s"
         >
           {/* hand label */}
-          <Text
-            fontSize="10px"
-            color={hasDrawnCard && drawnFromDiscard ? '#c9a227' : '#555'}
-            textAlign="center"
-            textTransform="uppercase"
-            letterSpacing="0.07em"
-            fontWeight="500"
-            mb="16px"
-          >
-            {hasDrawnCard && drawnFromDiscard
-              ? 'pick a slot to replace'
-              : gameState.phase === 'roundEnd' || gameState.phase === 'gameEnd'
-                ? 'round over'
-                : 'your hand'}
-          </Text>
+          {isPeeking ? (
+            /* Option C memo pill — replaces plain label during peeking phase */
+            <Flex align="center" justify="center" mb="10px">
+              <Flex
+                align="center"
+                gap="6px"
+                bg="#1e1a08"
+                border="1px solid #4a3a00"
+                borderRadius="20px"
+                px="12px"
+                py="4px"
+              >
+                <Text fontSize="11px" color="#c9a227" fontWeight="600">
+                  memorize
+                </Text>
+                <Text
+                  fontSize="13px"
+                  fontWeight="800"
+                  color="#c9a227"
+                  minW="20px"
+                  textAlign="center"
+                >
+                  {Math.ceil((peekProgress / 100) * (PEEK_DURATION_MS / 1000))}
+                </Text>
+                <Text fontSize="11px" color="#c9a227" fontWeight="600">
+                  sec
+                </Text>
+              </Flex>
+            </Flex>
+          ) : (
+            <Text
+              fontSize="10px"
+              color={hasDrawnCard && drawnFromDiscard ? '#c9a227' : '#555'}
+              textAlign="center"
+              textTransform="uppercase"
+              letterSpacing="0.07em"
+              fontWeight="500"
+              mb="16px"
+            >
+              {hasDrawnCard && drawnFromDiscard
+                ? 'pick a slot to replace'
+                : gameState.phase === 'roundEnd' || gameState.phase === 'gameEnd'
+                  ? 'round over'
+                  : 'your hand'}
+            </Text>
+          )}
 
           {/* Undo button when discard was taken */}
           {hasDrawnCard && drawnFromDiscard && (
@@ -2323,6 +2312,7 @@ export const GameBoard: FC = () => {
           {/* Hand row */}
           <Box
             overflowX="auto"
+            w="100%"
             sx={{
               overflowY: 'visible',
               '&::-webkit-scrollbar': { display: 'none' },
@@ -2393,7 +2383,12 @@ export const GameBoard: FC = () => {
                           ? { duration: 0.45, ease: 'easeInOut' }
                           : { duration: 0.3, delay: cardIdx * 0.07, ease: 'easeOut' }
                       }
-                      style={{ display: 'inline-block' }}
+                      style={{
+                        display: 'inline-block',
+                        opacity: isPeeking && !showFaceUp ? 0.35 : 1,
+                        transform: isPeeking && showFaceUp ? 'scale(1.12)' : undefined,
+                        transition: 'opacity 0.3s, transform 0.3s',
+                      }}
                     >
                       <Box
                         display="flex"
@@ -2460,10 +2455,22 @@ export const GameBoard: FC = () => {
                                 ? '#cf5e5e'
                                 : '#555'
                           }
-                          fontWeight="500"
+                          fontWeight={isPeekedSlot(h.slot) ? '700' : '500'}
                         >
                           {h.slot}
                         </Text>
+                        {/* Point value shown only during peek for revealed cards */}
+                        {isPeeking &&
+                          isPeekedSlot(h.slot) &&
+                          peekedCards &&
+                          (() => {
+                            const pc = peekedCards.find((p: PeekedCard) => p.slot === h.slot);
+                            return pc ? (
+                              <Text fontSize="9px" color="#666">
+                                {pc.card.value} pts
+                              </Text>
+                            ) : null;
+                          })()}
                       </Box>
                     </motion.div>
                   </Tooltip>
@@ -2472,16 +2479,34 @@ export const GameBoard: FC = () => {
             </HStack>
           </Box>
 
-          {/* hint-text */}
-          <Text fontSize="11px" color="#555" textAlign="center" mt="6px">
-            {gameState.phase === 'peeking'
-              ? 'memorize your cards'
-              : hasDrawnCard && drawnFromDiscard
+          {/* Peeking timer bar (Option C) / hint-text */}
+          {isPeeking ? (
+            <Flex align="center" gap="8px" mt="10px" px="4px">
+              <Text fontSize="16px" fontWeight="800" color="#c9a227" minW="24px">
+                {Math.ceil((peekProgress / 100) * (PEEK_DURATION_MS / 1000))}s
+              </Text>
+              <Box flex={1} h="5px" bg="#1a1a24" borderRadius="3px" overflow="hidden">
+                <Box
+                  h="100%"
+                  bg="#c9a227"
+                  borderRadius="3px"
+                  w={`${peekProgress}%`}
+                  transition="width 0.1s linear"
+                />
+              </Box>
+              <Text fontSize="10px" color="#555">
+                cards flip when timer ends
+              </Text>
+            </Flex>
+          ) : (
+            <Text fontSize="11px" color="#555" textAlign="center" mt="6px">
+              {hasDrawnCard && drawnFromDiscard
                 ? 'tap a slot to swap · tap discard again to cancel'
                 : hasDrawnCard
                   ? 'tap a hand card to swap · tap discard pile to discard'
                   : 'tap draw pile · tap discard then hand · tap hand card to burn'}
-          </Text>
+            </Text>
+          )}
         </Box>
       )}{' '}
       {/* end !isDesktop player zone */}
@@ -2943,21 +2968,52 @@ export const GameBoard: FC = () => {
                     transition="border-color 0.3s, box-shadow 0.3s"
                   >
                     {/* hand label */}
-                    <Text
-                      fontSize="10px"
-                      color={hasDrawnCard && drawnFromDiscard ? '#c9a227' : '#555'}
-                      textAlign="center"
-                      textTransform="uppercase"
-                      letterSpacing="0.07em"
-                      fontWeight="500"
-                      mb="8px"
-                    >
-                      {hasDrawnCard && drawnFromDiscard
-                        ? 'pick a slot to replace'
-                        : gameState.phase === 'roundEnd' || gameState.phase === 'gameEnd'
-                          ? 'round over'
-                          : 'your hand'}
-                    </Text>
+                    {isPeeking ? (
+                      /* Option C memo pill for desktop */
+                      <Flex align="center" justify="center" mb="10px">
+                        <Flex
+                          align="center"
+                          gap="6px"
+                          bg="#1e1a08"
+                          border="1px solid #4a3a00"
+                          borderRadius="20px"
+                          px="12px"
+                          py="4px"
+                        >
+                          <Text fontSize="11px" color="#c9a227" fontWeight="600">
+                            memorize
+                          </Text>
+                          <Text
+                            fontSize="13px"
+                            fontWeight="800"
+                            color="#c9a227"
+                            minW="20px"
+                            textAlign="center"
+                          >
+                            {Math.ceil((peekProgress / 100) * (PEEK_DURATION_MS / 1000))}
+                          </Text>
+                          <Text fontSize="11px" color="#c9a227" fontWeight="600">
+                            sec
+                          </Text>
+                        </Flex>
+                      </Flex>
+                    ) : (
+                      <Text
+                        fontSize="10px"
+                        color={hasDrawnCard && drawnFromDiscard ? '#c9a227' : '#555'}
+                        textAlign="center"
+                        textTransform="uppercase"
+                        letterSpacing="0.07em"
+                        fontWeight="500"
+                        mb="8px"
+                      >
+                        {hasDrawnCard && drawnFromDiscard
+                          ? 'pick a slot to replace'
+                          : gameState.phase === 'roundEnd' || gameState.phase === 'gameEnd'
+                            ? 'round over'
+                            : 'your hand'}
+                      </Text>
+                    )}
                     {hasDrawnCard && drawnFromDiscard && (
                       <Flex justify="center" mb="8px">
                         <Box
@@ -2980,6 +3036,7 @@ export const GameBoard: FC = () => {
                     {/* Hand row */}
                     <Box
                       overflowX="auto"
+                      w="100%"
                       sx={{
                         overflowY: 'visible',
                         clipPath: 'inset(-40px -9999px -9999px -9999px)',
@@ -3049,7 +3106,12 @@ export const GameBoard: FC = () => {
                                     ? { duration: 0.45, ease: 'easeInOut' }
                                     : { duration: 0.3, delay: cardIdx * 0.07, ease: 'easeOut' }
                                 }
-                                style={{ display: 'inline-block' }}
+                                style={{
+                                  display: 'inline-block',
+                                  opacity: isPeeking && !showFaceUp ? 0.35 : 1,
+                                  transform: isPeeking && showFaceUp ? 'scale(1.12)' : undefined,
+                                  transition: 'opacity 0.3s, transform 0.3s',
+                                }}
                               >
                                 <Box
                                   display="flex"
@@ -3121,10 +3183,24 @@ export const GameBoard: FC = () => {
                                           ? '#cf5e5e'
                                           : '#555'
                                     }
-                                    fontWeight="500"
+                                    fontWeight={isPeekedSlot(h.slot) ? '700' : '500'}
                                   >
                                     {h.slot}
                                   </Text>
+                                  {/* Point value shown only during peek for revealed cards */}
+                                  {isPeeking &&
+                                    isPeekedSlot(h.slot) &&
+                                    peekedCards &&
+                                    (() => {
+                                      const pc = peekedCards.find(
+                                        (p: PeekedCard) => p.slot === h.slot,
+                                      );
+                                      return pc ? (
+                                        <Text fontSize="9px" color="#666">
+                                          {pc.card.value} pts
+                                        </Text>
+                                      ) : null;
+                                    })()}
                                 </Box>
                               </motion.div>
                             </Tooltip>
@@ -3132,15 +3208,34 @@ export const GameBoard: FC = () => {
                         })}
                       </HStack>
                     </Box>
-                    <Text fontSize="11px" color="#555" textAlign="center" mt="6px">
-                      {gameState.phase === 'peeking'
-                        ? 'memorize your cards'
-                        : hasDrawnCard && drawnFromDiscard
+                    {/* Peeking timer bar (Option C) / hint-text */}
+                    {isPeeking ? (
+                      <Flex align="center" gap="8px" mt="10px" px="4px">
+                        <Text fontSize="16px" fontWeight="800" color="#c9a227" minW="24px">
+                          {Math.ceil((peekProgress / 100) * (PEEK_DURATION_MS / 1000))}s
+                        </Text>
+                        <Box flex={1} h="5px" bg="#1a1a24" borderRadius="3px" overflow="hidden">
+                          <Box
+                            h="100%"
+                            bg="#c9a227"
+                            borderRadius="3px"
+                            w={`${peekProgress}%`}
+                            transition="width 0.1s linear"
+                          />
+                        </Box>
+                        <Text fontSize="10px" color="#555">
+                          cards flip when timer ends
+                        </Text>
+                      </Flex>
+                    ) : (
+                      <Text fontSize="11px" color="#555" textAlign="center" mt="6px">
+                        {hasDrawnCard && drawnFromDiscard
                           ? 'tap a slot to place the discard card · tap discard again to cancel'
                           : hasDrawnCard
                             ? 'tap hand to swap · tap discard to keep hand'
                             : 'tap draw pile · tap discard then hand · tap hand card to burn'}
-                    </Text>
+                      </Text>
+                    )}
                   </Box>
                 </Box>
               </Box>
