@@ -1083,6 +1083,53 @@ export function registerRoomHandlers(io: SocketIOServer, socket: Socket): void {
       }
     },
   );
+
+  // ----------------------------------------------------------
+  // sendReaction — player sends an emoji reaction to the room
+  // ----------------------------------------------------------
+  socket.on(
+    'sendReaction',
+    async (
+      data: { roomCode: string; playerId: string; emoji: string },
+      callback?: (response: { success: boolean; error?: string }) => void,
+    ) => {
+      const roomCode = validateRoomCode(data?.roomCode);
+      if (!roomCode) {
+        callback?.({ success: false, error: 'Invalid room code' });
+        return;
+      }
+      if (!data?.playerId) {
+        callback?.({ success: false, error: 'Missing player ID' });
+        return;
+      }
+      const ALLOWED_EMOJIS = ['🖕', '😛', '🥲'];
+      if (!ALLOWED_EMOJIS.includes(data?.emoji)) {
+        callback?.({ success: false, error: 'Invalid emoji' });
+        return;
+      }
+
+      const room = await RoomModel.findOne({ roomCode });
+      if (!room) {
+        callback?.({ success: false, error: 'Room not found' });
+        return;
+      }
+      if (room.status !== 'playing') {
+        callback?.({ success: false, error: 'Game not active' });
+        return;
+      }
+      const player = room.players.find((p) => p.id === data.playerId);
+      if (!player) {
+        callback?.({ success: false, error: 'Player not in room' });
+        return;
+      }
+
+      callback?.({ success: true });
+      io.to(roomCode).emit('reactionReceived', {
+        fromPlayerId: data.playerId,
+        emoji: data.emoji,
+      });
+    },
+  );
 }
 
 // ============================================================

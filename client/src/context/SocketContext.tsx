@@ -72,6 +72,8 @@ interface SocketContextValue {
   lastSwapResult: SpecialEffectResolvedPayload | null;
   /** Slots that were recently modified (swap, burn penalty, red king placement) — cleared after 2.5s */
   modifiedSlots: { playerId: string; slot: string }[];
+  /** Last reaction received from any player — cleared on new game start */
+  lastReaction: { fromPlayerId: string; emoji: string; id: number } | null;
   createRoom: (
     username: string,
   ) => Promise<{ success: boolean; roomCode?: string; error?: string }>;
@@ -130,6 +132,8 @@ interface SocketContextValue {
   clearRoundEndData: () => void;
   /** Clear game end data (used by UI after showing modal) */
   clearGameEndData: () => void;
+  /** Send an emoji reaction to all players in the room */
+  sendReaction: (emoji: string) => Promise<{ success: boolean; error?: string }>;
   /** Attempt to rejoin a room by room code (used by /game/:roomCode route) */
   rejoinWithCode: (roomCode: string) => void;
 }
@@ -164,6 +168,12 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
   const [roundEndData, setRoundEndData] = useState<RoundEndedPayload | null>(null);
   const [gameEndData, setGameEndData] = useState<GameEndedPayload | null>(null);
   const [nextRoundStartsAt, setNextRoundStartsAt] = useState<number | null>(null);
+  const [lastReaction, setLastReaction] = useState<{
+    fromPlayerId: string;
+    emoji: string;
+    id: number;
+  } | null>(null);
+  const reactionIdRef = useRef(0);
 
   // Use a ref for navigate to avoid re-registering socket listeners
   const navigateRef = useRef(navigate);
@@ -280,6 +290,7 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
       setPendingEffect(null);
       setLastBurnResult(null);
       setNextRoundStartsAt(null);
+      setLastReaction(null);
       navigateRef.current('/game');
     });
 
@@ -434,6 +445,16 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
       setTimeout(() => setModifiedSlots([]), 2500);
     });
 
+    // Reaction from any player in the room
+    socket.on('reactionReceived', (data: { fromPlayerId: string; emoji: string }) => {
+      reactionIdRef.current += 1;
+      setLastReaction({
+        fromPlayerId: data.fromPlayerId,
+        emoji: data.emoji,
+        id: reactionIdRef.current,
+      });
+    });
+
     // F-203/F-306: Host kicked this player from the lobby
     socket.on('kicked', (_data: { roomCode: string; reason: string }) => {
       console.log('You were kicked from the room');
@@ -483,6 +504,7 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
       socket.off('gameResumed');
       socket.off('nextRoundCountdown');
       socket.off('slotsModified');
+      socket.off('reactionReceived');
       socket.off('kicked');
       socket.disconnect();
     };
@@ -1057,6 +1079,30 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
   }, []);
 
   // ----------------------------------------------------------
+  // sendReaction — emit an emoji reaction to all room players
+  // ----------------------------------------------------------
+  const sendReaction = useCallback(
+    (emoji: string): Promise<{ success: boolean; error?: string }> => {
+      return new Promise((resolve) => {
+        const roomCode = roomData?.roomCode;
+        const pid = playerId;
+        if (!roomCode || !pid) {
+          resolve({ success: false, error: 'Not in a room' });
+          return;
+        }
+        socket.emit(
+          'sendReaction',
+          { roomCode, playerId: pid, emoji },
+          (response: { success: boolean; error?: string }) => {
+            resolve(response);
+          },
+        );
+      });
+    },
+    [roomData, playerId],
+  );
+
+  // ----------------------------------------------------------
   // Rejoin With Code — called by /game/:roomCode route (GameRejoin page)
   // ----------------------------------------------------------
   const rejoinWithCode = useCallback((roomCode: string) => {
@@ -1149,6 +1195,7 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
     lastBurnResult,
     lastSwapResult,
     modifiedSlots,
+    lastReaction,
     checkCalledData,
     roundEndData,
     gameEndData,
@@ -1176,6 +1223,7 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
     debugPeek,
     clearRoundEndData,
     clearGameEndData,
+    sendReaction,
     rejoinWithCode,
   };
 
