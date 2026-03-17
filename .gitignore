@@ -34,6 +34,7 @@ pnpm-debug.log*
 *.njsproj
 *.sln
 *.sw?
+*.Identifier
 
 # IDEs
 *.swp
@@ -54,6 +55,7 @@ data/
 .temp
 temp/
 tmp/
+reskin/
 
 # Next.js (if used later)
 .next/
