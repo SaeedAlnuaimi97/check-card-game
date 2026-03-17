@@ -2325,9 +2325,10 @@ export const GameBoard: FC = () => {
           >
             <HStack
               spacing={{ base: '6px', md: '10px' }}
-              justify={myPlayer.hand.length > 4 ? 'flex-start' : 'center'}
-              w={myPlayer.hand.length > 4 ? 'max-content' : '100%'}
-              px={myPlayer.hand.length > 4 ? 2 : 0}
+              justify="center"
+              minW="max-content"
+              w="100%"
+              px={2}
               pt="8px"
             >
               {myPlayer.hand.map((h: ClientHandSlot, cardIdx: number) => {
@@ -3050,9 +3051,10 @@ export const GameBoard: FC = () => {
                     >
                       <HStack
                         spacing={{ base: '6px', md: '10px' }}
-                        justify={myPlayer.hand.length > 4 ? 'flex-start' : 'center'}
-                        w={myPlayer.hand.length > 4 ? 'max-content' : '100%'}
-                        px={myPlayer.hand.length > 4 ? 2 : 0}
+                        justify="center"
+                        minW="max-content"
+                        w="100%"
+                        px={2}
                         pt="0px"
                       >
                         {myPlayer.hand.map((h: ClientHandSlot, cardIdx: number) => {
