@@ -2236,6 +2236,7 @@ export const GameBoard: FC = () => {
           pt="20px"
           pb="10px"
           flexShrink={0}
+          overflow="visible"
           borderTop={canAct ? '2px solid #00e5cc' : '2px solid transparent'}
           boxShadow={canAct ? '0 -4px 18px 0 #00e5cc44' : 'none'}
           transition="border-color 0.3s, box-shadow 0.3s"
@@ -2312,15 +2313,15 @@ export const GameBoard: FC = () => {
           {/* Hand row */}
           <Box
             overflowX="auto"
+            overflowY="visible"
             w="100%"
+            py={isPeeking ? '12px' : '1px'}
             sx={{
-              overflowY: 'visible',
               '&::-webkit-scrollbar': { display: 'none' },
               scrollbarWidth: 'none',
               msOverflowStyle: 'none',
               WebkitOverflowScrolling: 'touch',
             }}
-            pb={1}
           >
             <HStack
               spacing={{ base: '6px', md: '10px' }}
@@ -2386,8 +2387,7 @@ export const GameBoard: FC = () => {
                       style={{
                         display: 'inline-block',
                         opacity: isPeeking && !showFaceUp ? 0.35 : 1,
-                        transform: isPeeking && showFaceUp ? 'scale(1.12)' : undefined,
-                        transition: 'opacity 0.3s, transform 0.3s',
+                        transition: 'opacity 0.3s',
                       }}
                     >
                       <Box
@@ -2406,7 +2406,7 @@ export const GameBoard: FC = () => {
                               isSelected={true}
                               isClickable={isClickable}
                               onClick={handleClick}
-                              size={isDesktop ? 'lg' : 'sm'}
+                              size={isDesktop ? 'lg' : isPeeking ? 'md' : 'sm'}
                             />
                           ) : visibleCard ? (
                             <Card
@@ -2414,7 +2414,7 @@ export const GameBoard: FC = () => {
                               isSelected={isPeekedSlot(h.slot)}
                               isClickable={isClickable}
                               onClick={handleClick}
-                              size={isDesktop ? 'lg' : 'sm'}
+                              size={isDesktop ? 'lg' : isPeeking ? 'md' : 'sm'}
                             />
                           ) : (
                             <CardBack
@@ -2422,7 +2422,7 @@ export const GameBoard: FC = () => {
                               isKnown={!isPeeking && knownSlots.has(h.slot)}
                               isClickable={isClickable}
                               onClick={handleClick}
-                              size={isDesktop ? 'lg' : 'sm'}
+                              size={isDesktop ? 'lg' : isPeeking ? 'md' : 'sm'}
                             />
                           )}
                           {isModified && (
@@ -2965,6 +2965,7 @@ export const GameBoard: FC = () => {
                     boxShadow={canAct ? '0 0 20px 2px #00e5cc33' : 'none'}
                     px="16px"
                     py="12px"
+                    overflow="visible"
                     transition="border-color 0.3s, box-shadow 0.3s"
                   >
                     {/* hand label */}
@@ -3036,16 +3037,16 @@ export const GameBoard: FC = () => {
                     {/* Hand row */}
                     <Box
                       overflowX="auto"
+                      overflowY="visible"
                       w="100%"
+                      py={isPeeking ? '14px' : '1px'}
                       sx={{
-                        overflowY: 'visible',
-                        clipPath: 'inset(-40px -9999px -9999px -9999px)',
+                        clipPath: isPeeking ? 'inset(-30px -9999px -30px -9999px)' : 'none',
                         '&::-webkit-scrollbar': { display: 'none' },
                         scrollbarWidth: 'none',
                         msOverflowStyle: 'none',
                         WebkitOverflowScrolling: 'touch',
                       }}
-                      pb={1}
                     >
                       <HStack
                         spacing={{ base: '6px', md: '10px' }}
@@ -3109,8 +3110,7 @@ export const GameBoard: FC = () => {
                                 style={{
                                   display: 'inline-block',
                                   opacity: isPeeking && !showFaceUp ? 0.35 : 1,
-                                  transform: isPeeking && showFaceUp ? 'scale(1.12)' : undefined,
-                                  transition: 'opacity 0.3s, transform 0.3s',
+                                  transition: 'opacity 0.3s',
                                 }}
                               >
                                 <Box
