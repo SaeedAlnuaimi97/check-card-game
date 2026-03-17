@@ -134,7 +134,7 @@ check-card-game/
 
 ## 🤝 Contributing
 
-This is currently a personal project. Contributions welcome after MVP launch!
+This is a personal project. Contributions welcome after MVP launch!
 
 ## 📄 License
 
@@ -146,10 +146,4 @@ MIT License (to be added)
 - [Game Rules (Detailed)](./PLAN.md#complete-game-mechanics)
 - GitHub Repository: (to be added)
 
-## 📞 Contact
 
-Created by @azizbek2411
-
----
-
-**Status:** In active development | **Next Milestone:** Data Models & Types, Room Management
