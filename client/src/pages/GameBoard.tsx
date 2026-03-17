@@ -871,6 +871,32 @@ export const GameBoard: FC = () => {
     setBurnBanner(null);
   }, [gameState?.currentTurnIndex]);
 
+  // Burn result — toast notification for bystanders (not the burner themselves)
+  useEffect(() => {
+    if (!lastBurnResult) return;
+    if (lastBurnResult.playerId === playerId) return; // burner sees the inline banner
+    const burnerUsername =
+      gameState?.players.find((p) => p.playerId === lastBurnResult.playerId)?.username ?? 'Someone';
+    if (lastBurnResult.burnSuccess && lastBurnResult.burnedCard) {
+      const { rank, suit } = lastBurnResult.burnedCard;
+      toast({
+        title: 'Card Burned',
+        description: `${burnerUsername} burned a ${rank}${suit}!`,
+        status: 'info',
+        duration: 3000,
+        position: 'top',
+      });
+    } else {
+      toast({
+        title: 'Burn Failed',
+        description: `${burnerUsername} failed to burn — got a penalty card`,
+        status: 'warning',
+        duration: 3000,
+        position: 'top',
+      });
+    }
+  }, [lastBurnResult, playerId, gameState?.players, toast]);
+
   // Red Jack swap toast notification
   useEffect(() => {
     if (!lastSwapResult) return;
@@ -4720,13 +4746,6 @@ export const GameBoard: FC = () => {
                       (roundEndData?.updatedScores[a.playerId] ?? 0) -
                       (roundEndData?.updatedScores[b.playerId] ?? 0),
                   );
-                const prevScores: Record<string, number> = {};
-                sorted.forEach((p) => {
-                  const total = roundEndData?.updatedScores[p.playerId] ?? 0;
-                  const roundPts =
-                    roundEndData?.allHands.find((h) => h.playerId === p.playerId)?.handSum ?? 0;
-                  prevScores[p.playerId] = total - roundPts;
-                });
                 return (
                   <Box>
                     <Flex
@@ -4748,8 +4767,12 @@ export const GameBoard: FC = () => {
                     </Flex>
                     {sorted.map((p, idx) => {
                       const total = roundEndData?.updatedScores[p.playerId] ?? 0;
-                      const roundPts =
-                        roundEndData?.allHands.find((h) => h.playerId === p.playerId)?.handSum ?? 0;
+                      const hand = roundEndData?.allHands.find((h) => h.playerId === p.playerId);
+                      const handSum = hand?.handSum ?? 0;
+                      const isWinner = roundEndData?.roundWinners.includes(p.playerId) ?? false;
+                      const isChecker = p.playerId === roundEndData?.checkCalledBy;
+                      const isDoubled = isChecker && (roundEndData?.checkerDoubled ?? false);
+                      const roundPts = isWinner ? 0 : isDoubled ? handSum * 2 : handSum;
                       const isMe = p.playerId === playerId;
                       const isDanger = total >= (gameState?.targetScore ?? 100);
                       const isBest = idx === 0;
@@ -5323,8 +5346,11 @@ export const GameBoard: FC = () => {
                         const isMe = pid === playerId;
                         const isWinner = pid === gameEndData.winner.playerId;
                         const isLoser = pid === gameEndData.loser.playerId;
-                        const lastRoundPts =
+                        const handSum =
                           gameEndData.allHands.find((h) => h.playerId === pid)?.handSum ?? 0;
+                        const isChecker = pid === roundEndData?.checkCalledBy;
+                        const isDoubled = isChecker && (roundEndData?.checkerDoubled ?? false);
+                        const lastRoundPts = isWinner ? 0 : isDoubled ? handSum * 2 : handSum;
                         const initials = playerName.slice(0, 2).toUpperCase();
                         return (
                           <Flex

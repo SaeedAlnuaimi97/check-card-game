@@ -22,22 +22,22 @@ Check Card Game is a multiplayer card game for 4-6 players. The goal is to have 
 
 ## Card Values
 
-| Card | Value |
-|------|-------|
-| Red 10 (hearts 10, diamonds 10) | 0 points |
-| Ace | 1 point |
-| 2 | 2 points |
-| 3 | 3 points |
-| 4 | 4 points |
-| 5 | 5 points |
-| 6 | 6 points |
-| 7 | 7 points |
-| 8 | 8 points |
-| 9 | 9 points |
-| Black 10 (spades 10, clubs 10) | 10 points |
-| Jack (all suits) | 10 points |
-| Queen (all suits) | 10 points |
-| King (all suits) | 10 points |
+| Card                            | Value     |
+| ------------------------------- | --------- |
+| Red 10 (hearts 10, diamonds 10) | 0 points  |
+| Ace                             | 1 point   |
+| 2                               | 2 points  |
+| 3                               | 3 points  |
+| 4                               | 4 points  |
+| 5                               | 5 points  |
+| 6                               | 6 points  |
+| 7                               | 7 points  |
+| 8                               | 8 points  |
+| 9                               | 9 points  |
+| Black 10 (spades 10, clubs 10)  | 10 points |
+| Jack (all suits)                | 10 points |
+| Queen (all suits)               | 10 points |
+| King (all suits)                | 10 points |
 
 ---
 
@@ -86,10 +86,12 @@ Then the player must choose exactly ONE of 3 actions:
 ## Special Effects (Red Face Cards)
 
 Special effects ONLY trigger when:
+
 - The card is drawn from the DECK (Action 1)
 - AND the player chooses to discard that drawn card (not keep it)
 
 Special effects NEVER trigger:
+
 - When burning a card (Action 3)
 - When taking from discard pile (Action 2)
 - When discarding a card from hand that was not just drawn
@@ -154,7 +156,7 @@ Special effects NEVER trigger:
 
 ### Game End Condition
 
-- The game ends when any player's total score reaches **100 or more points**
+- The game ends when any player's total score reaches **70 or more points** (default; configurable 50–150 via lobby slider)
 - That player LOSES the game
 - The player with the LOWEST total score at that point wins
 
@@ -163,20 +165,24 @@ Special effects NEVER trigger:
 ## Edge Cases
 
 ### Draw Pile Empty
+
 - When the draw pile runs out, take all cards from the discard pile EXCEPT the top card
 - Shuffle those cards to form a new draw pile
 - The top discard card remains as the only card in the discard pile
 
 ### Tie on Round Score
+
 - If multiple players tie for lowest sum, all tied players score 0 for the round
 - All non-tied players still add their sums
 
 ### Hand Size Zero
+
 - If a player successfully burns all their cards, they have 0 cards and a score of 0 for that round
 - They can still call check
 
-### Multiple Players Hit 100+
-- If multiple players reach 100+ in the same round, the one with the highest score loses
+### Multiple Players Hit 70+
+
+- If multiple players reach 70+ (or the configured threshold) in the same round, the one with the highest score loses
 - If tied at 100+, all tied players lose
 
 ---
