@@ -30,7 +30,7 @@ import type { SlotLabel } from '../types/player.types';
 // Debug Mode
 // ============================================================
 
-export const DEBUG_MODE = true;
+export const DEBUG_MODE = false;
 
 // ============================================================
 // Types
@@ -289,6 +289,7 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
       setDrawnFromDiscard(false);
       setPendingEffect(null);
       setLastBurnResult(null);
+      setLastSwapResult(null);
       setNextRoundStartsAt(null);
       setLastReaction(null);
       navigateRef.current('/game');
@@ -409,6 +410,7 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
       setDrawnFromDiscard(false);
       setPendingEffect(null);
       setCheckCalledData(null);
+      setLastSwapResult(null);
     });
 
     // F-075: Game ended — final scores, winner, loser
