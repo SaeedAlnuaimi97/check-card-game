@@ -1,4 +1,4 @@
-import { FC } from 'react';
+import { FC, memo } from 'react';
 import { Box, Text } from '@chakra-ui/react';
 import type { Card as CardType } from '../../types/card.types';
 
@@ -183,94 +183,90 @@ const PipArea: FC<PipAreaProps> = ({ suit, rank, color, pipSize, bigPipSize, fac
 // Card Component
 // ============================================================
 
-export const Card: FC<CardProps> = ({
-  card,
-  isSelected = false,
-  isClickable = false,
-  onClick,
-  size = 'md',
-}) => {
-  const s = SIZES[size];
-  const color = card.isRed ? 'card.red' : 'card.black';
+export const Card: FC<CardProps> = memo(
+  ({ card, isSelected = false, isClickable = false, onClick, size = 'md' }) => {
+    const s = SIZES[size];
+    const color = card.isRed ? 'card.red' : 'card.black';
 
-  return (
-    <Box
-      w={s.w}
-      h={s.h}
-      borderRadius="md"
-      border="2px solid"
-      borderColor={isSelected ? 'card.selected' : 'gray.500'}
-      bg="white"
-      cursor={isClickable || onClick ? 'pointer' : 'default'}
-      onClick={onClick}
-      transition="all 0.2s ease-in-out"
-      transform={isSelected ? 'translateY(-12px)' : 'none'}
-      shadow={isSelected ? '0 0 12px rgba(215, 172, 97, 0.5)' : 'sm'}
-      _hover={
-        isClickable || onClick
-          ? { transform: isSelected ? 'translateY(-14px)' : 'translateY(-4px)', shadow: 'lg' }
-          : {}
-      }
-      display="flex"
-      flexDirection="column"
-      position="relative"
-      overflow="hidden"
-      userSelect="none"
-      aria-label={`${card.rank} of ${card.suit}`}
-    >
-      {/* Top-left corner */}
+    return (
       <Box
-        position="absolute"
-        top="2px"
-        left="3px"
+        w={s.w}
+        h={s.h}
+        borderRadius="md"
+        border="2px solid"
+        borderColor={isSelected ? 'card.selected' : 'gray.500'}
+        bg="white"
+        cursor={isClickable || onClick ? 'pointer' : 'default'}
+        onClick={onClick}
+        transition="all 0.2s ease-in-out"
+        transform={isSelected ? 'translateY(-12px)' : 'none'}
+        shadow={isSelected ? '0 0 12px rgba(215, 172, 97, 0.5)' : 'sm'}
+        _hover={
+          isClickable || onClick
+            ? { transform: isSelected ? 'translateY(-14px)' : 'translateY(-4px)', shadow: 'lg' }
+            : {}
+        }
         display="flex"
         flexDirection="column"
-        alignItems="center"
-        lineHeight={1}
+        position="relative"
+        overflow="hidden"
+        userSelect="none"
+        aria-label={`${card.rank} of ${card.suit}`}
       >
-        <Text fontSize={s.corner} fontWeight="bold" color={color} lineHeight={1}>
-          {card.rank}
-        </Text>
-        <Text fontSize={s.corner} color={color} lineHeight={1} mt="-1px">
-          {card.suit}
-        </Text>
-      </Box>
+        {/* Top-left corner */}
+        <Box
+          position="absolute"
+          top="2px"
+          left="3px"
+          display="flex"
+          flexDirection="column"
+          alignItems="center"
+          lineHeight={1}
+        >
+          <Text fontSize={s.corner} fontWeight="bold" color={color} lineHeight={1}>
+            {card.rank}
+          </Text>
+          <Text fontSize={s.corner} color={color} lineHeight={1} mt="-1px">
+            {card.suit}
+          </Text>
+        </Box>
 
-      {/* Bottom-right corner (rotated 180) */}
-      <Box
-        position="absolute"
-        bottom="2px"
-        right="3px"
-        display="flex"
-        flexDirection="column"
-        alignItems="center"
-        lineHeight={1}
-        transform="rotate(180deg)"
-      >
-        <Text fontSize={s.corner} fontWeight="bold" color={color} lineHeight={1}>
-          {card.rank}
-        </Text>
-        <Text fontSize={s.corner} color={color} lineHeight={1} mt="-1px">
-          {card.suit}
-        </Text>
-      </Box>
+        {/* Bottom-right corner (rotated 180) */}
+        <Box
+          position="absolute"
+          bottom="2px"
+          right="3px"
+          display="flex"
+          flexDirection="column"
+          alignItems="center"
+          lineHeight={1}
+          transform="rotate(180deg)"
+        >
+          <Text fontSize={s.corner} fontWeight="bold" color={color} lineHeight={1}>
+            {card.rank}
+          </Text>
+          <Text fontSize={s.corner} color={color} lineHeight={1} mt="-1px">
+            {card.suit}
+          </Text>
+        </Box>
 
-      {/* Center pip area */}
-      <Box
-        display="flex"
-        flex={1}
-        mx={size === 'sm' ? '10px' : '14px'}
-        my={size === 'sm' ? '14px' : '18px'}
-      >
-        <PipArea
-          suit={card.suit}
-          rank={card.rank}
-          color={color}
-          pipSize={s.pip}
-          bigPipSize={s.bigPip}
-          faceSize={s.face}
-        />
+        {/* Center pip area */}
+        <Box
+          display="flex"
+          flex={1}
+          mx={size === 'sm' ? '10px' : '14px'}
+          my={size === 'sm' ? '14px' : '18px'}
+        >
+          <PipArea
+            suit={card.suit}
+            rank={card.rank}
+            color={color}
+            pipSize={s.pip}
+            bigPipSize={s.bigPip}
+            faceSize={s.face}
+          />
+        </Box>
       </Box>
-    </Box>
-  );
-};
+    );
+  },
+);

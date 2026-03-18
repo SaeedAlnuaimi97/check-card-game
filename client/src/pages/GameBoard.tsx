@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef, FC } from 'react';
+import { useEffect, useState, useCallback, useRef, useMemo, memo, FC } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   Box,
@@ -56,7 +56,7 @@ import type { PeekedCard, PlayerRoundResult } from '../types/game.types';
 // ============================================================
 
 const PEEK_DURATION_MS = 8000;
-const PEEK_TICK_MS = 100;
+const PEEK_TICK_MS = 250; // 250ms is smooth enough; CSS transition handles visual interpolation
 
 // ============================================================
 // Avatar color palette (deterministic by player index)
@@ -87,6 +87,51 @@ interface DiscardHistoryCard {
 }
 
 // ============================================================
+// Reusable CSS keyframe objects — defined once at module level so Chakra
+// doesn't re-process them on every render cycle
+// ============================================================
+
+const SX_KEYFRAMES_PIP_SWAP_FLASH = {
+  '@keyframes pipSwapFlash': {
+    '0%': { opacity: 0, boxShadow: 'none' },
+    '10%': { opacity: 1, boxShadow: '0 0 6px 3px #00e5cccc' },
+    '45%': { opacity: 0.85, boxShadow: '0 0 5px 2px #00e5cc88' },
+    '100%': { opacity: 0, boxShadow: 'none' },
+  },
+  animation: 'pipSwapFlash 1.8s ease-out forwards',
+  background: '#00e5cc',
+};
+
+const SX_KEYFRAMES_BG_FLASH = {
+  '@keyframes bgFlash': {
+    '0%': { background: '#2a2a4a', boxShadow: 'none' },
+    '10%': { background: '#00e5cc', boxShadow: '0 0 8px 3px #00e5cc99' },
+    '40%': { background: '#00b8a0', boxShadow: '0 0 6px 2px #00e5cc66' },
+    '100%': { background: '#2a2a4a', boxShadow: 'none' },
+  },
+  animation: 'bgFlash 1.8s ease-out forwards',
+};
+
+const SX_KEYFRAMES_TIMER_PULSE = {
+  '@keyframes timerPulse': {
+    '0%, 100%': { opacity: 1 },
+    '50%': { opacity: 0.55 },
+  },
+  animation: 'timerPulse 1s ease-in-out infinite',
+};
+
+const SX_KEYFRAMES_SWAP_FLASH = {
+  '@keyframes swapFlash': {
+    '0%': { opacity: 0, boxShadow: 'none' },
+    '10%': { opacity: 0.82, boxShadow: '0 0 18px 6px #00e5ccbb' },
+    '45%': { opacity: 0.7, boxShadow: '0 0 14px 4px #00e5cc88' },
+    '100%': { opacity: 0, boxShadow: 'none' },
+  },
+  animation: 'swapFlash 1.8s ease-out forwards',
+  background: '#00e5cc',
+};
+
+// ============================================================
 // F-309: Confetti overlay for victory animation
 // ============================================================
 
@@ -103,8 +148,25 @@ const CONFETTI_COLORS = [
   '#FF69B4',
 ];
 
-const ConfettiOverlay: FC = () => {
-  const pieces = Array.from({ length: 40 }, (_, i) => i);
+const ConfettiOverlay: FC = memo(() => {
+  // Pre-compute all random values once on mount — never recalculate on re-renders
+  const pieces = useMemo(
+    () =>
+      Array.from({ length: 40 }, (_, i) => ({
+        i,
+        left: Math.random() * 100,
+        delay: Math.random() * 1.5,
+        duration: 2 + Math.random() * 2,
+        color: CONFETTI_COLORS[i % CONFETTI_COLORS.length],
+        size: 6 + Math.random() * 8,
+        rotate: Math.random() * 360,
+        xDrift: (Math.random() - 0.5) * 120,
+        spinDir: Math.random() > 0.5 ? 1 : -1,
+        repeatDelay: Math.random() * 2,
+      })),
+    [],
+  );
+
   return (
     <Box
       position="fixed"
@@ -116,14 +178,8 @@ const ConfettiOverlay: FC = () => {
       zIndex={200}
       overflow="hidden"
     >
-      {pieces.map((i) => {
-        const left = Math.random() * 100;
-        const delay = Math.random() * 1.5;
-        const duration = 2 + Math.random() * 2;
-        const color = CONFETTI_COLORS[i % CONFETTI_COLORS.length];
-        const size = 6 + Math.random() * 8;
-        const rotate = Math.random() * 360;
-        return (
+      {pieces.map(
+        ({ i, left, delay, duration, color, size, rotate, xDrift, spinDir, repeatDelay }) => (
           <motion.div
             key={i}
             style={{
@@ -138,8 +194,8 @@ const ConfettiOverlay: FC = () => {
             }}
             animate={{
               y: ['0vh', '110vh'],
-              x: [0, (Math.random() - 0.5) * 120],
-              rotate: [rotate, rotate + 360 * (Math.random() > 0.5 ? 1 : -1)],
+              x: [0, xDrift],
+              rotate: [rotate, rotate + 360 * spinDir],
               opacity: [1, 1, 0],
             }}
             transition={{
@@ -147,14 +203,14 @@ const ConfettiOverlay: FC = () => {
               delay,
               ease: 'easeIn',
               repeat: Infinity,
-              repeatDelay: Math.random() * 2,
+              repeatDelay,
             }}
           />
-        );
-      })}
+        ),
+      )}
     </Box>
   );
-};
+});
 
 // ============================================================
 // Opponent Display
@@ -170,41 +226,25 @@ interface OpponentProps {
 }
 
 /** Mobile slim row (~30px tall) */
-const MobileOpponentRow: FC<OpponentProps> = ({
-  player,
-  playerIndex,
-  isCurrentTurn,
-  targetScore,
-  modifiedSlots,
-}) => {
-  const initials = player.username.slice(0, 2).toUpperCase();
-  const av = getAvatarColors(playerIndex);
-  const dangerThreshold = targetScore - 15;
-  const isDanger = player.totalScore >= dangerThreshold;
+const MobileOpponentRow: FC<OpponentProps> = memo(
+  ({ player, playerIndex, isCurrentTurn, targetScore, modifiedSlots }) => {
+    const initials = player.username.slice(0, 2).toUpperCase();
+    const av = getAvatarColors(playerIndex);
+    const dangerThreshold = targetScore - 15;
+    const isDanger = player.totalScore >= dangerThreshold;
 
-  return (
-    <Box
-      display="flex"
-      alignItems="center"
-      gap="8px"
-      px="10px"
-      py="4px"
-      borderBottom="0.5px solid #13131e"
-      position="relative"
-      bg={isCurrentTurn ? '#17150a' : isDanger ? '#140a0a' : 'transparent'}
-      sx={{
-        '&::before': isCurrentTurn
-          ? {
-              content: '""',
-              position: 'absolute',
-              left: 0,
-              top: 0,
-              bottom: 0,
-              width: '2px',
-              background: '#c9a227',
-              borderRadius: '0 1px 1px 0',
-            }
-          : isDanger
+    return (
+      <Box
+        display="flex"
+        alignItems="center"
+        gap="8px"
+        px="10px"
+        py="4px"
+        borderBottom="0.5px solid #13131e"
+        position="relative"
+        bg={isCurrentTurn ? '#17150a' : isDanger ? '#140a0a' : 'transparent'}
+        sx={{
+          '&::before': isCurrentTurn
             ? {
                 content: '""',
                 position: 'absolute',
@@ -212,182 +252,297 @@ const MobileOpponentRow: FC<OpponentProps> = ({
                 top: 0,
                 bottom: 0,
                 width: '2px',
-                background: '#cf5e5e',
+                background: '#c9a227',
                 borderRadius: '0 1px 1px 0',
               }
-            : {},
-      }}
-    >
-      {/* Turn pip */}
-      <Box
-        w="5px"
-        h="5px"
-        borderRadius="full"
-        bg={isCurrentTurn ? '#c9a227' : 'transparent'}
-        flexShrink={0}
-      />
-      {/* Avatar */}
-      <Box
-        w="20px"
-        h="20px"
-        borderRadius="full"
-        bg={av.bg}
-        display="flex"
-        alignItems="center"
-        justifyContent="center"
-        fontSize="8px"
-        fontWeight="700"
-        color={av.color}
-        flexShrink={0}
+            : isDanger
+              ? {
+                  content: '""',
+                  position: 'absolute',
+                  left: 0,
+                  top: 0,
+                  bottom: 0,
+                  width: '2px',
+                  background: '#cf5e5e',
+                  borderRadius: '0 1px 1px 0',
+                }
+              : {},
+        }}
       >
-        {initials}
-      </Box>
-      {/* Name */}
-      <Box
-        flex={1}
-        minW={0}
-        fontSize="11px"
-        color="#bbb"
-        fontWeight="500"
-        whiteSpace="nowrap"
-        overflow="hidden"
-        textOverflow="ellipsis"
-      >
-        {player.username}
-        {player.isBot && (
-          <Box as="span" fontSize="8px" color="#3a3a6a" fontWeight="400" ml="3px">
-            BOT
-          </Box>
-        )}
-      </Box>
-      {/* Mini card pips */}
-      <Box display="flex" gap="2px" alignItems="center" flexShrink={0}>
-        {player.hand.map((h: ClientHandSlot) => {
-          const isModified =
-            modifiedSlots?.some((m) => m.playerId === player.playerId && m.slot === h.slot) ??
-            false;
-          return (
-            <Box key={h.slot} position="relative" w="9px" h="13px" flexShrink={0}>
-              <Box w="9px" h="13px" borderRadius="2px" bg="#2a2a4a" border="0.5px solid #3a3a5a" />
-              {isModified && (
-                <Box
-                  position="absolute"
-                  inset={0}
-                  borderRadius="2px"
-                  pointerEvents="none"
-                  zIndex={10}
-                  sx={{
-                    '@keyframes pipSwapFlash': {
-                      '0%': { opacity: 0, boxShadow: 'none' },
-                      '10%': { opacity: 1, boxShadow: '0 0 6px 3px #00e5cccc' },
-                      '45%': { opacity: 0.85, boxShadow: '0 0 5px 2px #00e5cc88' },
-                      '100%': { opacity: 0, boxShadow: 'none' },
-                    },
-                    animation: 'pipSwapFlash 1.8s ease-out forwards',
-                    background: '#00e5cc',
-                  }}
-                />
-              )}
-            </Box>
-          );
-        })}
-      </Box>
-      {/* Score */}
-      <Box
-        fontSize="10px"
-        color={isDanger ? '#cf5e5e' : '#555'}
-        fontWeight="500"
-        minW="32px"
-        textAlign="right"
-        flexShrink={0}
-      >
-        {player.totalScore}
-        {isDanger ? ' !' : ''}
-      </Box>
-    </Box>
-  );
-};
-
-/** Desktop side opponent card (left/right columns) */
-const DesktopSideOpponent: FC<OpponentProps> = ({
-  player,
-  playerIndex,
-  isCurrentTurn,
-  targetScore,
-  debugRevealed,
-  modifiedSlots,
-}) => {
-  const initials = player.username.slice(0, 2).toUpperCase();
-  const av = getAvatarColors(playerIndex);
-  const dangerThreshold = targetScore - 15;
-  const isDanger = player.totalScore >= dangerThreshold;
-
-  return (
-    <Box
-      bg={isCurrentTurn ? '#1e1b0c' : '#1a1a26'}
-      border="0.5px solid"
-      borderColor={isCurrentTurn ? '#c9a22780' : isDanger ? '#cf5e5e60' : '#2a2a3a'}
-      borderRadius="10px"
-      px="10px"
-      py="8px"
-      display="flex"
-      alignItems="center"
-      gap="8px"
-    >
-      {/* Avatar */}
-      <Box
-        w="30px"
-        h="30px"
-        borderRadius="full"
-        bg={av.bg}
-        display="flex"
-        alignItems="center"
-        justifyContent="center"
-        fontSize="11px"
-        fontWeight="700"
-        color={av.color}
-        flexShrink={0}
-      >
-        {initials}
-      </Box>
-      {/* Info */}
-      <Box flex={1} minW={0}>
-        <Box fontSize="12px" color="#ccc" fontWeight="500" noOfLines={1}>
+        {/* Turn pip */}
+        <Box
+          w="5px"
+          h="5px"
+          borderRadius="full"
+          bg={isCurrentTurn ? '#c9a227' : 'transparent'}
+          flexShrink={0}
+        />
+        {/* Avatar */}
+        <Box
+          w="20px"
+          h="20px"
+          borderRadius="full"
+          bg={av.bg}
+          display="flex"
+          alignItems="center"
+          justifyContent="center"
+          fontSize="8px"
+          fontWeight="700"
+          color={av.color}
+          flexShrink={0}
+        >
+          {initials}
+        </Box>
+        {/* Name */}
+        <Box
+          flex={1}
+          minW={0}
+          fontSize="11px"
+          color="#bbb"
+          fontWeight="500"
+          whiteSpace="nowrap"
+          overflow="hidden"
+          textOverflow="ellipsis"
+        >
           {player.username}
           {player.isBot && (
-            <Box
-              as="span"
-              fontSize="9px"
-              color="#555"
-              bg="#1a1a28"
-              px="5px"
-              py="1px"
-              borderRadius="3px"
-              ml="5px"
-            >
+            <Box as="span" fontSize="8px" color="#3a3a6a" fontWeight="400" ml="3px">
               BOT
             </Box>
           )}
-          {isCurrentTurn && (
-            <Box
-              as="span"
-              fontSize="9px"
-              color="#c9a227"
-              bg="#2a1f00"
-              px="5px"
-              py="1px"
-              borderRadius="3px"
-              ml="5px"
-            >
-              TURN
-            </Box>
-          )}
         </Box>
-        <Box fontSize="11px" color={isDanger ? '#cf5e5e' : '#555'} mt="2px">
-          {player.totalScore} pts{isDanger ? ' — danger!' : ''}
+        {/* Mini card pips */}
+        <Box display="flex" gap="2px" alignItems="center" flexShrink={0}>
+          {player.hand.map((h: ClientHandSlot) => {
+            const isModified =
+              modifiedSlots?.some((m) => m.playerId === player.playerId && m.slot === h.slot) ??
+              false;
+            return (
+              <Box key={h.slot} position="relative" w="9px" h="13px" flexShrink={0}>
+                <Box
+                  w="9px"
+                  h="13px"
+                  borderRadius="2px"
+                  bg="#2a2a4a"
+                  border="0.5px solid #3a3a5a"
+                />
+                {isModified && (
+                  <Box
+                    position="absolute"
+                    inset={0}
+                    borderRadius="2px"
+                    pointerEvents="none"
+                    zIndex={10}
+                    sx={SX_KEYFRAMES_PIP_SWAP_FLASH}
+                  />
+                )}
+              </Box>
+            );
+          })}
+        </Box>
+        {/* Score */}
+        <Box
+          fontSize="10px"
+          color={isDanger ? '#cf5e5e' : '#555'}
+          fontWeight="500"
+          minW="32px"
+          textAlign="right"
+          flexShrink={0}
+        >
+          {player.totalScore}
+          {isDanger ? ' !' : ''}
+        </Box>
+      </Box>
+    );
+  },
+);
+
+/** Desktop side opponent card (left/right columns) */
+const DesktopSideOpponent: FC<OpponentProps> = memo(
+  ({ player, playerIndex, isCurrentTurn, targetScore, debugRevealed, modifiedSlots }) => {
+    const initials = player.username.slice(0, 2).toUpperCase();
+    const av = getAvatarColors(playerIndex);
+    const dangerThreshold = targetScore - 15;
+    const isDanger = player.totalScore >= dangerThreshold;
+
+    return (
+      <Box
+        bg={isCurrentTurn ? '#1e1b0c' : '#1a1a26'}
+        border="0.5px solid"
+        borderColor={isCurrentTurn ? '#c9a22780' : isDanger ? '#cf5e5e60' : '#2a2a3a'}
+        borderRadius="10px"
+        px="10px"
+        py="8px"
+        display="flex"
+        alignItems="center"
+        gap="8px"
+      >
+        {/* Avatar */}
+        <Box
+          w="30px"
+          h="30px"
+          borderRadius="full"
+          bg={av.bg}
+          display="flex"
+          alignItems="center"
+          justifyContent="center"
+          fontSize="11px"
+          fontWeight="700"
+          color={av.color}
+          flexShrink={0}
+        >
+          {initials}
+        </Box>
+        {/* Info */}
+        <Box flex={1} minW={0}>
+          <Box fontSize="12px" color="#ccc" fontWeight="500" noOfLines={1}>
+            {player.username}
+            {player.isBot && (
+              <Box
+                as="span"
+                fontSize="9px"
+                color="#555"
+                bg="#1a1a28"
+                px="5px"
+                py="1px"
+                borderRadius="3px"
+                ml="5px"
+              >
+                BOT
+              </Box>
+            )}
+            {isCurrentTurn && (
+              <Box
+                as="span"
+                fontSize="9px"
+                color="#c9a227"
+                bg="#2a1f00"
+                px="5px"
+                py="1px"
+                borderRadius="3px"
+                ml="5px"
+              >
+                TURN
+              </Box>
+            )}
+          </Box>
+          <Box fontSize="11px" color={isDanger ? '#cf5e5e' : '#555'} mt="2px">
+            {player.totalScore} pts{isDanger ? ' — danger!' : ''}
+          </Box>
+          {/* Mini card backs */}
+          <Box display="flex" gap="3px" flexWrap="wrap" mt="5px">
+            {player.hand.map((h: ClientHandSlot) => {
+              const key = `${player.playerId}:${h.slot}`;
+              const revealedCard = debugRevealed?.[key];
+              const isModified =
+                modifiedSlots?.some((m) => m.playerId === player.playerId && m.slot === h.slot) ??
+                false;
+              return (
+                <Box
+                  key={h.slot}
+                  w="16px"
+                  h="22px"
+                  borderRadius="3px"
+                  bg={revealedCard ? 'white' : '#2a2a4a'}
+                  border="0.5px solid"
+                  borderColor={revealedCard ? '#ddd' : '#3a3a5a'}
+                  display="flex"
+                  alignItems="center"
+                  justifyContent="center"
+                  fontSize="7px"
+                  fontWeight="700"
+                  color={revealedCard ? (revealedCard.isRed ? '#c0392b' : '#222') : undefined}
+                  sx={isModified && !revealedCard ? SX_KEYFRAMES_BG_FLASH : {}}
+                >
+                  {revealedCard ? `${revealedCard.rank}${revealedCard.suit}` : null}
+                </Box>
+              );
+            })}
+          </Box>
+        </Box>
+      </Box>
+    );
+  },
+);
+
+/** Desktop top opponent card (top row, column layout) */
+const DesktopTopOpponent: FC<OpponentProps> = memo(
+  ({ player, playerIndex, isCurrentTurn, targetScore, debugRevealed, modifiedSlots }) => {
+    const initials = player.username.slice(0, 2).toUpperCase();
+    const av = getAvatarColors(playerIndex);
+    const dangerThreshold = targetScore - 15;
+    const isDanger = player.totalScore >= dangerThreshold;
+
+    return (
+      <Box
+        bg={isCurrentTurn ? '#1e1b0c' : '#1a1a26'}
+        border="0.5px solid"
+        borderColor={isCurrentTurn ? '#c9a22780' : isDanger ? '#cf5e5e60' : '#2a2a3a'}
+        borderRadius="10px"
+        px="12px"
+        py="8px"
+        display="flex"
+        flexDirection="column"
+        alignItems="center"
+        gap="6px"
+        minW="110px"
+      >
+        {/* Header row: avatar + name/score */}
+        <Box display="flex" alignItems="center" gap="6px">
+          <Box
+            w="28px"
+            h="28px"
+            borderRadius="full"
+            bg={av.bg}
+            display="flex"
+            alignItems="center"
+            justifyContent="center"
+            fontSize="10px"
+            fontWeight="700"
+            color={av.color}
+            flexShrink={0}
+          >
+            {initials}
+          </Box>
+          <Box>
+            <Box fontSize="11px" color="#ccc" fontWeight="500" whiteSpace="nowrap">
+              {player.username}
+              {isCurrentTurn && (
+                <Box
+                  as="span"
+                  fontSize="9px"
+                  color="#c9a227"
+                  bg="#2a1f00"
+                  px="5px"
+                  py="1px"
+                  borderRadius="3px"
+                  ml="4px"
+                >
+                  TURN
+                </Box>
+              )}
+              {player.isBot && !isCurrentTurn && (
+                <Box
+                  as="span"
+                  fontSize="9px"
+                  color="#555"
+                  bg="#1a1a28"
+                  px="5px"
+                  py="1px"
+                  borderRadius="3px"
+                  ml="4px"
+                >
+                  BOT
+                </Box>
+              )}
+            </Box>
+            <Box fontSize="10px" color={isDanger ? '#cf5e5e' : '#555'}>
+              {player.totalScore} pts
+            </Box>
+          </Box>
         </Box>
         {/* Mini card backs */}
-        <Box display="flex" gap="3px" flexWrap="wrap" mt="5px">
+        <Box display="flex" gap="3px">
           {player.hand.map((h: ClientHandSlot) => {
             const key = `${player.playerId}:${h.slot}`;
             const revealedCard = debugRevealed?.[key];
@@ -409,19 +564,7 @@ const DesktopSideOpponent: FC<OpponentProps> = ({
                 fontSize="7px"
                 fontWeight="700"
                 color={revealedCard ? (revealedCard.isRed ? '#c0392b' : '#222') : undefined}
-                sx={
-                  isModified && !revealedCard
-                    ? {
-                        '@keyframes bgFlash': {
-                          '0%': { background: '#2a2a4a', boxShadow: 'none' },
-                          '10%': { background: '#00e5cc', boxShadow: '0 0 8px 3px #00e5cc99' },
-                          '40%': { background: '#00b8a0', boxShadow: '0 0 6px 2px #00e5cc66' },
-                          '100%': { background: '#2a2a4a', boxShadow: 'none' },
-                        },
-                        animation: 'bgFlash 1.8s ease-out forwards',
-                      }
-                    : {}
-                }
+                sx={isModified && !revealedCard ? SX_KEYFRAMES_BG_FLASH : {}}
               >
                 {revealedCard ? `${revealedCard.rank}${revealedCard.suit}` : null}
               </Box>
@@ -429,137 +572,9 @@ const DesktopSideOpponent: FC<OpponentProps> = ({
           })}
         </Box>
       </Box>
-    </Box>
-  );
-};
-
-/** Desktop top opponent card (top row, column layout) */
-const DesktopTopOpponent: FC<OpponentProps> = ({
-  player,
-  playerIndex,
-  isCurrentTurn,
-  targetScore,
-  debugRevealed,
-  modifiedSlots,
-}) => {
-  const initials = player.username.slice(0, 2).toUpperCase();
-  const av = getAvatarColors(playerIndex);
-  const dangerThreshold = targetScore - 15;
-  const isDanger = player.totalScore >= dangerThreshold;
-
-  return (
-    <Box
-      bg={isCurrentTurn ? '#1e1b0c' : '#1a1a26'}
-      border="0.5px solid"
-      borderColor={isCurrentTurn ? '#c9a22780' : isDanger ? '#cf5e5e60' : '#2a2a3a'}
-      borderRadius="10px"
-      px="12px"
-      py="8px"
-      display="flex"
-      flexDirection="column"
-      alignItems="center"
-      gap="6px"
-      minW="110px"
-    >
-      {/* Header row: avatar + name/score */}
-      <Box display="flex" alignItems="center" gap="6px">
-        <Box
-          w="28px"
-          h="28px"
-          borderRadius="full"
-          bg={av.bg}
-          display="flex"
-          alignItems="center"
-          justifyContent="center"
-          fontSize="10px"
-          fontWeight="700"
-          color={av.color}
-          flexShrink={0}
-        >
-          {initials}
-        </Box>
-        <Box>
-          <Box fontSize="11px" color="#ccc" fontWeight="500" whiteSpace="nowrap">
-            {player.username}
-            {isCurrentTurn && (
-              <Box
-                as="span"
-                fontSize="9px"
-                color="#c9a227"
-                bg="#2a1f00"
-                px="5px"
-                py="1px"
-                borderRadius="3px"
-                ml="4px"
-              >
-                TURN
-              </Box>
-            )}
-            {player.isBot && !isCurrentTurn && (
-              <Box
-                as="span"
-                fontSize="9px"
-                color="#555"
-                bg="#1a1a28"
-                px="5px"
-                py="1px"
-                borderRadius="3px"
-                ml="4px"
-              >
-                BOT
-              </Box>
-            )}
-          </Box>
-          <Box fontSize="10px" color={isDanger ? '#cf5e5e' : '#555'}>
-            {player.totalScore} pts
-          </Box>
-        </Box>
-      </Box>
-      {/* Mini card backs */}
-      <Box display="flex" gap="3px">
-        {player.hand.map((h: ClientHandSlot) => {
-          const key = `${player.playerId}:${h.slot}`;
-          const revealedCard = debugRevealed?.[key];
-          const isModified =
-            modifiedSlots?.some((m) => m.playerId === player.playerId && m.slot === h.slot) ??
-            false;
-          return (
-            <Box
-              key={h.slot}
-              w="16px"
-              h="22px"
-              borderRadius="3px"
-              bg={revealedCard ? 'white' : '#2a2a4a'}
-              border="0.5px solid"
-              borderColor={revealedCard ? '#ddd' : '#3a3a5a'}
-              display="flex"
-              alignItems="center"
-              justifyContent="center"
-              fontSize="7px"
-              fontWeight="700"
-              color={revealedCard ? (revealedCard.isRed ? '#c0392b' : '#222') : undefined}
-              sx={
-                isModified && !revealedCard
-                  ? {
-                      '@keyframes bgFlash': {
-                        '0%': { background: '#2a2a4a', boxShadow: 'none' },
-                        '10%': { background: '#00e5cc', boxShadow: '0 0 8px 3px #00e5cc99' },
-                        '40%': { background: '#00b8a0', boxShadow: '0 0 6px 2px #00e5cc66' },
-                        '100%': { background: '#2a2a4a', boxShadow: 'none' },
-                      },
-                      animation: 'bgFlash 1.8s ease-out forwards',
-                    }
-                  : {}
-              }
-            >
-              {revealedCard ? `${revealedCard.rank}${revealedCard.suit}` : null}
-            </Box>
-          );
-        })}
-      </Box>
-    </Box>
-  );
-};
+    );
+  },
+);
 
 // ============================================================
 // Main GameBoard Component (F-031, F-094)
@@ -669,6 +684,17 @@ export const GameBoard: FC = () => {
   const [discardHistory, setDiscardHistory] = useState<DiscardHistoryCard[]>([]);
   const prevDiscardTopIdRef = useRef<string>('');
   const prevRoundNumberRef = useRef<number>(0);
+  // Refs for untracked setTimeout IDs — cleared on unmount to prevent stale state updates
+  const burningSlotTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const queenPeekTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Cleanup untracked timers on unmount to prevent state updates after unmount
+  useEffect(() => {
+    return () => {
+      if (burningSlotTimerRef.current) clearTimeout(burningSlotTimerRef.current);
+      if (queenPeekTimerRef.current) clearTimeout(queenPeekTimerRef.current);
+    };
+  }, []);
+
   useEffect(() => {
     if (!gameState) return;
     const pile = gameState.discardPile;
@@ -870,7 +896,7 @@ export const GameBoard: FC = () => {
       if (remaining <= 0) {
         clearInterval(interval);
       }
-    }, 250);
+    }, 1000); // 1s tick; SVG ring uses CSS transition so animation stays smooth
 
     return () => clearInterval(interval);
   }, [gameState?.turnStartedAt, gameState?.phase, gameState?.paused, pendingEffect?.turnStartedAt]);
@@ -1082,7 +1108,8 @@ export const GameBoard: FC = () => {
       if (!canAct || hasDrawnCard || !turnData?.availableActions.includes('burn')) return;
       // F-308: trigger shake animation on the burning slot
       setBurningSlot(slot);
-      setTimeout(() => setBurningSlot(null), 500);
+      if (burningSlotTimerRef.current) clearTimeout(burningSlotTimerRef.current);
+      burningSlotTimerRef.current = setTimeout(() => setBurningSlot(null), 500);
       const result = await performAction('burn', slot);
       if (!result.success && result.error) {
         toast({ title: result.error, status: 'error', duration: 2000, position: 'top' });
@@ -1167,15 +1194,26 @@ export const GameBoard: FC = () => {
   const [queenLoading, setQueenLoading] = useState(false);
   const [queenPeekTimer, setQueenPeekTimer] = useState(false);
 
-  // Red King state
-  const [kingKeepIndex, setKingKeepIndex] = useState<0 | 1 | null>(null);
-  const [kingReplaceSlot, setKingReplaceSlot] = useState<string | null>(null);
-  const [kingReplaceSlots, setKingReplaceSlots] = useState<[string | null, string | null]>([
-    null,
-    null,
-  ]);
-  const [kingMode, setKingMode] = useState<'returnBoth' | 'keepOne' | 'keepBoth' | null>(null);
+  // Red King state — new selection-first flow
+  // kingSelectedIndices: which of the 2 drawn cards the player has tapped (0, 1, or both)
+  const [kingSelectedIndices, setKingSelectedIndices] = useState<(0 | 1)[]>([]);
+  // kingReplaceSlots: hand slots chosen to replace (one per selected drawn card, in order)
+  const [kingReplaceSlots, setKingReplaceSlots] = useState<(string | null)[]>([null, null]);
   const [kingLoading, setKingLoading] = useState(false);
+
+  // Derived: which step we are in
+  // 'selectCard'  — initial, pick which drawn card(s) to keep
+  // 'selectSlot'  — at least one card selected, now picking replacement hand slots
+  const kingStep: 'selectCard' | 'selectSlot' =
+    kingSelectedIndices.length === 0 ? 'selectCard' : 'selectSlot';
+
+  // Whether the king selection is fully ready to confirm
+  const kingReady =
+    kingSelectedIndices.length === 0
+      ? false // skip handled via separate button
+      : kingSelectedIndices.length === 1
+        ? kingReplaceSlots[0] !== null
+        : kingReplaceSlots[0] !== null && kingReplaceSlots[1] !== null;
 
   // Reset special effect state when pendingEffect changes
   // (but preserve queen peek display while timer is running)
@@ -1187,10 +1225,8 @@ export const GameBoard: FC = () => {
       setJackLoading(false);
       // Don't clear queen peek state here — the peek timer handles it
       setQueenLoading(false);
-      setKingKeepIndex(null);
-      setKingReplaceSlot(null);
+      setKingSelectedIndices([]);
       setKingReplaceSlots([null, null]);
-      setKingMode(null);
       setKingLoading(false);
     }
   }, [pendingEffect]);
@@ -1224,7 +1260,8 @@ export const GameBoard: FC = () => {
         setQueenPeekedCard(result.card);
         setQueenPeekTimer(true);
         // Auto-close after 3 seconds
-        setTimeout(() => {
+        if (queenPeekTimerRef.current) clearTimeout(queenPeekTimerRef.current);
+        queenPeekTimerRef.current = setTimeout(() => {
           setQueenPeekTimer(false);
           setQueenPeekedCard(null);
           setQueenSelectedSlot(null);
@@ -1237,46 +1274,45 @@ export const GameBoard: FC = () => {
     [redQueenPeek, toast],
   );
 
-  // Red King: submit choice
+  // Red King: submit choice (return both — separate skip button)
+  const handleKingSkip = useCallback(async () => {
+    setKingLoading(true);
+    const result = await redKingChoice({ type: 'returnBoth' });
+    setKingLoading(false);
+    if (!result.success && result.error) {
+      toast({ title: result.error, status: 'error', duration: 2000, position: 'top' });
+    }
+  }, [redKingChoice, toast]);
+
+  // Red King: submit keep choice
   const handleKingSubmit = useCallback(async () => {
-    if (!kingMode) return;
+    if (!kingReady) return;
     setKingLoading(true);
 
     let result: { success: boolean; error?: string };
 
-    if (kingMode === 'returnBoth') {
-      result = await redKingChoice({ type: 'returnBoth' });
-    } else if (kingMode === 'keepOne') {
-      if (kingKeepIndex === null || !kingReplaceSlot) {
+    if (kingSelectedIndices.length === 1) {
+      const slot = kingReplaceSlots[0];
+      if (!slot) {
         setKingLoading(false);
-        toast({
-          title: 'Select a card to keep and a slot to replace',
-          status: 'warning',
-          duration: 2000,
-          position: 'top',
-        });
         return;
       }
       result = await redKingChoice({
         type: 'keepOne',
-        keepIndex: kingKeepIndex,
-        replaceSlot: kingReplaceSlot,
+        keepIndex: kingSelectedIndices[0],
+        replaceSlot: slot,
       });
     } else {
       // keepBoth
-      if (!kingReplaceSlots[0] || !kingReplaceSlots[1]) {
+      const slot0 = kingReplaceSlots[0];
+      const slot1 = kingReplaceSlots[1];
+      if (!slot0 || !slot1) {
         setKingLoading(false);
-        toast({
-          title: 'Select 2 slots to replace',
-          status: 'warning',
-          duration: 2000,
-          position: 'top',
-        });
         return;
       }
       result = await redKingChoice({
         type: 'keepBoth',
-        replaceSlots: [kingReplaceSlots[0], kingReplaceSlots[1]],
+        replaceSlots: [slot0, slot1],
       });
     }
 
@@ -1284,7 +1320,7 @@ export const GameBoard: FC = () => {
     if (!result.success && result.error) {
       toast({ title: result.error, status: 'error', duration: 2000, position: 'top' });
     }
-  }, [kingMode, kingKeepIndex, kingReplaceSlot, kingReplaceSlots, redKingChoice, toast]);
+  }, [kingReady, kingSelectedIndices, kingReplaceSlots, redKingChoice, toast]);
 
   if (!gameState || !playerId) {
     return null;
@@ -2148,17 +2184,7 @@ export const GameBoard: FC = () => {
                     display="flex"
                     alignItems="center"
                     gap="10px"
-                    sx={
-                      isPulsing
-                        ? {
-                            '@keyframes timerPulse': {
-                              '0%, 100%': { opacity: 1 },
-                              '50%': { opacity: 0.55 },
-                            },
-                            animation: 'timerPulse 1s ease-in-out infinite',
-                          }
-                        : {}
-                    }
+                    sx={isPulsing ? SX_KEYFRAMES_TIMER_PULSE : {}}
                   >
                     <svg width="36" height="36" viewBox="0 0 36 36" style={{ flexShrink: 0 }}>
                       <circle
@@ -2180,7 +2206,7 @@ export const GameBoard: FC = () => {
                         strokeDashoffset={circumference * (1 - pct)}
                         strokeLinecap="round"
                         transform="rotate(-90 18 18)"
-                        style={{ transition: 'stroke-dashoffset 0.5s linear, stroke 0.5s' }}
+                        style={{ transition: 'stroke-dashoffset 1s linear, stroke 1s' }}
                       />
                       <text
                         x="18"
@@ -2204,7 +2230,7 @@ export const GameBoard: FC = () => {
                           borderRadius="3px"
                           bg={timerColor}
                           w={`${pct * 100}%`}
-                          style={{ transition: 'width 0.5s linear, background 0.5s' }}
+                          style={{ transition: 'width 1s linear, background 1s' }}
                         />
                       </Box>
                     </Box>
@@ -2641,16 +2667,7 @@ export const GameBoard: FC = () => {
                               borderRadius="md"
                               pointerEvents="none"
                               zIndex={10}
-                              sx={{
-                                '@keyframes swapFlash': {
-                                  '0%': { opacity: 0, boxShadow: 'none' },
-                                  '10%': { opacity: 0.82, boxShadow: '0 0 18px 6px #00e5ccbb' },
-                                  '45%': { opacity: 0.7, boxShadow: '0 0 14px 4px #00e5cc88' },
-                                  '100%': { opacity: 0, boxShadow: 'none' },
-                                },
-                                animation: 'swapFlash 1.8s ease-out forwards',
-                                background: '#00e5cc',
-                              }}
+                              sx={SX_KEYFRAMES_SWAP_FLASH}
                             />
                           )}
                         </Box>
@@ -2700,7 +2717,7 @@ export const GameBoard: FC = () => {
                   bg="#c9a227"
                   borderRadius="3px"
                   w={`${peekProgress}%`}
-                  transition="width 0.1s linear"
+                  transition="width 0.25s linear"
                 />
               </Box>
               <Text fontSize="10px" color="#555">
@@ -2868,17 +2885,7 @@ export const GameBoard: FC = () => {
                             display="flex"
                             alignItems="center"
                             gap="10px"
-                            sx={
-                              isPulsing
-                                ? {
-                                    '@keyframes timerPulse': {
-                                      '0%, 100%': { opacity: 1 },
-                                      '50%': { opacity: 0.55 },
-                                    },
-                                    animation: 'timerPulse 1s ease-in-out infinite',
-                                  }
-                                : {}
-                            }
+                            sx={isPulsing ? SX_KEYFRAMES_TIMER_PULSE : {}}
                           >
                             <svg
                               width="30"
@@ -2905,7 +2912,7 @@ export const GameBoard: FC = () => {
                                 strokeDashoffset={circumference * (1 - pct)}
                                 strokeLinecap="round"
                                 transform="rotate(-90 15 15)"
-                                style={{ transition: 'stroke-dashoffset 0.5s linear, stroke 0.5s' }}
+                                style={{ transition: 'stroke-dashoffset 1s linear, stroke 1s' }}
                               />
                               <text
                                 x="15"
@@ -2929,7 +2936,7 @@ export const GameBoard: FC = () => {
                                   borderRadius="3px"
                                   bg={timerColor}
                                   w={`${pct * 100}%`}
-                                  style={{ transition: 'width 0.5s linear, background 0.5s' }}
+                                  style={{ transition: 'width 1s linear, background 1s' }}
                                 />
                               </Box>
                             </Box>
@@ -3400,22 +3407,7 @@ export const GameBoard: FC = () => {
                                         borderRadius="md"
                                         pointerEvents="none"
                                         zIndex={10}
-                                        sx={{
-                                          '@keyframes swapFlash': {
-                                            '0%': { opacity: 0, boxShadow: 'none' },
-                                            '10%': {
-                                              opacity: 0.82,
-                                              boxShadow: '0 0 18px 6px #00e5ccbb',
-                                            },
-                                            '45%': {
-                                              opacity: 0.7,
-                                              boxShadow: '0 0 14px 4px #00e5cc88',
-                                            },
-                                            '100%': { opacity: 0, boxShadow: 'none' },
-                                          },
-                                          animation: 'swapFlash 1.8s ease-out forwards',
-                                          background: '#00e5cc',
-                                        }}
+                                        sx={SX_KEYFRAMES_SWAP_FLASH}
                                       />
                                     )}
                                   </Box>
@@ -3465,7 +3457,7 @@ export const GameBoard: FC = () => {
                             bg="#c9a227"
                             borderRadius="3px"
                             w={`${peekProgress}%`}
-                            transition="width 0.1s linear"
+                            transition="width 0.25s linear"
                           />
                         </Box>
                         <Text fontSize="10px" color="#555">
@@ -3834,7 +3826,7 @@ export const GameBoard: FC = () => {
                         bg={tc}
                         w={`${pct * 100}%`}
                         borderRadius="3px"
-                        style={{ transition: 'width 0.5s linear, background 0.5s' }}
+                        style={{ transition: 'width 1s linear, background 1s' }}
                       />
                     </Box>
                   </Box>
@@ -4204,7 +4196,7 @@ export const GameBoard: FC = () => {
                         bg={tc}
                         w={`${pct * 100}%`}
                         borderRadius="3px"
-                        style={{ transition: 'width 0.5s linear, background 0.5s' }}
+                        style={{ transition: 'width 1s linear, background 1s' }}
                       />
                     </Box>
                   </Box>
@@ -4472,17 +4464,15 @@ export const GameBoard: FC = () => {
               </Text>
             </HStack>
             <Text fontSize="11px" color="#555" pb="10px" borderBottom="0.5px solid #22222e">
-              {!kingMode
-                ? 'You drew 2 cards privately. Choose what to do with them.'
-                : kingMode === 'returnBoth'
-                  ? 'Both cards will be shuffled back. Your hand stays unchanged.'
-                  : kingMode === 'keepOne'
-                    ? kingKeepIndex === null
-                      ? 'Step 1 — tap the drawn card you want to keep.'
-                      : kingReplaceSlot
-                        ? 'Ready — confirm to complete the exchange.'
-                        : 'Step 2 — tap a hand slot to replace.'
-                    : 'Both drawn cards stay. Pick 2 hand slots to replace.'}
+              {kingStep === 'selectCard'
+                ? 'Select the card(s) you want to keep, or skip below.'
+                : kingSelectedIndices.length === 1
+                  ? kingReplaceSlots[0]
+                    ? 'Ready — confirm to keep this card in the selected slot.'
+                    : 'Select the slot you want to place this card in.'
+                  : kingReplaceSlots[0] && kingReplaceSlots[1]
+                    ? 'Ready — confirm to keep both cards.'
+                    : `Select ${2 - (kingReplaceSlots[0] ? 1 : 0) - (kingReplaceSlots[1] ? 1 : 0)} more slot${2 - (kingReplaceSlots[0] ? 1 : 0) - (kingReplaceSlots[1] ? 1 : 0) !== 1 ? 's' : ''} to replace.`}
             </Text>
             {/* Turn timer strip */}
             {turnTimeLeft !== null &&
@@ -4507,55 +4497,36 @@ export const GameBoard: FC = () => {
                         bg={tc}
                         w={`${pct * 100}%`}
                         borderRadius="3px"
-                        style={{ transition: 'width 0.5s linear, background 0.5s' }}
+                        style={{ transition: 'width 1s linear, background 1s' }}
                       />
                     </Box>
                   </Box>
                 );
               })()}
           </Box>
-
-          {/* Drawn cards */}
+          {/* ── Step 1: Drawn cards (always visible, tappable) ── */}
           {pendingEffect?.redKingCards && (
-            <Box px="16px" pt="10px">
+            <Box px="16px" pt="12px">
               <Text
                 fontSize="10px"
                 color="#444"
                 textTransform="uppercase"
                 letterSpacing="0.07em"
                 fontWeight="500"
-                mb="8px"
+                mb="10px"
               >
-                {kingMode === 'keepBoth'
-                  ? 'both keeping'
-                  : kingMode === 'keepOne'
-                    ? 'drawn cards — tap to keep'
-                    : 'your 2 drawn cards'}
+                {kingStep === 'selectCard' ? 'your 2 drawn cards — tap to select' : 'drawn cards'}
               </Text>
-              <Box display="flex" gap="12px" justifyContent="center">
+              <Box display="flex" gap="14px" justifyContent="center">
                 {pendingEffect.redKingCards.map((c, i) => {
-                  const isKeeping =
-                    kingMode === 'keepBoth' || (kingMode === 'keepOne' && kingKeepIndex === i);
-                  const isReturning =
-                    kingMode === 'keepOne' && kingKeepIndex !== null && kingKeepIndex !== i;
-                  const isReturnBoth = kingMode === 'returnBoth';
-                  const cardValue = c.value;
-
-                  let labelText = '';
-                  let labelColor = '#666';
-                  if (isReturnBoth) {
-                    labelText = 'returning';
-                    labelColor = '#333';
-                  } else if (isKeeping) {
-                    labelText = `keeping · ${cardValue} pts`;
-                    labelColor = '#c9a227';
-                  } else if (isReturning) {
-                    labelText = 'returning';
-                    labelColor = '#333';
-                  } else {
-                    labelText = `${c.rank}${c.suit} · ${cardValue} pts`;
-                    labelColor = '#666';
-                  }
+                  const idx = i as 0 | 1;
+                  const isSelected = kingSelectedIndices.includes(idx);
+                  const slotForThis =
+                    kingSelectedIndices.length === 1 && isSelected
+                      ? kingReplaceSlots[0]
+                      : kingSelectedIndices.length === 2
+                        ? kingReplaceSlots[kingSelectedIndices.indexOf(idx)]
+                        : null;
 
                   return (
                     <Box
@@ -4563,36 +4534,52 @@ export const GameBoard: FC = () => {
                       display="flex"
                       flexDirection="column"
                       alignItems="center"
-                      gap="5px"
+                      gap="6px"
+                      cursor="pointer"
+                      onClick={() => {
+                        setKingSelectedIndices((prev) => {
+                          if (prev.includes(idx)) {
+                            const newIndices = prev.filter((x) => x !== idx);
+                            setKingReplaceSlots((prevSlots) => {
+                              if (prev.length === 1) return [null, null];
+                              const pos = prev.indexOf(idx);
+                              const newSlots = [...prevSlots] as [string | null, string | null];
+                              newSlots[pos] = null;
+                              if (newSlots[0] === null && newSlots[1] !== null) {
+                                return [newSlots[1], null];
+                              }
+                              return newSlots;
+                            });
+                            return newIndices as (0 | 1)[];
+                          }
+                          if (prev.length >= 2) return prev;
+                          return [...prev, idx] as (0 | 1)[];
+                        });
+                      }}
                     >
                       <Box
-                        w="56px"
-                        h="78px"
-                        borderRadius="8px"
+                        w="62px"
+                        h="86px"
+                        borderRadius="9px"
                         bg="white"
-                        border={`2px solid ${isKeeping ? '#c9a227' : '#ddd'}`}
-                        boxShadow={isKeeping ? '0 0 0 1px #c9a22730' : 'none'}
-                        opacity={isReturning || isReturnBoth ? 0.45 : 1}
-                        transform={isKeeping ? 'translateY(-4px)' : 'none'}
-                        cursor={kingMode === 'keepOne' && !isReturning ? 'pointer' : 'default'}
-                        onClick={() => {
-                          if (kingMode === 'keepOne') setKingKeepIndex(i as 0 | 1);
-                        }}
+                        border={`2px solid ${isSelected ? '#c9a227' : '#ddd'}`}
+                        boxShadow={isSelected ? '0 0 0 3px #c9a22740' : 'none'}
+                        transform={isSelected ? 'translateY(-4px)' : 'none'}
                         display="flex"
                         flexDirection="column"
                         alignItems="center"
                         justifyContent="center"
                         position="relative"
                         fontWeight="700"
-                        fontSize="20px"
+                        fontSize="22px"
                         color={c.isRed ? '#c0392b' : '#222'}
-                        transition="border-color 0.12s, box-shadow 0.12s, transform 0.12s, opacity 0.12s"
+                        transition="border-color 0.15s, box-shadow 0.15s, transform 0.15s"
                       >
                         <Box
                           position="absolute"
-                          top="4px"
-                          left="5px"
-                          fontSize="10px"
+                          top="5px"
+                          left="6px"
+                          fontSize="11px"
                           fontWeight="700"
                           lineHeight={1.2}
                           color={c.isRed ? '#c0392b' : '#222'}
@@ -4604,9 +4591,9 @@ export const GameBoard: FC = () => {
                         <Text color={c.isRed ? '#c0392b' : '#222'}>{c.suit}</Text>
                         <Box
                           position="absolute"
-                          bottom="4px"
-                          right="5px"
-                          fontSize="10px"
+                          bottom="5px"
+                          right="6px"
+                          fontSize="11px"
                           fontWeight="700"
                           transform="rotate(180deg)"
                           color={c.isRed ? '#c0392b' : '#222'}
@@ -4615,9 +4602,35 @@ export const GameBoard: FC = () => {
                           <br />
                           {c.suit}
                         </Box>
+                        {isSelected && (
+                          <Box
+                            position="absolute"
+                            top="-6px"
+                            right="-6px"
+                            w="18px"
+                            h="18px"
+                            borderRadius="50%"
+                            bg="#c9a227"
+                            display="flex"
+                            alignItems="center"
+                            justifyContent="center"
+                          >
+                            <Text fontSize="9px" color="#1a1200" fontWeight="800">
+                              ✓
+                            </Text>
+                          </Box>
+                        )}
                       </Box>
-                      <Text fontSize="10px" textAlign="center" fontWeight="500" color={labelColor}>
-                        {labelText}
+                      <Text
+                        fontSize="10px"
+                        fontWeight="500"
+                        color={isSelected ? '#c9a227' : '#555'}
+                      >
+                        {isSelected
+                          ? slotForThis
+                            ? `→ slot ${slotForThis}`
+                            : `${c.rank}${c.suit} · keeping`
+                          : `${c.rank}${c.suit} · ${c.value} pts`}
                       </Text>
                     </Box>
                   );
@@ -4626,146 +4639,32 @@ export const GameBoard: FC = () => {
             </Box>
           )}
 
-          {/* Option pills */}
-          <Box display="flex" gap="6px" px="16px" pt="10px">
-            {[
-              { mode: 'returnBoth' as const, title: 'Return both', sub: 'hand unchanged' },
-              { mode: 'keepOne' as const, title: 'Keep 1', sub: 'replace 1 hand card' },
-              { mode: 'keepBoth' as const, title: 'Keep 2', sub: 'replace 2 hand cards' },
-            ].map(({ mode, title, sub }) => {
-              const isActive = kingMode === mode;
-              return (
-                <Box
-                  key={mode}
-                  flex={1}
-                  py="8px"
-                  px="6px"
-                  borderRadius="9px"
-                  textAlign="center"
-                  cursor="pointer"
-                  border={`1px solid ${isActive ? '#c9a227' : '#2a2a3a'}`}
-                  bg={isActive ? '#1f1a0a' : '#16162a'}
-                  display="flex"
-                  flexDirection="column"
-                  gap="2px"
-                  transition="border-color 0.12s, background 0.12s"
-                  onClick={() => {
-                    setKingMode(mode);
-                    setKingKeepIndex(null);
-                    setKingReplaceSlot(null);
-                    setKingReplaceSlots([null, null]);
-                  }}
-                >
-                  <Text fontSize="11px" fontWeight="600" color={isActive ? '#c9a227' : '#888'}>
-                    {title}
-                  </Text>
-                  <Text fontSize="9px" color={isActive ? '#7a6020' : '#333'} lineHeight={1.3}>
-                    {sub}
-                  </Text>
-                </Box>
-              );
-            })}
-          </Box>
-
-          {/* Return both: info box */}
-          {kingMode === 'returnBoth' && (
-            <Box
-              mx="16px"
-              mt="10px"
-              px="11px"
-              py="9px"
-              bg="#0f141f"
-              border="0.5px solid #1a2a3a"
-              borderRadius="8px"
-            >
-              <Text fontSize="11px" color="#3a5a7a" lineHeight={1.5}>
-                Both cards will be{' '}
-                <Text as="strong" color="#5a7a9a" fontWeight="500">
-                  shuffled back
-                </Text>{' '}
-                into the draw pile at random positions. Your hand stays exactly as it was.
-              </Text>
-            </Box>
-          )}
-
-          {/* Keep 1: hand slot picker */}
-          {kingMode === 'keepOne' && kingKeepIndex !== null && (
-            <Box px="16px" pt="10px">
+          {/* ── Step 2: Hand slot picker ── */}
+          {kingStep === 'selectSlot' && (
+            <Box px="16px" pt="14px">
               <Text
                 fontSize="10px"
                 color="#444"
                 textTransform="uppercase"
                 letterSpacing="0.07em"
                 fontWeight="500"
-                mb="8px"
+                mb="10px"
               >
-                step 2 — pick a hand slot to replace
+                {kingSelectedIndices.length === 1
+                  ? 'your hand — tap a slot to replace'
+                  : `your hand — pick 2 slots to replace (${(kingReplaceSlots[0] ? 1 : 0) + (kingReplaceSlots[1] ? 1 : 0)}/2)`}
               </Text>
-              <Box display="flex" gap="6px">
+              <Box display="flex" gap="8px" flexWrap="wrap">
                 {myPlayer.hand.map((h) => {
-                  const isSelected = kingReplaceSlot === h.slot;
-                  return (
-                    <Box
-                      key={h.slot}
-                      display="flex"
-                      flexDirection="column"
-                      alignItems="center"
-                      gap="4px"
-                      onClick={() => setKingReplaceSlot(h.slot)}
-                      cursor="pointer"
-                    >
-                      <Box
-                        w="44px"
-                        h="62px"
-                        borderRadius="7px"
-                        bg={isSelected ? '#1e0f0f' : '#22223a'}
-                        border={`1.5px solid ${isSelected ? '#cf5e5e' : '#3a3a5a'}`}
-                        boxShadow={isSelected ? '0 0 0 1px #cf5e5e30' : 'none'}
-                        position="relative"
-                        transition="border-color 0.12s, background 0.12s"
-                      />
-                      <Text
-                        fontSize="10px"
-                        color={isSelected ? '#cf5e5e' : '#555'}
-                        fontWeight="500"
-                      >
-                        {isSelected ? `${h.slot} ✕` : h.slot}
-                      </Text>
-                    </Box>
-                  );
-                })}
-              </Box>
-              {!kingReplaceSlot && (
-                <Text fontSize="10px" color="#3a3a4a" mt="6px" lineHeight={1.5}>
-                  The replaced card goes to the discard pile. The other drawn card returns to the
-                  deck.
-                </Text>
-              )}
-            </Box>
-          )}
+                  const slotPos0 = kingReplaceSlots[0] === h.slot;
+                  const slotPos1 = kingReplaceSlots[1] === h.slot;
+                  const isSelected = slotPos0 || slotPos1;
+                  const drawnCardForSlot = isSelected
+                    ? slotPos0
+                      ? pendingEffect?.redKingCards?.[kingSelectedIndices[0]]
+                      : pendingEffect?.redKingCards?.[kingSelectedIndices[1]]
+                    : null;
 
-          {/* Keep 2: hand slot picker (pick 2) */}
-          {kingMode === 'keepBoth' && (
-            <Box px="16px" pt="10px">
-              <Box display="flex" alignItems="center" gap="6px" mb="8px">
-                <Text
-                  fontSize="10px"
-                  color="#444"
-                  textTransform="uppercase"
-                  letterSpacing="0.07em"
-                  fontWeight="500"
-                >
-                  pick 2 slots to discard —
-                </Text>
-                <Text fontSize="10px" color="#c9a227" fontWeight="600">
-                  {(kingReplaceSlots[0] ? 1 : 0) + (kingReplaceSlots[1] ? 1 : 0)} / 2 selected
-                </Text>
-              </Box>
-              <Box display="flex" gap="6px">
-                {myPlayer.hand.map((h) => {
-                  const isFirst = kingReplaceSlots[0] === h.slot;
-                  const isSecond = kingReplaceSlots[1] === h.slot;
-                  const isSelected = isFirst || isSecond;
                   return (
                     <Box
                       key={h.slot}
@@ -4775,33 +4674,76 @@ export const GameBoard: FC = () => {
                       gap="4px"
                       cursor="pointer"
                       onClick={() => {
-                        if (isFirst) {
-                          setKingReplaceSlots([null, kingReplaceSlots[1]]);
-                        } else if (isSecond) {
-                          setKingReplaceSlots([kingReplaceSlots[0], null]);
-                        } else if (!kingReplaceSlots[0]) {
-                          setKingReplaceSlots([h.slot, kingReplaceSlots[1]]);
-                        } else if (!kingReplaceSlots[1]) {
-                          setKingReplaceSlots([kingReplaceSlots[0], h.slot]);
+                        if (kingSelectedIndices.length === 1) {
+                          setKingReplaceSlots((prev) =>
+                            prev[0] === h.slot ? [null, null] : [h.slot, null],
+                          );
+                        } else {
+                          setKingReplaceSlots((prev) => {
+                            if (prev[0] === h.slot) return [null, prev[1]];
+                            if (prev[1] === h.slot) return [prev[0], null];
+                            if (!prev[0]) return [h.slot, prev[1]];
+                            if (!prev[1]) return [prev[0], h.slot];
+                            return prev;
+                          });
                         }
                       }}
                     >
                       <Box
-                        w="44px"
-                        h="62px"
+                        w="48px"
+                        h="66px"
                         borderRadius="7px"
-                        bg={isSelected ? '#1e0f0f' : '#22223a'}
-                        border={`1.5px solid ${isSelected ? '#cf5e5e' : '#3a3a5a'}`}
-                        boxShadow={isSelected ? '0 0 0 1px #cf5e5e30' : 'none'}
+                        bg={
+                          isSelected ? (drawnCardForSlot?.isRed ? '#fff5f5' : '#f5f5f5') : '#22223a'
+                        }
+                        border={`1.5px solid ${isSelected ? '#c9a227' : '#3a3a5a'}`}
+                        boxShadow={isSelected ? '0 0 0 2px #c9a22740' : 'none'}
                         position="relative"
-                        transition="border-color 0.12s, background 0.12s"
-                      />
+                        display="flex"
+                        flexDirection="column"
+                        alignItems="center"
+                        justifyContent="center"
+                        transition="border-color 0.12s, background 0.12s, box-shadow 0.12s"
+                        transform={isSelected ? 'translateY(-2px)' : 'none'}
+                      >
+                        {isSelected && drawnCardForSlot ? (
+                          <>
+                            <Box
+                              position="absolute"
+                              top="4px"
+                              left="4px"
+                              fontSize="9px"
+                              fontWeight="700"
+                              lineHeight={1.2}
+                              color={drawnCardForSlot.isRed ? '#c0392b' : '#222'}
+                            >
+                              {drawnCardForSlot.rank}
+                              <br />
+                              {drawnCardForSlot.suit}
+                            </Box>
+                            <Text
+                              fontSize="14px"
+                              color={drawnCardForSlot.isRed ? '#c0392b' : '#222'}
+                            >
+                              {drawnCardForSlot.suit}
+                            </Text>
+                          </>
+                        ) : (
+                          <Box
+                            w="28px"
+                            h="40px"
+                            borderRadius="4px"
+                            bg="#2a2a4a"
+                            border="1px solid #3a3a5a"
+                          />
+                        )}
+                      </Box>
                       <Text
                         fontSize="10px"
-                        color={isSelected ? '#cf5e5e' : '#555'}
+                        color={isSelected ? '#c9a227' : '#555'}
                         fontWeight="500"
                       >
-                        {isSelected ? `${h.slot} ✕` : h.slot}
+                        {h.slot}
                       </Text>
                     </Box>
                   );
@@ -4810,145 +4752,41 @@ export const GameBoard: FC = () => {
             </Box>
           )}
 
-          {/* Summary box: keep 1 ready */}
-          {kingMode === 'keepOne' &&
-            kingKeepIndex !== null &&
-            kingReplaceSlot &&
-            pendingEffect?.redKingCards && (
-              <Box
-                mx="16px"
-                mt="10px"
-                px="11px"
-                py="9px"
-                bg="#141f0f"
-                border="0.5px solid #2a3a1a"
-                borderRadius="8px"
-              >
-                <Box display="flex" alignItems="center" gap="8px">
-                  <Text fontSize="12px">✓</Text>
-                  <Text fontSize="11px" color="#5a8a4a" lineHeight={1.5}>
-                    Keep{' '}
-                    <Text as="strong" color="#7ab85a" fontWeight="500">
-                      {pendingEffect.redKingCards[kingKeepIndex].rank}
-                      {pendingEffect.redKingCards[kingKeepIndex].suit}
-                    </Text>{' '}
-                    in slot {kingReplaceSlot}.{' '}
-                    {pendingEffect.redKingCards[kingKeepIndex === 0 ? 1 : 0].rank}
-                    {pendingEffect.redKingCards[kingKeepIndex === 0 ? 1 : 0].suit} returns to deck.
-                    Old slot {kingReplaceSlot} goes to discard.
-                  </Text>
-                </Box>
-              </Box>
-            )}
-
-          {/* Summary box: keep 2 ready */}
-          {kingMode === 'keepBoth' &&
-            kingReplaceSlots[0] &&
-            kingReplaceSlots[1] &&
-            pendingEffect?.redKingCards && (
-              <Box
-                mx="16px"
-                mt="10px"
-                px="11px"
-                py="9px"
-                bg="#141f0f"
-                border="0.5px solid #2a3a1a"
-                borderRadius="8px"
-              >
-                <Box display="flex" alignItems="center" gap="8px">
-                  <Text fontSize="12px">✓</Text>
-                  <Text fontSize="11px" color="#5a8a4a" lineHeight={1.5}>
-                    Keep{' '}
-                    <Text as="strong" color="#7ab85a" fontWeight="500">
-                      {pendingEffect.redKingCards[0].rank}
-                      {pendingEffect.redKingCards[0].suit}
-                    </Text>{' '}
-                    in slot {kingReplaceSlots[0]} and{' '}
-                    <Text as="strong" color="#7ab85a" fontWeight="500">
-                      {pendingEffect.redKingCards[1].rank}
-                      {pendingEffect.redKingCards[1].suit}
-                    </Text>{' '}
-                    in slot {kingReplaceSlots[1]}. Both old cards go to discard pile.
-                  </Text>
-                </Box>
-              </Box>
-            )}
-
-          {/* Helper text when selections incomplete */}
-          {kingMode &&
-            kingMode !== 'returnBoth' &&
-            !(kingMode === 'keepOne' && kingKeepIndex !== null && kingReplaceSlot) &&
-            !(kingMode === 'keepBoth' && kingReplaceSlots[0] && kingReplaceSlots[1]) && (
-              <Text fontSize="11px" color="#555" textAlign="center" mt="10px" px="16px">
-                {kingMode === 'keepOne'
-                  ? kingKeepIndex === null
-                    ? 'Tap a drawn card above to select which one to keep.'
-                    : 'Now tap a hand slot to replace.'
-                  : `Select ${2 - ((kingReplaceSlots[0] ? 1 : 0) + (kingReplaceSlots[1] ? 1 : 0))} more slot${2 - ((kingReplaceSlots[0] ? 1 : 0) + (kingReplaceSlots[1] ? 1 : 0)) !== 1 ? 's' : ''} to continue.`}
-              </Text>
-            )}
-
-          {/* Actions — no cancel, must choose */}
-          <Box px="16px" pt="12px" pb="16px" display="flex" gap="8px" mt="10px">
-            <Box flex={1} /> {/* spacer */}
+          {/* ── Bottom action row ── */}
+          <Box px="16px" pt="14px" pb="16px" display="flex" gap="8px">
             <Button
-              flex={2}
+              flex={1}
               py="10px"
               h="auto"
               borderRadius="9px"
-              bg={
-                !kingMode ||
-                (kingMode === 'keepOne' && (kingKeepIndex === null || !kingReplaceSlot)) ||
-                (kingMode === 'keepBoth' && (!kingReplaceSlots[0] || !kingReplaceSlots[1]))
-                  ? '#1e1e2e'
-                  : '#c9a227'
-              }
-              color={
-                !kingMode ||
-                (kingMode === 'keepOne' && (kingKeepIndex === null || !kingReplaceSlot)) ||
-                (kingMode === 'keepBoth' && (!kingReplaceSlots[0] || !kingReplaceSlots[1]))
-                  ? '#333'
-                  : '#1a1200'
-              }
-              border={
-                !kingMode ||
-                (kingMode === 'keepOne' && (kingKeepIndex === null || !kingReplaceSlot)) ||
-                (kingMode === 'keepBoth' && (!kingReplaceSlots[0] || !kingReplaceSlots[1]))
-                  ? '0.5px solid #2a2a3a'
-                  : 'none'
-              }
-              fontSize="13px"
-              fontWeight="600"
-              _hover={
-                kingMode === 'returnBoth' ||
-                (kingMode === 'keepOne' && kingKeepIndex !== null && kingReplaceSlot) ||
-                (kingMode === 'keepBoth' && kingReplaceSlots[0] && kingReplaceSlots[1])
-                  ? { bg: '#b8911e' }
-                  : {}
-              }
-              cursor={
-                !kingMode ||
-                (kingMode === 'keepOne' && (kingKeepIndex === null || !kingReplaceSlot)) ||
-                (kingMode === 'keepBoth' && (!kingReplaceSlots[0] || !kingReplaceSlots[1]))
-                  ? 'not-allowed'
-                  : 'pointer'
-              }
-              isDisabled={
-                !kingMode ||
-                (kingMode === 'keepOne' && (kingKeepIndex === null || !kingReplaceSlot)) ||
-                (kingMode === 'keepBoth' && (!kingReplaceSlots[0] || !kingReplaceSlots[1]))
-              }
-              isLoading={kingLoading}
-              onClick={handleKingSubmit}
+              bg="#16162a"
+              color="#555"
+              border="0.5px solid #2a2a3a"
+              fontSize="12px"
+              fontWeight="500"
+              _hover={{ bg: '#1e1e38', color: '#888' }}
+              isDisabled={kingLoading}
+              onClick={handleKingSkip}
             >
-              {kingMode === 'returnBoth'
-                ? 'Confirm — return both'
-                : kingMode === 'keepOne' && kingKeepIndex !== null && kingReplaceSlot
-                  ? 'Confirm'
-                  : kingMode === 'keepBoth' && kingReplaceSlots[0] && kingReplaceSlots[1]
-                    ? 'Confirm'
-                    : 'Select a card first'}
+              Skip
             </Button>
+            {kingReady && (
+              <Button
+                flex={2}
+                py="10px"
+                h="auto"
+                borderRadius="9px"
+                bg="#c9a227"
+                color="#1a1200"
+                fontSize="13px"
+                fontWeight="600"
+                _hover={{ bg: '#b8911e' }}
+                isLoading={kingLoading}
+                onClick={handleKingSubmit}
+              >
+                Confirm
+              </Button>
+            )}
           </Box>
         </ModalContent>
       </Modal>

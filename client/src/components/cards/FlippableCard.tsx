@@ -1,4 +1,4 @@
-import { FC, useEffect, useState } from 'react';
+import { FC, memo, useEffect, useState } from 'react';
 import { Box } from '@chakra-ui/react';
 import { Card } from './Card';
 import { CardBack } from './CardBack';
@@ -20,82 +20,81 @@ export interface FlippableCardProps {
 }
 
 // ============================================================
+// Dimensions per size — defined at module level, not inside component
+// ============================================================
+
+const SIZES = {
+  sm: { w: '52px', h: '74px' },
+  md: { w: '80px', h: '112px' },
+  lg: { w: '100px', h: '140px' },
+};
+
+// ============================================================
 // FlippableCard — CSS 3D card flip between CardBack and Card
 // ============================================================
 
-export const FlippableCard: FC<FlippableCardProps> = ({
-  card,
-  isFaceUp,
-  isSelected = false,
-  isClickable = false,
-  onClick,
-  size = 'md',
-}) => {
-  // Track the last known card so the face stays visible during flip-back animation
-  const [displayCard, setDisplayCard] = useState<CardType | null>(card);
+export const FlippableCard: FC<FlippableCardProps> = memo(
+  ({ card, isFaceUp, isSelected = false, isClickable = false, onClick, size = 'md' }) => {
+    // Track the last known card so the face stays visible during flip-back animation
+    const [displayCard, setDisplayCard] = useState<CardType | null>(card);
 
-  useEffect(() => {
-    if (card) {
-      setDisplayCard(card);
-    }
-  }, [card]);
+    useEffect(() => {
+      if (card) {
+        setDisplayCard(card);
+      }
+    }, [card]);
 
-  const SIZES = {
-    sm: { w: '52px', h: '74px' },
-    md: { w: '80px', h: '112px' },
-    lg: { w: '100px', h: '140px' },
-  };
+    const s = SIZES[size];
 
-  const s = SIZES[size];
-
-  return (
-    <Box
-      w={s.w}
-      h={s.h}
-      position="relative"
-      style={{ perspective: '600px' }}
-      cursor={isClickable || onClick ? 'pointer' : 'default'}
-      onClick={onClick}
-    >
+    return (
       <Box
+        w={s.w}
+        h={s.h}
         position="relative"
-        w="100%"
-        h="100%"
-        transition="transform 0.5s ease-in-out"
-        style={{
-          transformStyle: 'preserve-3d',
-          transform: isFaceUp ? 'rotateY(180deg)' : 'rotateY(0deg)',
-        }}
+        style={{ perspective: '600px' }}
+        cursor={isClickable || onClick ? 'pointer' : 'default'}
+        onClick={onClick}
       >
-        {/* Front face (card back) */}
         <Box
-          position="absolute"
-          top={0}
-          left={0}
+          position="relative"
           w="100%"
           h="100%"
-          style={{ backfaceVisibility: 'hidden' }}
-        >
-          <CardBack size={size} isSelected={isSelected} isClickable={false} />
-        </Box>
-
-        {/* Back face (card front — rotated 180deg so it shows when flipped) */}
-        <Box
-          position="absolute"
-          top={0}
-          left={0}
-          w="100%"
-          h="100%"
+          transition="transform 0.5s ease-in-out"
           style={{
-            backfaceVisibility: 'hidden',
-            transform: 'rotateY(180deg)',
+            transformStyle: 'preserve-3d',
+            transform: isFaceUp ? 'rotateY(180deg)' : 'rotateY(0deg)',
           }}
         >
-          {displayCard && (
-            <Card card={displayCard} size={size} isSelected={isSelected} isClickable={false} />
-          )}
+          {/* Front face (card back) */}
+          <Box
+            position="absolute"
+            top={0}
+            left={0}
+            w="100%"
+            h="100%"
+            style={{ backfaceVisibility: 'hidden' }}
+          >
+            <CardBack size={size} isSelected={isSelected} isClickable={false} />
+          </Box>
+
+          {/* Back face (card front — rotated 180deg so it shows when flipped) */}
+          <Box
+            position="absolute"
+            top={0}
+            left={0}
+            w="100%"
+            h="100%"
+            style={{
+              backfaceVisibility: 'hidden',
+              transform: 'rotateY(180deg)',
+            }}
+          >
+            {displayCard && (
+              <Card card={displayCard} size={size} isSelected={isSelected} isClickable={false} />
+            )}
+          </Box>
         </Box>
       </Box>
-    </Box>
-  );
-};
+    );
+  },
+);
