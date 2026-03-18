@@ -449,13 +449,13 @@ export function registerRoomHandlers(io: SocketIOServer, socket: Socket): void {
           return;
         }
 
-        // Validate targetScore (F-310): must be integer between 50 and 150, default 70
+        // Validate targetScore (F-310): must be integer between 30 and 150, default 70
         const rawTargetScore = data?.targetScore;
         let targetScore = 70;
         if (rawTargetScore !== undefined) {
           const parsed = Math.floor(Number(rawTargetScore));
-          if (!Number.isFinite(parsed) || parsed < 50 || parsed > 150) {
-            callback?.({ success: false, error: 'Target score must be between 50 and 150' });
+          if (!Number.isFinite(parsed) || parsed < 30 || parsed > 150) {
+            callback?.({ success: false, error: 'Target score must be between 30 and 150' });
             return;
           }
           targetScore = parsed;
@@ -1120,7 +1120,7 @@ export function registerRoomHandlers(io: SocketIOServer, socket: Socket): void {
         callback?.({ success: false, error: 'Missing player ID' });
         return;
       }
-      const ALLOWED_EMOJIS = ['🖕', '😛', '🥲'];
+      const ALLOWED_EMOJIS = ['🖕', '😛', '🥲', '💀', '🤌', '🔥', '😤'];
       if (!ALLOWED_EMOJIS.includes(data?.emoji)) {
         callback?.({ success: false, error: 'Invalid emoji' });
         return;

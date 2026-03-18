@@ -30,7 +30,7 @@ import type { SlotLabel } from '../types/player.types';
 // Debug Mode
 // ============================================================
 
-export const DEBUG_MODE = import.meta.env.DEV && import.meta.env.VITE_DEBUG_MODE === 'true';
+export const DEBUG_MODE = import.meta.env.DEV;
 
 // ============================================================
 // Types
@@ -45,6 +45,8 @@ interface YourTurnData {
 
 interface SocketContextValue {
   isConnected: boolean;
+  /** Current phase of the connection lifecycle shown to the user */
+  connectionPhase: 'connecting' | 'reconnecting' | 'ready';
   playerId: string | null;
   username: string | null;
   roomData: RoomData | null;
@@ -151,6 +153,9 @@ interface SocketProviderProps {
 export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
   const navigate = useNavigate();
   const [isConnected, setIsConnected] = useState(false);
+  const [connectionPhase, setConnectionPhase] = useState<'connecting' | 'reconnecting' | 'ready'>(
+    'connecting',
+  );
   const [playerId, setPlayerId] = useState<string | null>(null);
   const [username, setUsername] = useState<string | null>(null);
   const [roomData, setRoomData] = useState<RoomData | null>(null);
@@ -212,6 +217,7 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
         console.log(
           `[reconnect] Attempting rejoin: player=${storedPlayerId} room=${storedRoomCode}`,
         );
+        setConnectionPhase('reconnecting');
         rejoinInFlightRef.current = true;
         socket.emit(
           'rejoinRoom',
@@ -262,14 +268,18 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
               localStorage.removeItem('username');
               rejoinInFlightRef.current = false;
             }
+            setConnectionPhase('ready');
           },
         );
+      } else {
+        setConnectionPhase('ready');
       }
     });
 
     socket.on('disconnect', () => {
       console.log('Socket disconnected');
       setIsConnected(false);
+      setConnectionPhase('connecting');
     });
 
     socket.on('roomUpdated', (data: RoomData) => {
@@ -1191,6 +1201,7 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
 
   const value: SocketContextValue = {
     isConnected,
+    connectionPhase,
     playerId,
     username,
     roomData,

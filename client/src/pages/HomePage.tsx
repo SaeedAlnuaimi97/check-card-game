@@ -10,6 +10,7 @@ import {
   ModalContent,
   ModalHeader,
   ModalOverlay,
+  Spinner,
   Table,
   Tbody,
   Td,
@@ -90,7 +91,7 @@ export const HomePage: FC = () => {
   const [isCreating, setIsCreating] = useState(false);
   const [isJoining, setIsJoining] = useState(false);
 
-  const { isConnected, createRoom, joinRoom } = useSocket();
+  const { isConnected, connectionPhase, createRoom, joinRoom } = useSocket();
   const navigate = useNavigate();
   const toast = useToast();
   const {
@@ -168,15 +169,23 @@ export const HomePage: FC = () => {
       {/* Connection status row */}
       <Box display="flex" flexDirection="column" alignItems="center" gap="4px" mb="20px">
         <HStack spacing="6px" justify="center">
-          <Box
-            w="8px"
-            h="8px"
-            borderRadius="full"
-            bg={isConnected ? '#4ecb4e' : '#cf5e5e'}
-            flexShrink={0}
-          />
+          {isConnected ? (
+            <Box w="8px" h="8px" borderRadius="full" bg="#4ecb4e" flexShrink={0} />
+          ) : (
+            <Spinner
+              w="10px"
+              h="10px"
+              thickness="1.5px"
+              speed="0.8s"
+              color="#888"
+              flexShrink={0}
+              emptyColor="#2a2a3a"
+            />
+          )}
           <Text fontSize="12px" color="#888">
-            {isConnected ? 'Connected' : 'Connecting...'}
+            {connectionPhase === 'connecting' && 'Connecting to server…'}
+            {connectionPhase === 'reconnecting' && 'Restoring your session…'}
+            {connectionPhase === 'ready' && 'Connected'}
           </Text>
         </HStack>
 

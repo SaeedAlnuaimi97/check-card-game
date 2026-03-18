@@ -650,11 +650,11 @@ export const RoomLobby: FC = () => {
                 </HStack>
                 <HStack spacing="8px" align="center">
                   <Text fontSize="10px" color="#333" minW="20px" textAlign="right">
-                    50
+                    30
                   </Text>
                   <Box flex={1}>
                     <Slider
-                      min={50}
+                      min={30}
                       max={150}
                       step={5}
                       value={targetScore}

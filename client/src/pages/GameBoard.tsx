@@ -1982,19 +1982,47 @@ export const GameBoard: FC = () => {
               {opponents.length}
             </Box>
           </Box>
-          {opponents.map((opp) => (
-            <MobileOpponentRow
-              key={opp.playerId}
-              player={opp}
-              playerIndex={playerIndexMap.get(opp.playerId) ?? 0}
-              isCurrentTurn={
-                gameState.players[gameState.currentTurnIndex]?.playerId === opp.playerId
-              }
-              targetScore={gameState.targetScore}
-              debugRevealed={debugRevealed}
-              modifiedSlots={modifiedSlots}
-            />
-          ))}
+          {opponents.length >= 6 ? (
+            /* ── 2-column grid layout for 6+ opponents ── */
+            <Box display="grid" gridTemplateColumns="1fr 1fr">
+              {opponents.map((opp, idx) => {
+                const isLastOdd = idx === opponents.length - 1 && opponents.length % 2 !== 0;
+                const isLeftColumn = idx % 2 === 0 && !isLastOdd;
+                return (
+                  <Box
+                    key={opp.playerId}
+                    gridColumn={isLastOdd ? '1 / -1' : undefined}
+                    borderRight={isLeftColumn ? '0.5px solid #1e1e26' : undefined}
+                  >
+                    <MobileOpponentRow
+                      player={opp}
+                      playerIndex={playerIndexMap.get(opp.playerId) ?? 0}
+                      isCurrentTurn={
+                        gameState.players[gameState.currentTurnIndex]?.playerId === opp.playerId
+                      }
+                      targetScore={gameState.targetScore}
+                      debugRevealed={debugRevealed}
+                      modifiedSlots={modifiedSlots}
+                    />
+                  </Box>
+                );
+              })}
+            </Box>
+          ) : (
+            opponents.map((opp) => (
+              <MobileOpponentRow
+                key={opp.playerId}
+                player={opp}
+                playerIndex={playerIndexMap.get(opp.playerId) ?? 0}
+                isCurrentTurn={
+                  gameState.players[gameState.currentTurnIndex]?.playerId === opp.playerId
+                }
+                targetScore={gameState.targetScore}
+                debugRevealed={debugRevealed}
+                modifiedSlots={modifiedSlots}
+              />
+            ))
+          )}
           {/* Float emoji zone — reactions animate up over the opponent area */}
           <Box position="absolute" inset={0} pointerEvents="none" overflow="visible" zIndex={20}>
             {floatEmojis.map((f) => (
@@ -2694,10 +2722,10 @@ export const GameBoard: FC = () => {
       {/* ── DESKTOP: OVAL 3-COL GRID ── */}
       {isDesktop &&
         (() => {
-          const topOpponents = opponents.slice(0, Math.min(3, opponents.length));
-          const sideOpponents = opponents.slice(Math.min(3, opponents.length));
-          const leftOpp = sideOpponents[0] ?? null;
-          const rightOpp = sideOpponents[1] ?? null;
+          const leftOpponents = opponents.slice(0, Math.min(3, opponents.length));
+          const remaining = opponents.slice(leftOpponents.length);
+          const topOpponents = remaining.slice(0, Math.min(3, remaining.length));
+          const rightOpponents = remaining.slice(topOpponents.length).slice(0, 3);
           const dangerThreshold = gameState.targetScore - 15;
           return (
             <Box
@@ -2747,7 +2775,7 @@ export const GameBoard: FC = () => {
                 overflowX="clip"
                 overflowY="visible"
               >
-                {/* dt-top: top opponents */}
+                {/* dt-top: top opponents (up to 3) */}
                 <Box
                   gridColumn="1 / -1"
                   gridRow="1"
@@ -2771,27 +2799,30 @@ export const GameBoard: FC = () => {
                   ))}
                 </Box>
 
-                {/* dt-left */}
+                {/* dt-left: up to 3 opponents stacked */}
                 <Box
                   gridColumn="1"
                   gridRow="2"
                   display="flex"
-                  alignItems="center"
-                  justifyContent="flex-end"
+                  flexDirection="column"
+                  alignItems="stretch"
+                  justifyContent="center"
+                  gap="6px"
                   padding="10px 8px 10px 12px"
                 >
-                  {leftOpp && (
+                  {leftOpponents.map((opp) => (
                     <DesktopSideOpponent
-                      player={leftOpp}
-                      playerIndex={playerIndexMap.get(leftOpp.playerId) ?? 0}
+                      key={opp.playerId}
+                      player={opp}
+                      playerIndex={playerIndexMap.get(opp.playerId) ?? 0}
                       isCurrentTurn={
-                        gameState.players[gameState.currentTurnIndex]?.playerId === leftOpp.playerId
+                        gameState.players[gameState.currentTurnIndex]?.playerId === opp.playerId
                       }
                       targetScore={gameState.targetScore}
                       debugRevealed={debugRevealed}
                       modifiedSlots={modifiedSlots}
                     />
-                  )}
+                  ))}
                 </Box>
 
                 {/* dt-center: table surface */}
@@ -3144,28 +3175,30 @@ export const GameBoard: FC = () => {
                   </Box>
                 </Box>
 
-                {/* dt-right */}
+                {/* dt-right: up to 3 opponents stacked */}
                 <Box
                   gridColumn="3"
                   gridRow="2"
                   display="flex"
-                  alignItems="center"
-                  justifyContent="flex-start"
+                  flexDirection="column"
+                  alignItems="stretch"
+                  justifyContent="center"
+                  gap="6px"
                   padding="10px 12px 10px 8px"
                 >
-                  {rightOpp && (
+                  {rightOpponents.map((opp) => (
                     <DesktopSideOpponent
-                      player={rightOpp}
-                      playerIndex={playerIndexMap.get(rightOpp.playerId) ?? 0}
+                      key={opp.playerId}
+                      player={opp}
+                      playerIndex={playerIndexMap.get(opp.playerId) ?? 0}
                       isCurrentTurn={
-                        gameState.players[gameState.currentTurnIndex]?.playerId ===
-                        rightOpp.playerId
+                        gameState.players[gameState.currentTurnIndex]?.playerId === opp.playerId
                       }
                       targetScore={gameState.targetScore}
                       debugRevealed={debugRevealed}
                       modifiedSlots={modifiedSlots}
                     />
-                  )}
+                  ))}
                 </Box>
 
                 {/* dt-bottom: hand zone */}
@@ -4935,13 +4968,16 @@ export const GameBoard: FC = () => {
         <ModalContent
           bg="#0f0f16"
           color="white"
-          maxH={{ base: '100vh', md: '92vh' }}
+          h={{ base: '100dvh', md: 'auto' }}
+          maxH={{ base: '100dvh', md: '92vh' }}
           overflow="hidden"
           display="flex"
           flexDirection="column"
           borderRadius={{ base: 0, md: '16px' }}
           border="1px solid #1e1e2a"
           m={{ base: 0, md: 4 }}
+          paddingTop={{ base: 'env(safe-area-inset-top)', md: '0' }}
+          paddingBottom={{ base: 'env(safe-area-inset-bottom)', md: '0' }}
         >
           {/* top bar */}
           <Box
@@ -5413,44 +5449,29 @@ export const GameBoard: FC = () => {
                   </Box>
                 );
               })()}
+            </VStack>
+          </Box>
 
-              {/* ── action buttons ── */}
-              {roundEndData?.nextRoundStarting ? (
-                <Box>
-                  {roundCountdown != null && roundCountdown > 0 ? (
-                    <VStack spacing="8px">
-                      <Text fontSize="13px" fontWeight="700" color="#7a7aee" textAlign="center">
-                        Next round in {roundCountdown}s…
-                      </Text>
-                      {roomData?.host === playerId && (
-                        <Box
-                          as="button"
-                          w="100%"
-                          py="11px"
-                          borderRadius="10px"
-                          fontSize="13px"
-                          fontWeight="700"
-                          cursor="pointer"
-                          textAlign="center"
-                          bg="transparent"
-                          border="1px solid #5a2a2a"
-                          color="#cf7070"
-                          onClick={() => endGame()}
-                          _hover={{ bg: '#1a0808' }}
-                        >
-                          End Game
-                        </Box>
-                      )}
-                    </VStack>
-                  ) : roundCountdown === 0 ? (
-                    <Text fontSize="13px" fontWeight="700" color="#5ecf5e" textAlign="center">
-                      Starting…
+          {/* sticky footer — always visible above safe area */}
+          <Box
+            px="12px"
+            pt="10px"
+            pb="12px"
+            bg="#0f0f16"
+            borderTop="0.5px solid #1e1e2a"
+            flexShrink={0}
+          >
+            {roundEndData?.nextRoundStarting ? (
+              <>
+                {roundCountdown != null && roundCountdown > 0 ? (
+                  <VStack spacing="8px">
+                    <Text fontSize="13px" fontWeight="700" color="#7a7aee" textAlign="center">
+                      Next round in {roundCountdown}s…
                     </Text>
-                  ) : roomData?.host === playerId ? (
-                    <Flex gap="8px">
+                    {roomData?.host === playerId && (
                       <Box
                         as="button"
-                        flex={1}
+                        w="100%"
                         py="11px"
                         borderRadius="10px"
                         fontSize="13px"
@@ -5465,35 +5486,59 @@ export const GameBoard: FC = () => {
                       >
                         End Game
                       </Box>
-                      <Box
-                        as="button"
-                        flex={1}
-                        py="11px"
-                        borderRadius="10px"
-                        fontSize="13px"
-                        fontWeight="700"
-                        cursor="pointer"
-                        textAlign="center"
-                        bg="#4a8a5a"
-                        color="#e8f5ec"
-                        onClick={() => startNextRound()}
-                        _hover={{ bg: '#3a7a4a' }}
-                      >
-                        Start Round {(roundEndData?.roundNumber ?? 0) + 1} →
-                      </Box>
-                    </Flex>
-                  ) : (
-                    <Text fontSize="12px" color="#555" textAlign="center">
-                      Waiting for host to start next round…
-                    </Text>
-                  )}
-                </Box>
-              ) : (
-                <Text fontSize="12px" color="#555" textAlign="center">
-                  Game over!
-                </Text>
-              )}
-            </VStack>
+                    )}
+                  </VStack>
+                ) : roundCountdown === 0 ? (
+                  <Text fontSize="13px" fontWeight="700" color="#5ecf5e" textAlign="center">
+                    Starting…
+                  </Text>
+                ) : roomData?.host === playerId ? (
+                  <Flex gap="8px">
+                    <Box
+                      as="button"
+                      flex={1}
+                      py="11px"
+                      borderRadius="10px"
+                      fontSize="13px"
+                      fontWeight="700"
+                      cursor="pointer"
+                      textAlign="center"
+                      bg="transparent"
+                      border="1px solid #5a2a2a"
+                      color="#cf7070"
+                      onClick={() => endGame()}
+                      _hover={{ bg: '#1a0808' }}
+                    >
+                      End Game
+                    </Box>
+                    <Box
+                      as="button"
+                      flex={1}
+                      py="11px"
+                      borderRadius="10px"
+                      fontSize="13px"
+                      fontWeight="700"
+                      cursor="pointer"
+                      textAlign="center"
+                      bg="#4a8a5a"
+                      color="#e8f5ec"
+                      onClick={() => startNextRound()}
+                      _hover={{ bg: '#3a7a4a' }}
+                    >
+                      Start Round {(roundEndData?.roundNumber ?? 0) + 1} →
+                    </Box>
+                  </Flex>
+                ) : (
+                  <Text fontSize="12px" color="#555" textAlign="center">
+                    Waiting for host to start next round…
+                  </Text>
+                )}
+              </>
+            ) : (
+              <Text fontSize="12px" color="#555" textAlign="center">
+                Game over!
+              </Text>
+            )}
           </Box>
         </ModalContent>
       </Modal>
