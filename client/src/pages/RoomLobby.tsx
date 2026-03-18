@@ -18,7 +18,7 @@ import { CheckOutlined } from '@ant-design/icons';
 import { useSocket } from '../context/SocketContext';
 
 const MIN_PLAYERS = 2;
-const MAX_PLAYERS = 6;
+const MAX_PLAYERS = 10;
 
 // ────────────────────────────────────────────────────────────
 // Shared badge component matching the mockup exactly
