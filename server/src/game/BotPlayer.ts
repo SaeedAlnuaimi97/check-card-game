@@ -79,6 +79,43 @@ function getHighestValueSlot(gameState: GameState, playerId: string): SlotLabel 
   return player.hand.reduce((best, h) => (h.card.value > best.card.value ? h : best)).slot;
 }
 
+/**
+ * Returns the total known hand value for a bot player.
+ * Bots have full knowledge of their own hand (server-side).
+ */
+function getBotHandValue(gameState: GameState, playerId: string): number {
+  const player = gameState.players.find((p) => p.playerId === playerId);
+  if (!player) return Infinity;
+  return player.hand.reduce((sum, h) => sum + getCardValue(h.card), 0);
+}
+
+// ============================================================
+// Check Decision
+// ============================================================
+
+/**
+ * Decides whether a bot should call CHECK at the start of their turn.
+ *
+ * Rules:
+ * - Only the expert bot calls check (easy bot never does).
+ * - Only when no one else has already called check.
+ * - Only when the bot's total hand value is between 2 and 6 (inclusive).
+ */
+export function shouldBotCallCheck(
+  gameState: GameState,
+  botPlayerId: string,
+  difficulty: BotDifficulty,
+): boolean {
+  // Easy bots never call check
+  if (difficulty === 'easy') return false;
+
+  // Someone already called check — can't call again
+  if (gameState.checkCalledBy !== null) return false;
+
+  const handValue = getBotHandValue(gameState, botPlayerId);
+  return handValue >= 2 && handValue <= 6;
+}
+
 // ============================================================
 // Easy Bot: Random valid actions
 // ============================================================

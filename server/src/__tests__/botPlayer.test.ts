@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { chooseBotAction, chooseBotSpecialEffectResponse } from '../game/BotPlayer';
+import {
+  chooseBotAction,
+  chooseBotSpecialEffectResponse,
+  shouldBotCallCheck,
+} from '../game/BotPlayer';
 import type { Card, GameState, PlayerState } from '../types/game.types';
 
 // ============================================================
@@ -315,5 +319,94 @@ describe('chooseBotSpecialEffectResponse — redKing', () => {
     const resp = chooseBotSpecialEffectResponse(gs, 'bot1', 'expert', 'redKing', drawnCards);
     expect(resp.keepIndices).toEqual([]);
     expect(resp.discardSlots).toEqual([]);
+  });
+});
+
+// ============================================================
+// shouldBotCallCheck
+// ============================================================
+
+describe('shouldBotCallCheck', () => {
+  it('easy bot never calls check', () => {
+    const bot = makePlayer('bot1', [{ slot: 'A', card: makeCard('c1', '2', '♠', 2) }], {
+      isBot: true,
+      botDifficulty: 'easy',
+    });
+    const gs = createTestGameState({ players: [bot], currentTurnIndex: 0 });
+    expect(shouldBotCallCheck(gs, 'bot1', 'easy')).toBe(false);
+  });
+
+  it('expert bot calls check when hand value is exactly 2', () => {
+    const bot = makePlayer(
+      'bot1',
+      [
+        { slot: 'A', card: makeCard('c1', 'A', '♠', 1) },
+        { slot: 'B', card: makeCard('c2', 'A', '♥', 1) },
+      ],
+      { isBot: true, botDifficulty: 'expert' },
+    );
+    const gs = createTestGameState({ players: [bot], currentTurnIndex: 0 });
+    expect(shouldBotCallCheck(gs, 'bot1', 'expert')).toBe(true);
+  });
+
+  it('expert bot calls check when hand value is 5', () => {
+    const bot = makePlayer(
+      'bot1',
+      [
+        { slot: 'A', card: makeCard('c1', '3', '♠', 3) },
+        { slot: 'B', card: makeCard('c2', '2', '♠', 2) },
+      ],
+      { isBot: true, botDifficulty: 'expert' },
+    );
+    const gs = createTestGameState({ players: [bot], currentTurnIndex: 0 });
+    expect(shouldBotCallCheck(gs, 'bot1', 'expert')).toBe(true);
+  });
+
+  it('expert bot calls check when hand value is exactly 6', () => {
+    const bot = makePlayer(
+      'bot1',
+      [
+        { slot: 'A', card: makeCard('c1', '3', '♠', 3) },
+        { slot: 'B', card: makeCard('c2', '3', '♠', 3) },
+      ],
+      { isBot: true, botDifficulty: 'expert' },
+    );
+    const gs = createTestGameState({ players: [bot], currentTurnIndex: 0 });
+    expect(shouldBotCallCheck(gs, 'bot1', 'expert')).toBe(true);
+  });
+
+  it('expert bot does not call check when hand value is 7', () => {
+    const bot = makePlayer(
+      'bot1',
+      [
+        { slot: 'A', card: makeCard('c1', '4', '♠', 4) },
+        { slot: 'B', card: makeCard('c2', '3', '♠', 3) },
+      ],
+      { isBot: true, botDifficulty: 'expert' },
+    );
+    const gs = createTestGameState({ players: [bot], currentTurnIndex: 0 });
+    expect(shouldBotCallCheck(gs, 'bot1', 'expert')).toBe(false);
+  });
+
+  it('expert bot does not call check when hand value is 1 (below range)', () => {
+    const bot = makePlayer('bot1', [{ slot: 'A', card: makeCard('c1', 'A', '♠', 1) }], {
+      isBot: true,
+      botDifficulty: 'expert',
+    });
+    const gs = createTestGameState({ players: [bot], currentTurnIndex: 0 });
+    expect(shouldBotCallCheck(gs, 'bot1', 'expert')).toBe(false);
+  });
+
+  it('expert bot does not call check if check already called', () => {
+    const bot = makePlayer('bot1', [{ slot: 'A', card: makeCard('c1', '3', '♠', 3) }], {
+      isBot: true,
+      botDifficulty: 'expert',
+    });
+    const gs = createTestGameState({
+      players: [bot],
+      currentTurnIndex: 0,
+      checkCalledBy: 'someOtherPlayer',
+    });
+    expect(shouldBotCallCheck(gs, 'bot1', 'expert')).toBe(false);
   });
 });

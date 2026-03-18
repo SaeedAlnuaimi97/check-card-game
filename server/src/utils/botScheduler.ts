@@ -1,7 +1,11 @@
 import { Server as SocketIOServer } from 'socket.io';
 import { RoomModel } from '../models/Room';
 import { getRoomMutex } from '../utils/roomLock';
-import { chooseBotAction, chooseBotSpecialEffectResponse } from '../game/BotPlayer';
+import {
+  chooseBotAction,
+  chooseBotSpecialEffectResponse,
+  shouldBotCallCheck,
+} from '../game/BotPlayer';
 import {
   handleDrawFromDeck,
   handleTakeDiscard,
@@ -17,6 +21,7 @@ import {
   isRoundOver,
   getCurrentTurnPlayerId,
   getAvailableActions,
+  callCheck,
 } from '../game/TurnManager';
 import { computeRoundResult, computeGameEndResult } from '../game/Scoring';
 import { sanitizeGameState } from '../game/GameSetup';
@@ -252,6 +257,31 @@ async function executeBotTurn(
     if (currentPlayerId !== botPlayerId) return;
 
     console.log(`Room ${roomCode}: Bot ${botPlayerId} (${difficulty}) executing turn`);
+
+    // Check if the bot should call CHECK before taking their action (F-059)
+    if (shouldBotCallCheck(gameState, botPlayerId, difficulty)) {
+      const checkResult = callCheck(gameState, botPlayerId);
+      if (checkResult.success) {
+        // Save check state
+        room.gameState = gameState;
+        room.markModified('gameState');
+        await room.save();
+
+        // Broadcast CHECK notification to all players
+        const botPlayer = gameState.players.find((p) => p.playerId === botPlayerId);
+        for (const player of gameState.players) {
+          const sid = getSocketByPlayer(player.playerId);
+          if (sid) {
+            io.to(sid).emit('checkCalled', {
+              playerId: botPlayerId,
+              username: botPlayer?.username ?? 'Bot',
+            });
+          }
+        }
+
+        console.log(`Room ${roomCode}: Bot ${botPlayerId} called CHECK (hand value qualifies)`);
+      }
+    }
 
     // Choose action
     const action = chooseBotAction(gameState, botPlayerId, difficulty);

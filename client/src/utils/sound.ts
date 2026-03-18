@@ -41,13 +41,16 @@ export function setSoundEnabled(enabled: boolean): void {
 
 /**
  * Play a cloned audio node at given volume.
+ * Uses `new Audio(src)` instead of `cloneNode()` for reliable cross-browser src
+ * inheritance, and calls `load()` before `play()` to avoid buffering delays.
  * Non-blocking — errors are silently ignored (e.g. browser autoplay policy).
  * Respects the sound toggle.
  */
 function playClone(source: HTMLAudioElement, volume = 0.5): void {
   if (!isSoundEnabled()) return;
-  const clone = source.cloneNode() as HTMLAudioElement;
+  const clone = new Audio(source.src);
   clone.volume = volume;
+  clone.load();
   clone.play().catch(() => {
     // Autoplay may be blocked until user interacts — ignore
   });
