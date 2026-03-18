@@ -1158,6 +1158,7 @@ export const GameBoard: FC = () => {
 
   // Red Queen state
   const [queenPeekedCard, setQueenPeekedCard] = useState<CardType | null>(null);
+  const [queenSelectedSlot, setQueenSelectedSlot] = useState<string | null>(null);
   const [queenLoading, setQueenLoading] = useState(false);
   const [queenPeekTimer, setQueenPeekTimer] = useState(false);
 
@@ -1211,6 +1212,7 @@ export const GameBoard: FC = () => {
   const handleQueenPeek = useCallback(
     async (slot: string) => {
       setQueenLoading(true);
+      setQueenSelectedSlot(slot);
       const result = await redQueenPeek(slot);
       setQueenLoading(false);
       if (result.success && result.card) {
@@ -1220,8 +1222,10 @@ export const GameBoard: FC = () => {
         setTimeout(() => {
           setQueenPeekTimer(false);
           setQueenPeekedCard(null);
+          setQueenSelectedSlot(null);
         }, 3000);
       } else if (result.error) {
+        setQueenSelectedSlot(null);
         toast({ title: result.error, status: 'error', duration: 2000, position: 'top' });
       }
     },
@@ -4049,12 +4053,12 @@ export const GameBoard: FC = () => {
               py="10px"
               h="auto"
               borderRadius="9px"
-              bg="transparent"
-              border="0.5px solid #2a2a3a"
-              color="#555"
+              bg="#1e0e0e"
+              border="1px solid #7a2a2a"
+              color="#e07070"
               fontSize="13px"
-              fontWeight="500"
-              _hover={{ bg: '#16162a' }}
+              fontWeight="600"
+              _hover={{ bg: '#2a1010', borderColor: '#c0392b', color: '#ff8080' }}
               onClick={() => handleJackSubmit(true)}
               isLoading={jackLoading}
             >
@@ -4136,73 +4140,119 @@ export const GameBoard: FC = () => {
           </Box>
 
           {queenPeekedCard ? (
-            /* Revealed state */
-            <Box
-              mx="16px"
-              mt="10px"
-              p="10px 12px"
-              bg="#14200f"
-              border="0.5px solid #2a4020"
-              borderRadius="8px"
-              display="flex"
-              alignItems="center"
-              gap="10px"
-            >
-              {/* Large face-up card */}
-              <Box
-                w="52px"
-                h="72px"
-                borderRadius="8px"
-                bg="white"
-                border="2px solid #c9a227"
-                display="flex"
-                flexDirection="column"
-                alignItems="center"
-                justifyContent="center"
-                position="relative"
-                fontWeight="700"
-                fontSize="20px"
-                flexShrink={0}
-                color={queenPeekedCard.isRed ? '#c0392b' : '#222'}
+            /* Revealed state: show the peeked card + all hand slots so the user
+               can see exactly which slot was looked at */
+            <Box px="16px" pt="10px">
+              {/* Full hand overview — all slots visible, selected one highlighted */}
+              <Text
+                fontSize="10px"
+                color="#444"
+                textTransform="uppercase"
+                letterSpacing="0.07em"
+                fontWeight="500"
+                mb="8px"
               >
-                <Box
-                  position="absolute"
-                  top="3px"
-                  left="4px"
-                  fontSize="10px"
-                  fontWeight="700"
-                  lineHeight={1.2}
-                  color={queenPeekedCard.isRed ? '#c0392b' : '#222'}
-                >
-                  {queenPeekedCard.rank}
-                  <br />
-                  {queenPeekedCard.suit}
-                </Box>
-                <Text>{queenPeekedCard.suit}</Text>
-                <Box
-                  position="absolute"
-                  bottom="3px"
-                  right="4px"
-                  fontSize="10px"
-                  fontWeight="700"
-                  transform="rotate(180deg)"
-                  color={queenPeekedCard.isRed ? '#c0392b' : '#222'}
-                >
-                  {queenPeekedCard.rank}
-                  <br />
-                  {queenPeekedCard.suit}
-                </Box>
+                your hand
+              </Text>
+              <Box display="flex" gap="8px" mb="10px">
+                {myPlayer.hand.map((h) => {
+                  const isRevealed = h.slot === queenSelectedSlot;
+                  return (
+                    <Box
+                      key={h.slot}
+                      display="flex"
+                      flexDirection="column"
+                      alignItems="center"
+                      gap="4px"
+                    >
+                      {isRevealed ? (
+                        /* Show the actual face-up card for the peeked slot */
+                        <Box
+                          w="46px"
+                          h="64px"
+                          borderRadius="7px"
+                          bg="white"
+                          border="2px solid #c9a227"
+                          display="flex"
+                          flexDirection="column"
+                          alignItems="center"
+                          justifyContent="center"
+                          position="relative"
+                          fontWeight="700"
+                          fontSize="16px"
+                          flexShrink={0}
+                          color={queenPeekedCard.isRed ? '#c0392b' : '#222'}
+                          boxShadow="0 0 0 2px #c9a22740"
+                        >
+                          <Box
+                            position="absolute"
+                            top="2px"
+                            left="3px"
+                            fontSize="9px"
+                            fontWeight="700"
+                            lineHeight={1.2}
+                            color={queenPeekedCard.isRed ? '#c0392b' : '#222'}
+                          >
+                            {queenPeekedCard.rank}
+                            <br />
+                            {queenPeekedCard.suit}
+                          </Box>
+                          <Text fontSize="14px">{queenPeekedCard.suit}</Text>
+                          <Box
+                            position="absolute"
+                            bottom="2px"
+                            right="3px"
+                            fontSize="9px"
+                            fontWeight="700"
+                            transform="rotate(180deg)"
+                            color={queenPeekedCard.isRed ? '#c0392b' : '#222'}
+                          >
+                            {queenPeekedCard.rank}
+                            <br />
+                            {queenPeekedCard.suit}
+                          </Box>
+                        </Box>
+                      ) : (
+                        /* Other slots remain face-down */
+                        <Box
+                          w="46px"
+                          h="64px"
+                          borderRadius="7px"
+                          bg="#22223a"
+                          border="1.5px solid #3a3a5a"
+                          opacity={0.5}
+                        />
+                      )}
+                      <Text
+                        fontSize="10px"
+                        color={isRevealed ? '#c9a227' : '#555'}
+                        fontWeight={isRevealed ? '600' : '400'}
+                      >
+                        {h.slot}
+                      </Text>
+                    </Box>
+                  );
+                })}
               </Box>
-              <Box display="flex" flexDirection="column" gap="4px">
+              {/* Card detail info */}
+              <Box
+                p="8px 12px"
+                bg="#14200f"
+                border="0.5px solid #2a4020"
+                borderRadius="8px"
+                display="flex"
+                alignItems="center"
+                gap="8px"
+              >
                 <Text fontSize="12px" color="#5ecf5e" fontWeight="500">
-                  {queenPeekedCard.rank}
-                  {queenPeekedCard.suit} revealed
+                  Slot {queenSelectedSlot} — {queenPeekedCard.rank}
+                  {queenPeekedCard.suit}
                 </Text>
                 <Text fontSize="11px" color="#888">
-                  Value: {queenPeekedCard.value} point{queenPeekedCard.value !== 1 ? 's' : ''}
+                  · {queenPeekedCard.value} pt{queenPeekedCard.value !== 1 ? 's' : ''}
                 </Text>
-                <Text fontSize="10px" color="#3a5a3a" lineHeight={1.4}>
-                  Only you can see this. The card stays in its slot. It is now marked as known.
+                <Text fontSize="10px" color="#3a5a3a" ml="auto">
+                  Only you can see this
                 </Text>
               </Box>
             </Box>
@@ -4294,6 +4344,7 @@ export const GameBoard: FC = () => {
                 if (queenPeekedCard) {
                   setQueenPeekTimer(false);
                   setQueenPeekedCard(null);
+                  setQueenSelectedSlot(null);
                 }
               }}
             >
