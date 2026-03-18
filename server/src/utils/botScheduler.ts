@@ -245,6 +245,7 @@ async function executeBotTurn(
   difficulty: BotDifficulty,
 ): Promise<void> {
   const release = await getRoomMutex(roomCode).acquire();
+  let released = false;
   try {
     const room = await RoomModel.findOne({ roomCode });
     if (!room || !room.gameState) return;
@@ -362,6 +363,7 @@ async function executeBotTurn(
       room.markModified('gameState');
       await room.save();
       // Release lock before sleeping
+      released = true;
       release();
 
       await new Promise((resolve) => setTimeout(resolve, BOT_EFFECT_DELAY_MS));
@@ -420,11 +422,9 @@ async function executeBotTurn(
   } catch (err) {
     console.error(`Room ${roomCode}: Bot turn execution error:`, err);
   } finally {
-    // Only call release if we haven't already released it in the drawDeck branch
-    try {
+    // Only release if we haven't already done so in the drawDeck branch
+    if (!released) {
       release();
-    } catch {
-      /* already released */
     }
   }
 }

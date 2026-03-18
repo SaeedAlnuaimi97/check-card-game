@@ -181,7 +181,8 @@ export function createShuffledDeck(): Card[] {
 // ============================================================
 
 /**
- * Creates a compact 20-card debug deck that:
+ * Creates a compact debug deck that:
+ * - Supports up to 10 players (needs 41+ cards: 4 per player + 1 discard)
  * - Covers every card rank at least once
  * - Includes ONLY red face cards (J♥, J♦, Q♥, Q♦, K♥, K♦) as action cards
  * - Contains no black Jacks, Queens, or Kings
@@ -214,6 +215,28 @@ export function createDebugDeck(): Card[] {
     ['♦', 'Q'],
     ['♥', 'K'],
     ['♦', 'K'],
+    // Additional filler cards to support up to 10 players (41+ cards total)
+    ['♠', 'A'],
+    ['♣', '2'],
+    ['♥', '3'],
+    ['♦', '4'],
+    ['♠', '5'],
+    ['♣', '6'],
+    ['♥', '7'],
+    ['♦', '8'],
+    ['♠', '9'],
+    ['♣', '3'],
+    ['♥', '4'],
+    ['♦', '7'],
+    ['♠', '8'],
+    ['♣', '9'],
+    ['♥', '6'],
+    ['♦', '3'],
+    ['♠', '2'],
+    ['♣', '5'],
+    ['♥', '8'],
+    ['♦', '9'],
+    ['♠', '4'],
   ];
 
   let cardIndex = 0;

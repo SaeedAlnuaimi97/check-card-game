@@ -251,9 +251,9 @@ describe('roomHandlers', () => {
       );
     });
 
-    it('rejects when room is full (6 players)', async () => {
-      // Add 5 more players (total 6)
-      for (let i = 0; i < 5; i++) {
+    it('rejects when room is full (10 players)', async () => {
+      // Add 9 more players (total 10, which is MAX_PLAYERS)
+      for (let i = 0; i < 9; i++) {
         rooms[roomCode].players.push({ id: `player-${i}`, username: `P${i}` });
       }
 

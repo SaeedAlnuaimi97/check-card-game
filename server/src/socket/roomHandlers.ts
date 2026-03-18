@@ -26,6 +26,7 @@ import {
 } from './playerMapping';
 import { emitYourTurn, broadcastGameState } from './gameHandlers';
 import { scheduleBotTurnIfNeeded } from '../utils/botScheduler';
+import { computeGameEndResult } from '../game/Scoring';
 import type { GameState, BotDifficulty, ClientGameState, PeekedCard } from '../types/game.types';
 
 // ============================================================
@@ -33,13 +34,13 @@ import type { GameState, BotDifficulty, ClientGameState, PeekedCard } from '../t
 // ============================================================
 
 const MIN_PLAYERS = 2;
-const MAX_PLAYERS = 6;
+const MAX_PLAYERS = 10;
 
 /** Grace period for lobby disconnects (page refresh, tab switch) */
 const LOBBY_GRACE_MS = 60_000;
 
 /** Maximum number of rooms that can exist simultaneously */
-const MAX_ROOMS = 5;
+const MAX_ROOMS = parseInt(process.env.MAX_ROOMS ?? '5', 10);
 
 // ============================================================
 // Bot Names — European-inspired random names
@@ -84,7 +85,7 @@ const BOT_NAMES = [
 function getRandomBotName(existingNames: string[]): string {
   const available = BOT_NAMES.filter((name) => !existingNames.includes(name));
   if (available.length === 0) {
-    // Fallback if all names are taken (very unlikely with 30 names and max 6 players)
+    // Fallback if all names are taken (very unlikely with 30 names and max 10 players)
     return `Bot ${Math.floor(Math.random() * 1000)}`;
   }
   return available[Math.floor(Math.random() * available.length)];
@@ -681,6 +682,23 @@ export function registerRoomHandlers(io: SocketIOServer, socket: Socket): void {
               gameEnded: result.gameEnded,
             });
 
+            if (result.gameEnded) {
+              // Compute and emit gameEnded so remaining players see the end screen
+              const allHands = gameState.players.map((player) => ({
+                playerId: player.playerId,
+                username: player.username,
+                cards: player.hand.map((h) => h.card),
+                slots: player.hand.map((h) => h.slot),
+                handSum: player.hand.reduce((sum, h) => sum + h.card.value, 0),
+              }));
+              const gameEndResult = computeGameEndResult(gameState, allHands);
+              for (const player of gameState.players) {
+                const sid = getSocketByPlayer(player.playerId);
+                if (!sid) continue;
+                io.to(sid).emit('gameEnded', gameEndResult);
+              }
+            }
+
             // Broadcast updated game state to remaining players
             for (const player of gameState.players) {
               const sid = getSocketByPlayer(player.playerId);
@@ -1202,6 +1220,24 @@ async function handlePlayerLeave(
         username: result.username,
         gameEnded: result.gameEnded,
       });
+
+      if (result.gameEnded) {
+        // Compute and emit gameEnded so remaining players see the end screen
+        const allHands = gameState.players.map((player) => ({
+          playerId: player.playerId,
+          username: player.username,
+          cards: player.hand.map((h) => h.card),
+          slots: player.hand.map((h) => h.slot),
+          handSum: player.hand.reduce((sum, h) => sum + h.card.value, 0),
+        }));
+        const gameEndResult = computeGameEndResult(gameState, allHands);
+        for (const player of gameState.players) {
+          const sid = getSocketByPlayer(player.playerId);
+          if (sid) {
+            io.to(sid).emit('gameEnded', gameEndResult);
+          }
+        }
+      }
 
       // Broadcast updated game state to remaining players
       for (const player of gameState.players) {

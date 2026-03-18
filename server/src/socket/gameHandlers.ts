@@ -215,8 +215,9 @@ export function emitYourTurn(io: SocketIOServer, roomCode: string, gameState: Ga
   // Bot turns are managed by scheduleBotTurnIfNeeded / emitYourTurnFromBot
   // which has its own timer with handleBotTurnTimeout.
   if (!currentPlayer?.isBot) {
+    const expectedPlayerId = turnPlayerId;
     startTurnTimer(roomCode, (rc) => {
-      handleTurnTimeout(io, rc);
+      handleTurnTimeout(io, rc, expectedPlayerId);
     });
   }
 }
@@ -228,8 +229,14 @@ export function emitYourTurn(io: SocketIOServer, roomCode: string, gameState: Ga
 /**
  * Called when the 30-second turn timer fires.
  * Auto-advances the turn (the player forfeits their action).
+ * The expectedPlayerId guard prevents stale timers from advancing the wrong player's turn
+ * when a player leaves or the turn advances during the async window.
  */
-async function handleTurnTimeout(io: SocketIOServer, roomCode: string): Promise<void> {
+async function handleTurnTimeout(
+  io: SocketIOServer,
+  roomCode: string,
+  expectedPlayerId: string,
+): Promise<void> {
   const release = await getRoomMutex(roomCode).acquire();
   try {
     const room = await RoomModel.findOne({ roomCode });
@@ -240,6 +247,10 @@ async function handleTurnTimeout(io: SocketIOServer, roomCode: string): Promise<
 
     const timedOutPlayer = gameState.players[gameState.currentTurnIndex];
     if (!timedOutPlayer) return;
+
+    // Guard: if the turn has moved on (player left or turn already advanced),
+    // this timer is stale — do nothing.
+    if (timedOutPlayer.playerId !== expectedPlayerId) return;
 
     // If the player has a pending drawn card, discard it
     if (gameState.drawnCard && gameState.drawnByPlayerId === timedOutPlayer.playerId) {
@@ -356,7 +367,13 @@ async function advanceTurnAndCheckRoundEnd(
     }
 
     console.log(
-      `Room ${roomCode}: GAME ENDED — Winner: ${gameEndResult.winner.username} (${gameEndResult.winner.score}), Loser: ${gameEndResult.loser.username} (${gameEndResult.loser.score})`,
+      `Room ${roomCode}: GAME ENDED — Winners: ${gameEndResult.winners.map((w) => `${w.username}(${w.score})`).join(', ')} | Losers: ${gameEndResult.losers.map((l) => `${l.username}(${l.score})`).join(', ')} | Standings: ${Object.entries(
+        gameEndResult.finalScores,
+      )
+        .map(
+          ([id, s]) => `${gameState.players.find((p) => p.playerId === id)?.username ?? id}=${s}`,
+        )
+        .join(', ')}`,
     );
   } else {
     // Round ended but game continues — wait for host to start next round
@@ -661,7 +678,7 @@ export function registerGameHandlers(io: SocketIOServer, socket: Socket): void {
               }
 
               console.log(
-                `Room ${data.roomCode}: GAME ENDED — Winner: ${gameEndResult.winner.username} (${gameEndResult.winner.score}), Loser: ${gameEndResult.loser.username} (${gameEndResult.loser.score})`,
+                `Room ${data.roomCode}: GAME ENDED — Winners: ${gameEndResult.winners.map((w) => `${w.username}(${w.score})`).join(', ')} | Losers: ${gameEndResult.losers.map((l) => `${l.username}(${l.score})`).join(', ')}`,
               );
             } else {
               console.log(
@@ -1469,7 +1486,7 @@ export function registerGameHandlers(io: SocketIOServer, socket: Socket): void {
         }
 
         console.log(
-          `Room ${data.roomCode}: Host manually ended game — Winner: ${gameEndResult.winner.username} (${gameEndResult.winner.score}), Loser: ${gameEndResult.loser.username} (${gameEndResult.loser.score})`,
+          `Room ${data.roomCode}: Host manually ended game — Winners: ${gameEndResult.winners.map((w) => `${w.username}(${w.score})`).join(', ')} | Losers: ${gameEndResult.losers.map((l) => `${l.username}(${l.score})`).join(', ')}`,
         );
       } catch (error) {
         console.error('Error in endGame:', error);
@@ -1630,14 +1647,15 @@ export function registerGameHandlers(io: SocketIOServer, socket: Socket): void {
         gameState.turnTimeRemainingMs = null;
 
         // Restart the turn timer with remaining time (only during playing phase)
+        const resumeExpectedPlayerId = getCurrentTurnPlayerId(gameState) ?? '';
         if (gameState.phase === 'playing' && remainingMs != null && remainingMs > 0) {
           startTurnTimerWithDuration(data.roomCode, remainingMs, (rc) => {
-            handleTurnTimeout(io, rc);
+            handleTurnTimeout(io, rc, resumeExpectedPlayerId);
           });
         } else if (gameState.phase === 'playing') {
           // Fallback: start a full turn timer
           startTurnTimer(data.roomCode, (rc) => {
-            handleTurnTimeout(io, rc);
+            handleTurnTimeout(io, rc, resumeExpectedPlayerId);
           });
         }
 

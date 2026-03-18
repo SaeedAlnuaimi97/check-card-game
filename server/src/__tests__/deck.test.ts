@@ -396,9 +396,9 @@ describe('reshuffleDiscard', () => {
 // ============================================================
 
 describe('createDebugDeck', () => {
-  it('returns exactly 20 cards', () => {
+  it('returns exactly 41 cards', () => {
     const deck = createDebugDeck();
-    expect(deck).toHaveLength(20);
+    expect(deck).toHaveLength(41);
   });
 
   it('contains all 13 ranks at least once', () => {
@@ -429,7 +429,7 @@ describe('createDebugDeck', () => {
   it('has unique card IDs', () => {
     const deck = createDebugDeck();
     const ids = deck.map((c) => c.id);
-    expect(new Set(ids).size).toBe(20);
+    expect(new Set(ids).size).toBe(41);
   });
 
   it('correctly assigns isRed for all cards', () => {

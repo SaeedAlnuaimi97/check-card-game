@@ -91,7 +91,7 @@ export function computeRoundResult(gameState: GameState): RoundResult {
     player.totalScore = updatedScores[player.playerId] ?? 0;
   }
 
-  // Check if game should end (F-071, F-310) — threshold is configurable (default 70)
+  // Check if game should end (F-071, F-310) — threshold is configurable (default 70, JSDoc says "100+" but actual default is targetScore)
   const GAME_END_THRESHOLD = gameState.targetScore ?? 70;
   const gameEnded = Object.values(updatedScores).some((score) => score >= GAME_END_THRESHOLD);
 
@@ -115,27 +115,33 @@ export function computeRoundResult(gameState: GameState): RoundResult {
 
 export interface GameEndResult {
   finalScores: Record<string, number>;
+  /** Primary winner (lowest score) — kept for backward compat with client */
   winner: {
     playerId: string;
     username: string;
     score: number;
   };
+  /** Primary loser (highest score) — kept for backward compat with client */
   loser: {
     playerId: string;
     username: string;
     score: number;
   };
+  /** All players tied at the lowest score (full list for 6–10 player games) */
+  winners: { playerId: string; username: string; score: number }[];
+  /** All players tied at the highest score (full list for 6–10 player games) */
+  losers: { playerId: string; username: string; score: number }[];
   allHands: PlayerRoundResult[];
 }
 
 /**
- * Determines the game winner and loser.
+ * Determines the game winner(s) and loser(s).
  *
  * Rules:
- * - F-071: Game ends when any player reaches 100+ total points.
- * - F-072: Player with 100+ loses.
- * - F-073: Multiple at 100+ → highest score loses; tied → all tied lose.
- * - F-074: Winner = player with lowest total score.
+ * - F-071: Game ends when any player reaches targetScore (default 70) total points.
+ * - F-072: Player with the highest score loses.
+ * - F-073: Multiple at max score → all tied players lose.
+ * - F-074: Winner = player(s) with lowest total score.
  */
 export function computeGameEndResult(
   gameState: GameState,
@@ -143,15 +149,27 @@ export function computeGameEndResult(
 ): GameEndResult {
   const scores = gameState.scores;
 
+  if (gameState.players.length === 0) {
+    // Defensive: should never happen, but guard against TypeError
+    return {
+      finalScores: { ...scores },
+      winner: { playerId: '', username: 'Unknown', score: 0 },
+      loser: { playerId: '', username: 'Unknown', score: 0 },
+      winners: [],
+      losers: [],
+      allHands,
+    };
+  }
+
   // Find the loser(s) — highest score among those at 100+ (F-072, F-073)
   const maxScore = Math.max(...Object.values(scores));
-  const losers = gameState.players.filter((p) => scores[p.playerId] === maxScore);
-  const loser = losers[0]; // If multiple tied, pick first (all tied lose per rules)
+  const loserPlayers = gameState.players.filter((p) => scores[p.playerId] === maxScore);
+  const loser = loserPlayers[0]; // primary loser for backward compat
 
-  // Find the winner — lowest total score (F-074)
+  // Find the winner(s) — lowest total score (F-074)
   const minScore = Math.min(...Object.values(scores));
-  const winners = gameState.players.filter((p) => scores[p.playerId] === minScore);
-  const winner = winners[0];
+  const winnerPlayers = gameState.players.filter((p) => scores[p.playerId] === minScore);
+  const winner = winnerPlayers[0]; // primary winner for backward compat
 
   return {
     finalScores: { ...scores },
@@ -165,6 +183,16 @@ export function computeGameEndResult(
       username: loser.username,
       score: scores[loser.playerId],
     },
+    winners: winnerPlayers.map((p) => ({
+      playerId: p.playerId,
+      username: p.username,
+      score: scores[p.playerId],
+    })),
+    losers: loserPlayers.map((p) => ({
+      playerId: p.playerId,
+      username: p.username,
+      score: scores[p.playerId],
+    })),
     allHands,
   };
 }
