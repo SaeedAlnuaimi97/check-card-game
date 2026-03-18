@@ -838,10 +838,10 @@ export const GameBoard: FC = () => {
   }, []);
 
   // Turn timer countdown — derived from gameState.turnStartedAt
-  // Timer is paused (hidden) during special effect prompts
+  // Timer continues during special effect prompts (shown inside the modal)
   // Timer is frozen (visible but stopped) when game is paused (F-279)
   useEffect(() => {
-    if (!gameState?.turnStartedAt || gameState.phase !== 'playing' || pendingEffect) {
+    if (!gameState?.turnStartedAt || gameState.phase !== 'playing') {
       setTurnTimeLeft(null);
       return;
     }
@@ -868,7 +868,7 @@ export const GameBoard: FC = () => {
     }, 250);
 
     return () => clearInterval(interval);
-  }, [gameState?.turnStartedAt, gameState?.phase, gameState?.paused, pendingEffect]);
+  }, [gameState?.turnStartedAt, gameState?.phase, gameState?.paused]);
 
   // Burn result — play sound, haptics, and show inline feedback banner (RS-006) (F-044 to F-048)
   const [burnBanner, setBurnBanner] = useState<{ success: boolean } | null>(null);
@@ -1395,29 +1395,23 @@ export const GameBoard: FC = () => {
           )}
           {/* CHECK button — gold styling (RS-003) */}
           {turnData?.canCheck && !hasDrawnCard && !pendingEffect && (
-            <Tooltip
-              label="Call CHECK — you think you have the lowest hand"
-              placement="bottom"
-              isDisabled={!isDesktop}
+            <Button
+              px="12px"
+              py="4px"
+              h="auto"
+              minH="28px"
+              borderRadius="6px"
+              bg="#c9a227"
+              color="#1a1200"
+              fontSize={{ base: '11px', md: '12px' }}
+              fontWeight="600"
+              border="none"
+              _hover={{ bg: '#b8911e' }}
+              _active={{ bg: '#a07e18' }}
+              onClick={handleCallCheck}
             >
-              <Button
-                px="12px"
-                py="4px"
-                h="auto"
-                minH="28px"
-                borderRadius="6px"
-                bg="#c9a227"
-                color="#1a1200"
-                fontSize={{ base: '11px', md: '12px' }}
-                fontWeight="600"
-                border="none"
-                _hover={{ bg: '#b8911e' }}
-                _active={{ bg: '#a07e18' }}
-                onClick={handleCallCheck}
-              >
-                CHECK
-              </Button>
-            </Tooltip>
+              CHECK
+            </Button>
           )}
 
           {/* ── Reaction button — visible during active gameplay only ── */}
@@ -1551,56 +1545,50 @@ export const GameBoard: FC = () => {
           {isDesktop ? (
             <>
               {/* Desktop: inline menu options */}
-              <Tooltip label={gameState.paused ? 'Resume Game' : 'Pause Game'}>
-                <IconButton
-                  aria-label={gameState.paused ? 'Resume game' : 'Pause game'}
-                  size="sm"
-                  variant="ghost"
-                  color={gameState.paused ? 'warning.a10' : 'gray.400'}
-                  _hover={{ color: 'white', bg: 'whiteAlpha.100' }}
-                  isDisabled={
-                    gameState.phase === 'roundEnd' ||
-                    gameState.phase === 'gameEnd' ||
-                    gameState.phase === 'dealing'
+              <IconButton
+                aria-label={gameState.paused ? 'Resume game' : 'Pause game'}
+                size="sm"
+                variant="ghost"
+                color={gameState.paused ? 'warning.a10' : 'gray.400'}
+                _hover={{ color: 'white', bg: 'whiteAlpha.100' }}
+                isDisabled={
+                  gameState.phase === 'roundEnd' ||
+                  gameState.phase === 'gameEnd' ||
+                  gameState.phase === 'dealing'
+                }
+                onClick={async () => {
+                  const result = gameState.paused ? await resumeGame() : await pauseGame();
+                  if (!result.success && result.error) {
+                    toast({
+                      title: result.error,
+                      status: 'error',
+                      duration: 4000,
+                      position: 'top',
+                    });
                   }
-                  onClick={async () => {
-                    const result = gameState.paused ? await resumeGame() : await pauseGame();
-                    if (!result.success && result.error) {
-                      toast({
-                        title: result.error,
-                        status: 'error',
-                        duration: 2000,
-                        position: 'top',
-                      });
-                    }
-                  }}
-                  icon={gameState.paused ? <PlayCircleOutlined /> : <PauseCircleOutlined />}
-                />
-              </Tooltip>
+                }}
+                icon={gameState.paused ? <PlayCircleOutlined /> : <PauseCircleOutlined />}
+              />
 
-              <Tooltip label={soundEnabled ? 'Mute sound' : 'Unmute sound'}>
-                <IconButton
-                  aria-label="Toggle sound"
-                  size="sm"
-                  variant="ghost"
-                  color={soundEnabled ? 'gray.400' : 'gray.600'}
-                  _hover={{ color: 'white', bg: 'whiteAlpha.100' }}
-                  onClick={toggleSound}
-                  icon={<SoundOutlined />}
-                />
-              </Tooltip>
+              <IconButton
+                aria-label="Toggle sound"
+                size="sm"
+                variant="ghost"
+                color={soundEnabled ? 'gray.400' : 'gray.600'}
+                _hover={{ color: 'white', bg: 'whiteAlpha.100' }}
+                onClick={toggleSound}
+                icon={<SoundOutlined />}
+              />
 
-              <Tooltip label="Exit game">
-                <IconButton
-                  aria-label="Exit game"
-                  size="sm"
-                  variant="ghost"
-                  color="gray.400"
-                  _hover={{ color: 'danger.a10', bg: 'whiteAlpha.100' }}
-                  onClick={handleExitGame}
-                  icon={<LogoutOutlined />}
-                />
-              </Tooltip>
+              <IconButton
+                aria-label="Exit game"
+                size="sm"
+                variant="ghost"
+                color="gray.400"
+                _hover={{ color: 'danger.a10', bg: 'whiteAlpha.100' }}
+                onClick={handleExitGame}
+                icon={<LogoutOutlined />}
+              />
             </>
           ) : (
             /* Mobile: single menu button */
@@ -2253,28 +2241,17 @@ export const GameBoard: FC = () => {
                 ) : (
                   /* ── Normal draw pile ── */
                   <>
-                    <Tooltip
-                      label={
-                        canAct && turnData?.availableActions.includes('drawDeck')
-                          ? 'Draw from deck'
-                          : !canAct
-                            ? 'Not your turn'
-                            : ''
-                      }
-                      isDisabled={!isDesktop || (!canAct && gameState.phase !== 'playing')}
-                    >
-                      <Box>
-                        <CardBack
-                          size="lg"
-                          isClickable={
-                            canAct &&
-                            !hasDrawnCard &&
-                            (turnData?.availableActions.includes('drawDeck') ?? false)
-                          }
-                          onClick={handleDrawDeck}
-                        />
-                      </Box>
-                    </Tooltip>
+                    <Box>
+                      <CardBack
+                        size="lg"
+                        isClickable={
+                          canAct &&
+                          !hasDrawnCard &&
+                          (turnData?.availableActions.includes('drawDeck') ?? false)
+                        }
+                        onClick={handleDrawDeck}
+                      />
+                    </Box>
                     {canAct && turnData?.availableActions.includes('drawDeck') && (
                       <Text fontSize="10px" color="#333">
                         tap to draw
@@ -2294,91 +2271,76 @@ export const GameBoard: FC = () => {
 
               {/* Discard Pile */}
               <VStack spacing="5px">
-                <Tooltip
-                  label={
-                    hasDrawnCard && !drawnFromDiscard
-                      ? 'Discard drawn card'
-                      : topDiscard?.isBurned
-                        ? 'Burned card — cannot pick up'
-                        : canAct && turnData?.availableActions.includes('takeDiscard')
-                          ? 'Tap to take from discard'
-                          : !canAct
-                            ? 'Not your turn'
-                            : ''
-                  }
-                  isDisabled={!isDesktop || (!canAct && gameState.phase !== 'playing')}
-                >
-                  <Box>
-                    {topDiscard ? (
-                      <Box position="relative">
-                        <AnimatePresence mode="wait">
-                          <motion.div
-                            key={discardAnimKey}
-                            initial={{ rotateY: 90, opacity: 0 }}
-                            animate={{ rotateY: 0, opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            transition={{ duration: 0.25, ease: 'easeOut' }}
-                            style={{ transformStyle: 'preserve-3d' }}
-                          >
-                            <Card
-                              card={topDiscard}
-                              size="lg"
-                              isClickable={
-                                canAct &&
-                                (hasDrawnCard
-                                  ? !drawnFromDiscard
-                                  : !topDiscard.isBurned &&
-                                    (turnData?.availableActions.includes('takeDiscard') ?? false))
-                              }
-                              onClick={
-                                canAct && hasDrawnCard && !drawnFromDiscard
-                                  ? () => handleDiscardChoice(null)
-                                  : canAct &&
-                                      !topDiscard.isBurned &&
-                                      turnData?.availableActions.includes('takeDiscard')
-                                    ? handleTakeDiscard
-                                    : undefined
-                              }
-                            />
-                          </motion.div>
-                        </AnimatePresence>
-                        {topDiscard.isBurned && (
-                          <Box
-                            position="absolute"
-                            top="-6px"
-                            right="-6px"
-                            bg="warning.a0"
-                            borderRadius="full"
-                            w="24px"
-                            h="24px"
-                            display="flex"
-                            alignItems="center"
-                            justifyContent="center"
-                            shadow="md"
-                            border="2px solid"
-                            borderColor="warning.a10"
-                          >
-                            <FireOutlined style={{ fontSize: '12px', color: 'white' }} />
-                          </Box>
-                        )}
-                      </Box>
-                    ) : (
-                      <Box
-                        w="58px"
-                        h="80px"
-                        borderRadius="8px"
-                        border="2px dashed #2a2a3a"
-                        display="flex"
-                        alignItems="center"
-                        justifyContent="center"
-                      >
-                        <Text fontSize="9px" color="#333">
-                          empty
-                        </Text>
-                      </Box>
-                    )}
-                  </Box>
-                </Tooltip>
+                <Box>
+                  {topDiscard ? (
+                    <Box position="relative">
+                      <AnimatePresence mode="wait">
+                        <motion.div
+                          key={discardAnimKey}
+                          initial={{ rotateY: 90, opacity: 0 }}
+                          animate={{ rotateY: 0, opacity: 1 }}
+                          exit={{ opacity: 0 }}
+                          transition={{ duration: 0.25, ease: 'easeOut' }}
+                          style={{ transformStyle: 'preserve-3d' }}
+                        >
+                          <Card
+                            card={topDiscard}
+                            size="lg"
+                            isClickable={
+                              canAct &&
+                              (hasDrawnCard
+                                ? !drawnFromDiscard
+                                : !topDiscard.isBurned &&
+                                  (turnData?.availableActions.includes('takeDiscard') ?? false))
+                            }
+                            onClick={
+                              canAct && hasDrawnCard && !drawnFromDiscard
+                                ? () => handleDiscardChoice(null)
+                                : canAct &&
+                                    !topDiscard.isBurned &&
+                                    turnData?.availableActions.includes('takeDiscard')
+                                  ? handleTakeDiscard
+                                  : undefined
+                            }
+                          />
+                        </motion.div>
+                      </AnimatePresence>
+                      {topDiscard.isBurned && (
+                        <Box
+                          position="absolute"
+                          top="-6px"
+                          right="-6px"
+                          bg="warning.a0"
+                          borderRadius="full"
+                          w="24px"
+                          h="24px"
+                          display="flex"
+                          alignItems="center"
+                          justifyContent="center"
+                          shadow="md"
+                          border="2px solid"
+                          borderColor="warning.a10"
+                        >
+                          <FireOutlined style={{ fontSize: '12px', color: 'white' }} />
+                        </Box>
+                      )}
+                    </Box>
+                  ) : (
+                    <Box
+                      w="58px"
+                      h="80px"
+                      borderRadius="8px"
+                      border="2px dashed #2a2a3a"
+                      display="flex"
+                      alignItems="center"
+                      justifyContent="center"
+                    >
+                      <Text fontSize="9px" color="#333">
+                        empty
+                      </Text>
+                    </Box>
+                  )}
+                </Box>
                 <Text fontSize="10px" color="#444">
                   discard
                 </Text>
@@ -3776,17 +3738,19 @@ export const GameBoard: FC = () => {
         <ModalOverlay bg="rgba(0,0,0,0.6)" />
         <ModalContent
           bg="#1c1c28"
-          borderRadius="16px 16px 0 0"
-          borderTop="0.5px solid #2a2a3a"
+          borderRadius={{ base: '16px 16px 0 0', md: '14px' }}
+          borderTop={{ base: '0.5px solid #2a2a3a', md: 'none' }}
+          border={{ base: 'none', md: '0.5px solid #2a2a3a' }}
           p={0}
-          mx={0}
-          mb={0}
+          mx={{ base: 0, md: 'auto' }}
+          mb={{ base: 0, md: '12px' }}
           mt="auto"
           position="fixed"
-          bottom={0}
-          left={0}
-          right={0}
-          maxW="unset"
+          bottom={{ base: 0, md: '0' }}
+          left={{ base: 0, md: 'auto' }}
+          right={{ base: 0, md: 'auto' }}
+          maxW={{ base: 'unset', md: '480px' }}
+          w={{ base: '100%', md: '480px' }}
           overflow="hidden"
         >
           {/* Drag handle */}
@@ -3809,6 +3773,35 @@ export const GameBoard: FC = () => {
                   ? 'Step 2 — pick an opponent and one of their slots.'
                   : "Swap one of your cards with any opponent's card. Neither card is revealed."}
             </Text>
+            {/* Turn timer strip — visible while this player's turn timer is running */}
+            {turnTimeLeft !== null &&
+              (() => {
+                const pct = turnTimeLeft / TURN_TIMEOUT_SECS;
+                const tc = pct > 0.6 ? '#4ecb4e' : pct > 0.3 ? '#c9a227' : '#cf5e5e';
+                return (
+                  <Box
+                    display="flex"
+                    alignItems="center"
+                    gap="8px"
+                    pt="8px"
+                    pb="2px"
+                    sx={pct <= 0.3 ? { animation: 'timerPulse 1s ease-in-out infinite' } : {}}
+                  >
+                    <Text fontSize="11px" color={tc} fontWeight="600" minW="24px">
+                      {Math.ceil(turnTimeLeft)}s
+                    </Text>
+                    <Box flex={1} h="4px" bg="#1a2a1a" borderRadius="3px" overflow="hidden">
+                      <Box
+                        h="100%"
+                        bg={tc}
+                        w={`${pct * 100}%`}
+                        borderRadius="3px"
+                        style={{ transition: 'width 0.5s linear, background 0.5s' }}
+                      />
+                    </Box>
+                  </Box>
+                );
+              })()}
           </Box>
 
           {/* Step 1 / Step 2 / Confirm content */}
@@ -4106,24 +4099,37 @@ export const GameBoard: FC = () => {
         <ModalOverlay bg="rgba(0,0,0,0.6)" />
         <ModalContent
           bg="#1c1c28"
-          borderRadius="16px 16px 0 0"
-          borderTop="0.5px solid #2a2a3a"
+          borderRadius={{ base: '16px 16px 0 0', md: '14px' }}
+          borderTop={{ base: '0.5px solid #2a2a3a', md: 'none' }}
+          border={{ base: 'none', md: '0.5px solid #2a2a3a' }}
           p={0}
-          mx={0}
-          mb={0}
+          mx={{ base: 0, md: 'auto' }}
+          mb={{ base: 0, md: '12px' }}
           mt="auto"
           position="fixed"
-          bottom={0}
-          left={0}
-          right={0}
-          maxW="unset"
+          bottom={{ base: 0, md: '0' }}
+          left={{ base: 0, md: 'auto' }}
+          right={{ base: 0, md: 'auto' }}
+          maxW={{ base: 'unset', md: '480px' }}
+          w={{ base: '100%', md: '480px' }}
+          maxH={{ base: '92vh', md: '75vh' }}
           overflow="hidden"
+          display="flex"
+          flexDirection="column"
         >
           {/* Drag handle */}
-          <Box w="32px" h="3px" bg="#2a2a3a" borderRadius="2px" mx="auto" mt="10px" />
+          <Box
+            w="32px"
+            h="3px"
+            bg="#2a2a3a"
+            borderRadius="2px"
+            mx="auto"
+            mt="10px"
+            flexShrink={0}
+          />
 
           {/* Header */}
-          <Box px="16px" pt="10px" pb={0}>
+          <Box px="16px" pt="10px" pb={0} flexShrink={0}>
             <HStack spacing="8px" mb="3px">
               <Text fontSize="15px" color="#c0392b">
                 ♦
@@ -4137,220 +4143,253 @@ export const GameBoard: FC = () => {
                 ? 'Slot revealed — only you can see this.'
                 : 'Choose one of your face-down cards to peek at privately. Only you will see it.'}
             </Text>
+            {/* Turn timer strip */}
+            {turnTimeLeft !== null &&
+              (() => {
+                const pct = turnTimeLeft / TURN_TIMEOUT_SECS;
+                const tc = pct > 0.6 ? '#4ecb4e' : pct > 0.3 ? '#c9a227' : '#cf5e5e';
+                return (
+                  <Box
+                    display="flex"
+                    alignItems="center"
+                    gap="8px"
+                    pt="8px"
+                    pb="2px"
+                    sx={pct <= 0.3 ? { animation: 'timerPulse 1s ease-in-out infinite' } : {}}
+                  >
+                    <Text fontSize="11px" color={tc} fontWeight="600" minW="24px">
+                      {Math.ceil(turnTimeLeft)}s
+                    </Text>
+                    <Box flex={1} h="4px" bg="#1a2a1a" borderRadius="3px" overflow="hidden">
+                      <Box
+                        h="100%"
+                        bg={tc}
+                        w={`${pct * 100}%`}
+                        borderRadius="3px"
+                        style={{ transition: 'width 0.5s linear, background 0.5s' }}
+                      />
+                    </Box>
+                  </Box>
+                );
+              })()}
           </Box>
 
-          {queenPeekedCard ? (
-            /* Revealed state: show the peeked card + all hand slots so the user
+          {/* Scrollable body */}
+          <Box flex={1} overflowY="auto">
+            {queenPeekedCard ? (
+              /* Revealed state: show the peeked card + all hand slots so the user
                can see exactly which slot was looked at */
-            <Box px="16px" pt="10px">
-              {/* Full hand overview — all slots visible, selected one highlighted */}
-              <Text
-                fontSize="10px"
-                color="#444"
-                textTransform="uppercase"
-                letterSpacing="0.07em"
-                fontWeight="500"
-                mb="8px"
-              >
-                your hand
-              </Text>
-              <Box display="flex" gap="8px" mb="10px">
-                {myPlayer.hand.map((h) => {
-                  const isRevealed = h.slot === queenSelectedSlot;
-                  return (
-                    <Box
-                      key={h.slot}
-                      display="flex"
-                      flexDirection="column"
-                      alignItems="center"
-                      gap="4px"
-                    >
-                      {isRevealed ? (
-                        /* Show the actual face-up card for the peeked slot */
-                        <Box
-                          w="46px"
-                          h="64px"
-                          borderRadius="7px"
-                          bg="white"
-                          border="2px solid #c9a227"
-                          display="flex"
-                          flexDirection="column"
-                          alignItems="center"
-                          justifyContent="center"
-                          position="relative"
-                          fontWeight="700"
-                          fontSize="16px"
-                          flexShrink={0}
-                          color={queenPeekedCard.isRed ? '#c0392b' : '#222'}
-                          boxShadow="0 0 0 2px #c9a22740"
+              <Box px="16px" pt="10px">
+                {/* Full hand overview — all slots visible, selected one highlighted */}
+                <Text
+                  fontSize="10px"
+                  color="#444"
+                  textTransform="uppercase"
+                  letterSpacing="0.07em"
+                  fontWeight="500"
+                  mb="8px"
+                >
+                  your hand
+                </Text>
+                <Box display="flex" gap="8px" mb="10px">
+                  {myPlayer.hand.map((h) => {
+                    const isRevealed = h.slot === queenSelectedSlot;
+                    return (
+                      <Box
+                        key={h.slot}
+                        display="flex"
+                        flexDirection="column"
+                        alignItems="center"
+                        gap="4px"
+                      >
+                        {isRevealed ? (
+                          /* Show the actual face-up card for the peeked slot */
+                          <Box
+                            w="46px"
+                            h="64px"
+                            borderRadius="7px"
+                            bg="white"
+                            border="2px solid #c9a227"
+                            display="flex"
+                            flexDirection="column"
+                            alignItems="center"
+                            justifyContent="center"
+                            position="relative"
+                            fontWeight="700"
+                            fontSize="16px"
+                            flexShrink={0}
+                            color={queenPeekedCard.isRed ? '#c0392b' : '#222'}
+                            boxShadow="0 0 0 2px #c9a22740"
+                          >
+                            <Box
+                              position="absolute"
+                              top="2px"
+                              left="3px"
+                              fontSize="9px"
+                              fontWeight="700"
+                              lineHeight={1.2}
+                              color={queenPeekedCard.isRed ? '#c0392b' : '#222'}
+                            >
+                              {queenPeekedCard.rank}
+                              <br />
+                              {queenPeekedCard.suit}
+                            </Box>
+                            <Text fontSize="14px">{queenPeekedCard.suit}</Text>
+                            <Box
+                              position="absolute"
+                              bottom="2px"
+                              right="3px"
+                              fontSize="9px"
+                              fontWeight="700"
+                              transform="rotate(180deg)"
+                              color={queenPeekedCard.isRed ? '#c0392b' : '#222'}
+                            >
+                              {queenPeekedCard.rank}
+                              <br />
+                              {queenPeekedCard.suit}
+                            </Box>
+                          </Box>
+                        ) : (
+                          /* Other slots remain face-down */
+                          <Box
+                            w="46px"
+                            h="64px"
+                            borderRadius="7px"
+                            bg="#22223a"
+                            border="1.5px solid #3a3a5a"
+                            opacity={0.5}
+                          />
+                        )}
+                        <Text
+                          fontSize="10px"
+                          color={isRevealed ? '#c9a227' : '#555'}
+                          fontWeight={isRevealed ? '600' : '400'}
                         >
-                          <Box
-                            position="absolute"
-                            top="2px"
-                            left="3px"
-                            fontSize="9px"
-                            fontWeight="700"
-                            lineHeight={1.2}
-                            color={queenPeekedCard.isRed ? '#c0392b' : '#222'}
-                          >
-                            {queenPeekedCard.rank}
-                            <br />
-                            {queenPeekedCard.suit}
-                          </Box>
-                          <Text fontSize="14px">{queenPeekedCard.suit}</Text>
-                          <Box
-                            position="absolute"
-                            bottom="2px"
-                            right="3px"
-                            fontSize="9px"
-                            fontWeight="700"
-                            transform="rotate(180deg)"
-                            color={queenPeekedCard.isRed ? '#c0392b' : '#222'}
-                          >
-                            {queenPeekedCard.rank}
-                            <br />
-                            {queenPeekedCard.suit}
-                          </Box>
-                        </Box>
-                      ) : (
-                        /* Other slots remain face-down */
+                          {h.slot}
+                        </Text>
+                      </Box>
+                    );
+                  })}
+                </Box>
+                {/* Card detail info */}
+                <Box
+                  p="8px 12px"
+                  bg="#14200f"
+                  border="0.5px solid #2a4020"
+                  borderRadius="8px"
+                  display="flex"
+                  alignItems="center"
+                  gap="8px"
+                >
+                  <Text fontSize="12px" color="#5ecf5e" fontWeight="500">
+                    Slot {queenSelectedSlot} — {queenPeekedCard.rank}
+                    {queenPeekedCard.suit}
+                  </Text>
+                  <Text fontSize="11px" color="#888">
+                    · {queenPeekedCard.value} pt{queenPeekedCard.value !== 1 ? 's' : ''}
+                  </Text>
+                  <Text fontSize="10px" color="#3a5a3a" ml="auto">
+                    Only you can see this
+                  </Text>
+                </Box>
+              </Box>
+            ) : (
+              /* Select state */
+              <Box px="16px" pt="10px">
+                <Text
+                  fontSize="10px"
+                  color="#444"
+                  textTransform="uppercase"
+                  letterSpacing="0.07em"
+                  fontWeight="500"
+                  mb="8px"
+                >
+                  your hand — tap a slot to peek
+                </Text>
+                <Box display="flex" gap="8px">
+                  {myPlayer.hand.map((h) => {
+                    return (
+                      <Box
+                        key={h.slot}
+                        display="flex"
+                        flexDirection="column"
+                        alignItems="center"
+                        gap="4px"
+                      >
                         <Box
                           w="46px"
                           h="64px"
                           borderRadius="7px"
                           bg="#22223a"
                           border="1.5px solid #3a3a5a"
-                          opacity={0.5}
+                          position="relative"
+                          cursor={queenLoading ? 'wait' : 'pointer'}
+                          onClick={() => handleQueenPeek(h.slot)}
+                          transition="border-color 0.12s"
+                          _hover={{ borderColor: '#5a5a8a' }}
                         />
-                      )}
-                      <Text
-                        fontSize="10px"
-                        color={isRevealed ? '#c9a227' : '#555'}
-                        fontWeight={isRevealed ? '600' : '400'}
-                      >
-                        {h.slot}
-                      </Text>
-                    </Box>
-                  );
-                })}
+                        <Text fontSize="10px" color="#555" fontWeight="500">
+                          {h.slot}
+                        </Text>
+                      </Box>
+                    );
+                  })}
+                </Box>
               </Box>
-              {/* Card detail info */}
-              <Box
-                p="8px 12px"
-                bg="#14200f"
-                border="0.5px solid #2a4020"
-                borderRadius="8px"
-                display="flex"
-                alignItems="center"
-                gap="8px"
-              >
-                <Text fontSize="12px" color="#5ecf5e" fontWeight="500">
-                  Slot {queenSelectedSlot} — {queenPeekedCard.rank}
-                  {queenPeekedCard.suit}
-                </Text>
-                <Text fontSize="11px" color="#888">
-                  · {queenPeekedCard.value} pt{queenPeekedCard.value !== 1 ? 's' : ''}
-                </Text>
-                <Text fontSize="10px" color="#3a5a3a" ml="auto">
-                  Only you can see this
-                </Text>
-              </Box>
-            </Box>
-          ) : (
-            /* Select state */
-            <Box px="16px" pt="10px">
-              <Text
-                fontSize="10px"
-                color="#444"
-                textTransform="uppercase"
-                letterSpacing="0.07em"
-                fontWeight="500"
-                mb="8px"
-              >
-                your hand — tap a slot to peek
-              </Text>
-              <Box display="flex" gap="8px">
-                {myPlayer.hand.map((h) => {
-                  return (
-                    <Box
-                      key={h.slot}
-                      display="flex"
-                      flexDirection="column"
-                      alignItems="center"
-                      gap="4px"
-                    >
-                      <Box
-                        w="46px"
-                        h="64px"
-                        borderRadius="7px"
-                        bg="#22223a"
-                        border="1.5px solid #3a3a5a"
-                        position="relative"
-                        cursor={queenLoading ? 'wait' : 'pointer'}
-                        onClick={() => handleQueenPeek(h.slot)}
-                        transition="border-color 0.12s"
-                        _hover={{ borderColor: '#5a5a8a' }}
-                      />
-                      <Text fontSize="10px" color="#555" fontWeight="500">
-                        {h.slot}
-                      </Text>
-                    </Box>
-                  );
-                })}
-              </Box>
-            </Box>
-          )}
+            )}
 
-          {/* Actions */}
-          <Box px="16px" pt="12px" pb="16px" display="flex" gap="8px" mt="10px">
-            {!queenPeekedCard && (
+            {/* Actions */}
+            <Box px="16px" pt="12px" pb="16px" display="flex" gap="8px" mt="10px">
+              {!queenPeekedCard && (
+                <Button
+                  flex={1}
+                  py="10px"
+                  h="auto"
+                  borderRadius="9px"
+                  bg="transparent"
+                  border="0.5px solid #2a2a3a"
+                  color="#555"
+                  fontSize="13px"
+                  fontWeight="500"
+                  _hover={{ bg: '#16162a' }}
+                  isDisabled={queenLoading}
+                  onClick={() => {
+                    // skip queen by peeking at first available slot... actually skip means close effect
+                    // we have no dedicated skip — match existing pattern (no footer button in original)
+                    // The queen modal auto-closes only after peek. We add a skip that calls with null.
+                    // handleQueenPeek handles skip by the absence of a skip handler.
+                    // Use jackSubmit-style: emit skip via redQueenPeek with a special value is not available.
+                    // For now, we show the button as disabled placeholder matching the mockup "Skip" behavior.
+                  }}
+                >
+                  Skip
+                </Button>
+              )}
               <Button
-                flex={1}
+                flex={queenPeekedCard ? 1 : 2}
                 py="10px"
                 h="auto"
                 borderRadius="9px"
-                bg="transparent"
-                border="0.5px solid #2a2a3a"
-                color="#555"
+                bg={queenPeekedCard ? '#c9a227' : '#1e1e2e'}
+                color={queenPeekedCard ? '#1a1200' : '#333'}
+                border={queenPeekedCard ? 'none' : '0.5px solid #2a2a3a'}
                 fontSize="13px"
-                fontWeight="500"
-                _hover={{ bg: '#16162a' }}
-                isDisabled={queenLoading}
+                fontWeight="600"
+                isDisabled={!queenPeekedCard && true}
+                cursor={queenPeekedCard ? 'pointer' : 'not-allowed'}
                 onClick={() => {
-                  // skip queen by peeking at first available slot... actually skip means close effect
-                  // we have no dedicated skip — match existing pattern (no footer button in original)
-                  // The queen modal auto-closes only after peek. We add a skip that calls with null.
-                  // handleQueenPeek handles skip by the absence of a skip handler.
-                  // Use jackSubmit-style: emit skip via redQueenPeek with a special value is not available.
-                  // For now, we show the button as disabled placeholder matching the mockup "Skip" behavior.
+                  if (queenPeekedCard) {
+                    setQueenPeekTimer(false);
+                    setQueenPeekedCard(null);
+                    setQueenSelectedSlot(null);
+                  }
                 }}
               >
-                Skip
+                {queenPeekedCard ? 'Got it' : 'Select a slot'}
               </Button>
-            )}
-            <Button
-              flex={queenPeekedCard ? 1 : 2}
-              py="10px"
-              h="auto"
-              borderRadius="9px"
-              bg={queenPeekedCard ? '#c9a227' : '#1e1e2e'}
-              color={queenPeekedCard ? '#1a1200' : '#333'}
-              border={queenPeekedCard ? 'none' : '0.5px solid #2a2a3a'}
-              fontSize="13px"
-              fontWeight="600"
-              isDisabled={!queenPeekedCard && true}
-              cursor={queenPeekedCard ? 'pointer' : 'not-allowed'}
-              onClick={() => {
-                if (queenPeekedCard) {
-                  setQueenPeekTimer(false);
-                  setQueenPeekedCard(null);
-                  setQueenSelectedSlot(null);
-                }
-              }}
-            >
-              {queenPeekedCard ? 'Got it' : 'Select a slot'}
-            </Button>
+            </Box>
           </Box>
+          {/* end scrollable body */}
         </ModalContent>
       </Modal>
       {/* ============================================================ */}
@@ -4366,17 +4405,19 @@ export const GameBoard: FC = () => {
         <ModalOverlay bg="rgba(0,0,0,0.6)" />
         <ModalContent
           bg="#1c1c28"
-          borderRadius="16px 16px 0 0"
-          borderTop="0.5px solid #2a2a3a"
+          borderRadius={{ base: '16px 16px 0 0', md: '14px' }}
+          borderTop={{ base: '0.5px solid #2a2a3a', md: 'none' }}
+          border={{ base: 'none', md: '0.5px solid #2a2a3a' }}
           p={0}
-          mx={0}
-          mb={0}
+          mx={{ base: 0, md: 'auto' }}
+          mb={{ base: 0, md: '12px' }}
           mt="auto"
           position="fixed"
-          bottom={0}
-          left={0}
-          right={0}
-          maxW="unset"
+          bottom={{ base: 0, md: '0' }}
+          left={{ base: 0, md: 'auto' }}
+          right={{ base: 0, md: 'auto' }}
+          maxW={{ base: 'unset', md: '480px' }}
+          w={{ base: '100%', md: '480px' }}
           overflow="hidden"
         >
           {/* Drag handle */}
@@ -4405,6 +4446,35 @@ export const GameBoard: FC = () => {
                         : 'Step 2 — tap a hand slot to replace.'
                     : 'Both drawn cards stay. Pick 2 hand slots to replace.'}
             </Text>
+            {/* Turn timer strip */}
+            {turnTimeLeft !== null &&
+              (() => {
+                const pct = turnTimeLeft / TURN_TIMEOUT_SECS;
+                const tc = pct > 0.6 ? '#4ecb4e' : pct > 0.3 ? '#c9a227' : '#cf5e5e';
+                return (
+                  <Box
+                    display="flex"
+                    alignItems="center"
+                    gap="8px"
+                    pt="8px"
+                    pb="2px"
+                    sx={pct <= 0.3 ? { animation: 'timerPulse 1s ease-in-out infinite' } : {}}
+                  >
+                    <Text fontSize="11px" color={tc} fontWeight="600" minW="24px">
+                      {Math.ceil(turnTimeLeft)}s
+                    </Text>
+                    <Box flex={1} h="4px" bg="#1a2a1a" borderRadius="3px" overflow="hidden">
+                      <Box
+                        h="100%"
+                        bg={tc}
+                        w={`${pct * 100}%`}
+                        borderRadius="3px"
+                        style={{ transition: 'width 0.5s linear, background 0.5s' }}
+                      />
+                    </Box>
+                  </Box>
+                );
+              })()}
           </Box>
 
           {/* Drawn cards */}
