@@ -838,10 +838,15 @@ export const GameBoard: FC = () => {
   }, []);
 
   // Turn timer countdown — derived from gameState.turnStartedAt
-  // Timer continues during special effect prompts (shown inside the modal)
+  // Timer continues during special effect prompts (shown inside the modal).
+  // When a Red J/Q/K is discarded the server sets turnStartedAt=null, but
+  // SocketContext snapshots the pre-wipe value into pendingEffect.turnStartedAt
+  // so the timer can keep running inside the action card modal.
   // Timer is frozen (visible but stopped) when game is paused (F-279)
   useEffect(() => {
-    if (!gameState?.turnStartedAt || gameState.phase !== 'playing') {
+    // Use the snapshot from pendingEffect as fallback when turnStartedAt is null
+    const originTs = gameState?.turnStartedAt ?? pendingEffect?.turnStartedAt ?? null;
+    if (!originTs || gameState?.phase !== 'playing') {
       setTurnTimeLeft(null);
       return;
     }
@@ -853,7 +858,7 @@ export const GameBoard: FC = () => {
     }
 
     const computeRemaining = () => {
-      const elapsed = (Date.now() - gameState.turnStartedAt!) / 1000;
+      const elapsed = (Date.now() - originTs) / 1000;
       return Math.max(0, TURN_TIMEOUT_SECS - elapsed);
     };
 
@@ -868,7 +873,7 @@ export const GameBoard: FC = () => {
     }, 250);
 
     return () => clearInterval(interval);
-  }, [gameState?.turnStartedAt, gameState?.phase, gameState?.paused]);
+  }, [gameState?.turnStartedAt, gameState?.phase, gameState?.paused, pendingEffect?.turnStartedAt]);
 
   // Burn result — play sound, haptics, and show inline feedback banner (RS-006) (F-044 to F-048)
   const [burnBanner, setBurnBanner] = useState<{ success: boolean } | null>(null);
@@ -1515,7 +1520,7 @@ export const GameBoard: FC = () => {
                     },
                   }}
                 >
-                  {(['🖕', '😛', '🥲'] as const).map((emoji) => (
+                  {(['🖕', '😛', '🥲', '💀', '🤌', '🔥', '😤'] as const).map((emoji) => (
                     <Box
                       key={emoji}
                       as="button"

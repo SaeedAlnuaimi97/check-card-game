@@ -190,6 +190,10 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
   const usernameRef = useRef(username);
   usernameRef.current = username;
 
+  // Mirror latest gameState in a ref so socket event handlers can read it synchronously
+  const gameStateRef = useRef(gameState);
+  gameStateRef.current = gameState;
+
   // Flag to prevent duplicate rejoinRoom emissions (e.g. main connect handler + rejoinWithCode)
   const rejoinInFlightRef = useRef(false);
 
@@ -342,7 +346,10 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
 
     socket.on('waitingForSpecialEffect', (data: WaitingForSpecialEffectPayload) => {
       console.log('Special effect triggered:', data.effect, data);
-      setPendingEffect(data);
+      // Snapshot turnStartedAt now — the subsequent gameStateUpdated will set it to null.
+      // Enriching the payload here lets GameBoard keep the timer running inside the modal.
+      const snapshotTurnStartedAt = gameStateRef.current?.turnStartedAt ?? undefined;
+      setPendingEffect({ ...data, turnStartedAt: snapshotTurnStartedAt });
     });
 
     socket.on('specialEffectResolved', (data: SpecialEffectResolvedPayload) => {

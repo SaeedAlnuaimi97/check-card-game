@@ -105,6 +105,8 @@ export interface WaitingForSpecialEffectPayload {
   effect: SpecialEffectType;
   card: Card;
   redKingCards?: [Card, Card];
+  /** Snapshot of turnStartedAt at the moment the effect was triggered (client-side enrichment) */
+  turnStartedAt?: number;
 }
 
 export interface SpecialEffectResolvedPayload {
