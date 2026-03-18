@@ -146,8 +146,8 @@ describe('startRoomExpiryJob / stopRoomExpiryJob', () => {
     await Promise.resolve();
     await Promise.resolve();
 
-    // find is called twice: once for expireEmptyRooms, once for expireStaleRooms
-    expect(mockFind).toHaveBeenCalledTimes(2);
+    // find is called three times: expireEmptyRooms, expireStaleRooms, logActiveSessions
+    expect(mockFind).toHaveBeenCalledTimes(3);
   });
 
   it('does not start a second interval if called twice', async () => {
@@ -161,8 +161,8 @@ describe('startRoomExpiryJob / stopRoomExpiryJob', () => {
     await Promise.resolve();
     await Promise.resolve();
 
-    // find is called twice (one immediate call each, from first startRoomExpiryJob only)
-    expect(mockFind).toHaveBeenCalledTimes(2);
+    // find is called three times (one immediate call each, from first startRoomExpiryJob only)
+    expect(mockFind).toHaveBeenCalledTimes(3);
   });
 
   it('stops running after stopRoomExpiryJob', () => {

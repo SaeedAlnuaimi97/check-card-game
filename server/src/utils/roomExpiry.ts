@@ -27,6 +27,9 @@ const FAST_CLEANUP_INTERVAL_MS = 30 * 1000; // Run every 30 seconds
 
 let cleanupInterval: ReturnType<typeof setInterval> | null = null;
 let fastCleanupInterval: ReturnType<typeof setInterval> | null = null;
+let sessionLogInterval: ReturnType<typeof setInterval> | null = null;
+
+const SESSION_LOG_INTERVAL_MS = 60 * 1000; // 1 minute
 
 /**
  * Deletes lobby and playing rooms that have no human players and have been
@@ -108,6 +111,32 @@ export async function expireStaleRooms(): Promise<number> {
 }
 
 /**
+ * Logs a summary of all active sessions (lobby + playing rooms) to the
+ * console. Runs only in development (NODE_ENV !== 'production').
+ */
+export async function logActiveSessions(): Promise<void> {
+  try {
+    const rooms = await RoomModel.find(
+      { status: { $in: ['lobby', 'playing'] } },
+      { roomCode: 1, status: 1, players: 1, updatedAt: 1 },
+    ).lean();
+
+    const summary = rooms.map((r) => ({
+      roomCode: r.roomCode,
+      status: r.status,
+      players: r.players.length,
+      humans: r.players.filter((p) => !p.isBot).length,
+      bots: r.players.filter((p) => p.isBot).length,
+      updatedAt: r.updatedAt,
+    }));
+
+    logger.debug({ count: rooms.length, rooms: summary }, 'Active sessions');
+  } catch (err) {
+    logger.error({ err }, 'Failed to log active sessions');
+  }
+}
+
+/**
  * Starts the periodic room expiration jobs.
  * Safe to call multiple times — will only start one set of intervals.
  */
@@ -134,6 +163,17 @@ export function startRoomExpiryJob(): void {
     cleanupInterval.unref();
   }
 
+  // Debug: log active sessions every minute (development only)
+  if (process.env.NODE_ENV !== 'production') {
+    logActiveSessions().catch((err) => logger.error({ err }, 'Initial session log failed'));
+    sessionLogInterval = setInterval(() => {
+      logActiveSessions().catch((err) => logger.error({ err }, 'Scheduled session log failed'));
+    }, SESSION_LOG_INTERVAL_MS);
+    if (sessionLogInterval.unref) {
+      sessionLogInterval.unref();
+    }
+  }
+
   logger.info(
     {
       intervalMs: CLEANUP_INTERVAL_MS,
@@ -156,5 +196,9 @@ export function stopRoomExpiryJob(): void {
   if (fastCleanupInterval) {
     clearInterval(fastCleanupInterval);
     fastCleanupInterval = null;
+  }
+  if (sessionLogInterval) {
+    clearInterval(sessionLogInterval);
+    sessionLogInterval = null;
   }
 }
