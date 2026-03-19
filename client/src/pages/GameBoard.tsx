@@ -36,6 +36,7 @@ import socket from '../services/socket';
 import { Card } from '../components/cards/Card';
 import { CardBack } from '../components/cards/CardBack';
 import { FlippableCard } from '../components/cards/FlippableCard';
+import { ChatDrawer } from '../components/ChatDrawer';
 import {
   playPickSound,
   playBurnSound,
@@ -621,6 +622,15 @@ export const GameBoard: FC = () => {
   } = useSocket();
   const toast = useToast();
 
+  // Chat drawer state
+  const [isChatOpen, setIsChatOpen] = useState(false);
+  const { lastChatMessage, clearLastChatMessage } = useSocket();
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [toastPreviewMsg, setToastPreviewMsg] = useState<{ text: string; username: string } | null>(
+    null,
+  );
+  const toastPreviewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // Peek animation state
   const [isPeeking, setIsPeeking] = useState(false);
   const [peekProgress, setPeekProgress] = useState(100);
@@ -649,6 +659,30 @@ export const GameBoard: FC = () => {
   // Float emojis keyed by opponent playerId → list of active floats
   const [floatEmojis, setFloatEmojis] = useState<{ id: number; emoji: string; left: number }[]>([]);
   const floatIdRef = useRef(0);
+
+  // ── Chat: unread badge + toast preview ──────────────────────
+  useEffect(() => {
+    if (!lastChatMessage) return;
+    if (isChatOpen) {
+      // Drawer is open — no badge, no toast
+      return;
+    }
+    setUnreadCount((c) => c + 1);
+    // Toast preview — auto-dismiss after 3s
+    setToastPreviewMsg({ text: lastChatMessage.text, username: lastChatMessage.username });
+    if (toastPreviewTimerRef.current) clearTimeout(toastPreviewTimerRef.current);
+    toastPreviewTimerRef.current = setTimeout(() => {
+      setToastPreviewMsg(null);
+    }, 3000);
+  }, [lastChatMessage]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Clear unread + toast preview when opening the drawer
+  const handleOpenChat = useCallback(() => {
+    setIsChatOpen(true);
+    setUnreadCount(0);
+    setToastPreviewMsg(null);
+    clearLastChatMessage();
+  }, [clearLastChatMessage]);
 
   // Game menu modal
   const { isOpen: isMenuOpen, onOpen: onMenuOpen, onClose: onMenuClose } = useDisclosure();
@@ -1348,7 +1382,7 @@ export const GameBoard: FC = () => {
       display="flex"
       flexDirection="column"
       position="relative"
-      sx={{ overflowX: 'clip', overflowY: 'visible' }}
+      sx={{ overflowX: 'clip', overflowY: 'hidden' }}
       pb="env(safe-area-inset-bottom)"
     >
       {/* Red card flash overlay (UI-006) */}
@@ -1582,6 +1616,60 @@ export const GameBoard: FC = () => {
               )}
             </Box>
           )}
+
+          {/* ── Chat button — visible whenever in a room ── */}
+          <Box position="relative" flexShrink={0}>
+            <Box
+              as="button"
+              w="28px"
+              h="28px"
+              borderRadius="full"
+              bg={isChatOpen ? '#2a2a3e' : '#1e1e2e'}
+              border={isChatOpen ? '1px solid #5a5a8a' : '1px solid #3a3a5a'}
+              display="flex"
+              alignItems="center"
+              justifyContent="center"
+              fontSize="13px"
+              cursor="pointer"
+              userSelect="none"
+              flexShrink={0}
+              transition="background 0.15s, transform 0.1s"
+              _hover={{ bg: '#2a2a3e', transform: 'scale(1.1)' }}
+              onClick={handleOpenChat}
+              aria-label="Open chat"
+            >
+              💬
+            </Box>
+            {/* Unread badge */}
+            {unreadCount > 0 && (
+              <Box
+                position="absolute"
+                top="-4px"
+                right="-4px"
+                minW="14px"
+                h="14px"
+                bg="#e74c3c"
+                borderRadius="10px"
+                display="flex"
+                alignItems="center"
+                justifyContent="center"
+                px="3px"
+                fontSize="7px"
+                fontWeight="600"
+                color="white"
+                pointerEvents="none"
+                sx={{
+                  animation: 'badgePop 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
+                  '@keyframes badgePop': {
+                    from: { transform: 'scale(0)' },
+                    to: { transform: 'scale(1)' },
+                  },
+                }}
+              >
+                {unreadCount > 9 ? '9+' : unreadCount}
+              </Box>
+            )}
+          </Box>
 
           {isDesktop ? (
             <>
@@ -2142,14 +2230,14 @@ export const GameBoard: FC = () => {
       {!isDesktop && (
         <Box
           flex={1}
+          minH={0}
           bg="#0d0d12"
           display="flex"
           flexDirection="column"
           justifyContent="center"
           px="14px"
           py="14px"
-          overflowX="hidden"
-          overflowY="visible"
+          overflow="hidden"
         >
           <Box
             bg="#12181a"
@@ -5922,6 +6010,68 @@ export const GameBoard: FC = () => {
           </Box>
         </ModalContent>
       </Modal>
+      {/* ── Chat drawer (full-screen overlay) ── */}
+      <ChatDrawer isOpen={isChatOpen} onClose={() => setIsChatOpen(false)} />
+      {/* ── Chat toast preview ── */}
+      {toastPreviewMsg && (
+        <Box
+          position="fixed"
+          bottom="72px"
+          left="50%"
+          zIndex={190}
+          pointerEvents="auto"
+          sx={{
+            transform: 'translateX(-50%)',
+            animation: 'toastSlideUp 0.2s ease-out',
+            '@keyframes toastSlideUp': {
+              from: { opacity: 0, transform: 'translateX(-50%) translateY(10px)' },
+              to: { opacity: 1, transform: 'translateX(-50%) translateY(0)' },
+            },
+          }}
+          onClick={handleOpenChat}
+          cursor="pointer"
+        >
+          <Flex
+            align="center"
+            gap="8px"
+            bg="#1a1a2e"
+            border="0.5px solid #2a2a50"
+            borderRadius="18px"
+            px="12px"
+            h="36px"
+            maxW="260px"
+          >
+            <Box
+              w="14px"
+              h="14px"
+              borderRadius="50%"
+              bg="#1f2b5e"
+              color="#7b8cde"
+              fontSize="7px"
+              fontWeight="700"
+              display="flex"
+              alignItems="center"
+              justifyContent="center"
+              flexShrink={0}
+            >
+              {toastPreviewMsg.username.slice(0, 2).toUpperCase()}
+            </Box>
+            <Text
+              fontSize="12px"
+              color="#c8c8e8"
+              overflow="hidden"
+              whiteSpace="nowrap"
+              textOverflow="ellipsis"
+              maxW="200px"
+            >
+              <Text as="span" fontWeight="600">
+                {toastPreviewMsg.username}:
+              </Text>{' '}
+              {toastPreviewMsg.text}
+            </Text>
+          </Flex>
+        </Box>
+      )}
     </Box>
   );
 };

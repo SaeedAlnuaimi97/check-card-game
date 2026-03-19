@@ -28,6 +28,20 @@ import type {
 import type { SlotLabel } from '../types/player.types';
 
 // ============================================================
+// Chat Types (mirrored from server ChatMessage interface)
+// ============================================================
+
+export interface ChatMessage {
+  id: string;
+  roomCode: string;
+  playerId: string;
+  username: string;
+  text: string;
+  timestamp: number;
+  isSystem?: boolean;
+}
+
+// ============================================================
 // Debug Mode
 // ============================================================
 
@@ -139,6 +153,16 @@ interface SocketContextValue {
   sendReaction: (emoji: string) => Promise<{ success: boolean; error?: string }>;
   /** Attempt to rejoin a room by room code (used by /game/:roomCode route) */
   rejoinWithCode: (roomCode: string) => void;
+  /** All chat messages for the current room */
+  chatMessages: ChatMessage[];
+  /** The most recent incoming chat message (for toast preview) — null when drawer is open */
+  lastChatMessage: ChatMessage | null;
+  /** Clear lastChatMessage (call when drawer opens) */
+  clearLastChatMessage: () => void;
+  /** Send a chat message to the room */
+  sendChatMessage: (text: string) => Promise<{ success: boolean; error?: string }>;
+  /** Fetch chat history for the current room (call on drawer open / reconnect) */
+  getChatHistory: () => Promise<{ success: boolean; messages?: ChatMessage[]; error?: string }>;
 }
 
 const SocketContext = createContext<SocketContextValue | null>(null);
@@ -180,6 +204,10 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
     id: number;
   } | null>(null);
   const reactionIdRef = useRef(0);
+
+  // Chat state
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [lastChatMessage, setLastChatMessage] = useState<ChatMessage | null>(null);
 
   // Use a ref for navigate to avoid re-registering socket listeners
   const navigateRef = useRef(navigate);
@@ -475,6 +503,12 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
       });
     });
 
+    // Chat message received from the room
+    socket.on('chatMessage', (msg: ChatMessage) => {
+      setChatMessages((prev) => [...prev, msg]);
+      setLastChatMessage(msg);
+    });
+
     // F-203/F-306: Host kicked this player from the lobby
     socket.on('kicked', (_data: { roomCode: string; reason: string }) => {
       console.log('You were kicked from the room');
@@ -525,6 +559,7 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
       socket.off('nextRoundCountdown');
       socket.off('slotsModified');
       socket.off('reactionReceived');
+      socket.off('chatMessage');
       socket.off('kicked');
       socket.disconnect();
     };
@@ -1200,6 +1235,65 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
     }
   }, []);
 
+  // ----------------------------------------------------------
+  // clearLastChatMessage — call when drawer opens to suppress toast
+  // ----------------------------------------------------------
+  const clearLastChatMessage = useCallback(() => {
+    setLastChatMessage(null);
+  }, []);
+
+  // ----------------------------------------------------------
+  // sendChatMessage — emit text message to the room
+  // ----------------------------------------------------------
+  const sendChatMessage = useCallback(
+    (text: string): Promise<{ success: boolean; error?: string }> => {
+      return new Promise((resolve) => {
+        const roomCode = roomData?.roomCode;
+        const pid = playerId;
+        if (!roomCode || !pid) {
+          resolve({ success: false, error: 'Not in a room' });
+          return;
+        }
+        socket.emit(
+          'sendChatMessage',
+          { roomCode, playerId: pid, text },
+          (response: { success: boolean; error?: string }) => {
+            resolve(response);
+          },
+        );
+      });
+    },
+    [roomData, playerId],
+  );
+
+  // ----------------------------------------------------------
+  // getChatHistory — fetch stored messages for the room
+  // ----------------------------------------------------------
+  const getChatHistory = useCallback((): Promise<{
+    success: boolean;
+    messages?: ChatMessage[];
+    error?: string;
+  }> => {
+    return new Promise((resolve) => {
+      const roomCode = roomData?.roomCode;
+      const pid = playerId;
+      if (!roomCode || !pid) {
+        resolve({ success: false, error: 'Not in a room' });
+        return;
+      }
+      socket.emit(
+        'getChatHistory',
+        { roomCode, playerId: pid },
+        (response: { success: boolean; messages?: ChatMessage[]; error?: string }) => {
+          if (response.success && response.messages) {
+            setChatMessages(response.messages);
+          }
+          resolve(response);
+        },
+      );
+    });
+  }, [roomData, playerId]);
+
   const value: SocketContextValue = useMemo(
     () => ({
       isConnected,
@@ -1247,6 +1341,11 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
       clearGameEndData,
       sendReaction,
       rejoinWithCode,
+      chatMessages,
+      lastChatMessage,
+      clearLastChatMessage,
+      sendChatMessage,
+      getChatHistory,
     }),
     [
       isConnected,
@@ -1294,6 +1393,11 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
       clearGameEndData,
       sendReaction,
       rejoinWithCode,
+      chatMessages,
+      lastChatMessage,
+      clearLastChatMessage,
+      sendChatMessage,
+      getChatHistory,
     ],
   );
 

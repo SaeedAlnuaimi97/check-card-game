@@ -465,3 +465,12 @@ Design system source of truth: `reskin/` folder (spec MD + two HTML mockups). Sk
 **UI Reskin:** 18  
 **Document Version:** 1.14  
 **Last Updated:** 2026-03-17
+
+---
+
+### 41. Chat Feature (🔴)
+
+- [x] **CHAT-001**: Server chat handlers — in-memory `chatStore` (Map, 200-msg cap per room), `sendChatMessage` socket handler (validates room membership, sanitizes text, broadcasts `chatMessage`), `getChatHistory` socket handler; unit tests for all store functions
+- [x] **CHAT-002**: SocketContext chat integration — `chatMessages` state, `lastChatMessage` state (drives toast preview), `sendChatMessage()` method, `getChatHistory()` method, `clearLastChatMessage()` helper; `chatMessage` socket event listener
+- [x] **CHAT-003**: ChatDrawer component — slide-up drawer with 4 snap states (closed/peek/half/full), drag gesture handling with velocity-based close, backdrop with proportional opacity, header with player avatars, message list with auto-scroll + "↓ new messages" pill, consecutive message grouping, system event pills, empty state, input row with send button, quick-react chips strip, Escape key handler, popIn animation on new bubbles
+- [x] **CHAT-004**: GameBoard integration — chat bubble button in top bar (next to emoji button), unread badge (red pill, capped at `9+`), toast preview (slide-up pill with sender name + text, 3s auto-dismiss, tap to open drawer)
