@@ -1,6 +1,7 @@
 import { Server as SocketIOServer } from 'socket.io';
 import { registerRoomHandlers } from './roomHandlers';
 import { registerGameHandlers } from './gameHandlers';
+import { registerChatHandlers } from './chatHandlers';
 
 export function registerSocketHandlers(io: SocketIOServer): void {
   io.on('connection', (socket) => {
@@ -11,5 +12,8 @@ export function registerSocketHandlers(io: SocketIOServer): void {
 
     // Register game action handlers (F-033+)
     registerGameHandlers(io, socket);
+
+    // Register chat handlers
+    registerChatHandlers(io, socket);
   });
 }

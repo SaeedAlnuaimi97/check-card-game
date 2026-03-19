@@ -1,0 +1,370 @@
+
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: transparent; }
+  .root { display: flex; justify-content: center; padding: 16px 0; }
+  .phone-wrap { width: 300px; height: 580px; background: #0d0d1a; border-radius: 32px; border: 2px solid #2a2a45; overflow: hidden; position: relative; font-family: var(--font-sans); }
+
+  /* game bg */
+  .game { position: absolute; inset: 0; padding: 12px; display: flex; flex-direction: column; gap: 8px; transition: opacity 0.3s; }
+  .game.dimmed { opacity: 0.35; pointer-events: none; }
+  .g-top { display: flex; justify-content: space-between; align-items: center; }
+  .g-round { font-size: 12px; color: #7b8cde; font-weight: 500; }
+  .g-check { background: #d4a017; border-radius: 6px; padding: 3px 10px; font-size: 10px; color: #412402; font-weight: 500; }
+  .g-opponents { display: flex; flex-direction: column; gap: 4px; }
+  .g-opp { display: flex; align-items: center; gap: 6px; }
+  .g-av { width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 8px; font-weight: 600; flex-shrink: 0; }
+  .av-fe { background: #1f2b5e; color: #7b8cde; }
+  .av-mi { background: #3b1f3b; color: #c07bd0; }
+  .av-yo { background: #1a3b2b; color: #4ade80; }
+  .g-opp-name { font-size: 10px; color: #a0a0c0; }
+  .g-opp-cards { display: flex; gap: 3px; }
+  .g-mini-card { width: 14px; height: 18px; background: #1e1e40; border-radius: 2px; border: 0.5px solid #2a2a55; }
+  .g-table { background: #12121f; border-radius: 10px; padding: 10px; flex: 1; display: flex; flex-direction: column; gap: 8px; }
+  .g-timer-row { display: flex; align-items: center; gap: 6px; }
+  .g-timer-dot { width: 22px; height: 22px; border-radius: 50%; border: 2px solid #4ade80; display: flex; align-items: center; justify-content: center; font-size: 8px; color: #4ade80; font-weight: 600; }
+  .g-timer-label { font-size: 9px; color: #4ade80; }
+  .g-timer-bar { flex: 1; height: 3px; background: #1e3a28; border-radius: 2px; overflow: hidden; }
+  .g-timer-fill { width: 70%; height: 100%; background: #4ade80; border-radius: 2px; }
+  .g-cards-row { display: flex; align-items: center; justify-content: space-around; flex: 1; }
+  .g-deck { width: 60px; height: 82px; background: #1e1e40; border-radius: 6px; border: 1px solid #2a2a55; display: flex; align-items: center; justify-content: center; }
+  .g-deck-diamond { width: 16px; height: 16px; background: #3b4fd4; transform: rotate(45deg); border-radius: 2px; }
+  .g-arrow { font-size: 12px; color: #555580; }
+  .g-discard { width: 60px; height: 82px; background: #fff; border-radius: 6px; border: 1px solid #ddd; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; }
+  .g-card-num { font-size: 14px; color: #c0392b; font-weight: 700; }
+  .g-card-suit { font-size: 20px; color: #c0392b; line-height: 1; }
+  .g-hand { display: flex; gap: 6px; justify-content: center; padding-top: 4px; }
+  .g-hand-card { width: 46px; height: 62px; background: #1e1e40; border-radius: 5px; border: 1px solid #2a2a55; cursor: pointer; transition: transform 0.15s; }
+  .g-hand-card:hover { transform: translateY(-4px); }
+  .g-hand-label { text-align: center; font-size: 9px; color: #555580; }
+
+  /* bottom bar */
+  .bottom-bar { position: absolute; bottom: 0; left: 0; right: 0; background: #0a0a18; border-top: 1px solid #1a1a30; display: flex; align-items: center; justify-content: space-around; padding: 8px 0 10px; z-index: 5; }
+  .bb-tab { display: flex; flex-direction: column; align-items: center; gap: 3px; cursor: pointer; position: relative; padding: 2px 14px; }
+  .bb-tab svg { opacity: 0.4; transition: opacity 0.2s; }
+  .bb-tab.active svg { opacity: 1; }
+  .bb-tab-label { font-size: 9px; color: #555580; transition: color 0.2s; }
+  .bb-tab.active .bb-tab-label { color: #7b8cde; }
+  .bb-badge { position: absolute; top: 0; right: 8px; width: 14px; height: 14px; background: #e74c3c; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 7px; color: #fff; font-weight: 600; border: 1.5px solid #0a0a18; transform: scale(0); transition: transform 0.2s cubic-bezier(0.34,1.56,0.64,1); }
+  .bb-badge.show { transform: scale(1); }
+
+  /* toast */
+  .toast { position: absolute; left: 16px; right: 16px; bottom: 56px; background: #1a1a2e; border: 0.5px solid #2a2a50; border-radius: 18px; padding: 8px 12px; display: flex; align-items: center; gap: 8px; z-index: 8; transform: translateY(20px); opacity: 0; transition: transform 0.25s ease, opacity 0.25s ease; pointer-events: none; cursor: pointer; }
+  .toast.show { transform: translateY(0); opacity: 1; pointer-events: auto; }
+  .toast-text { font-size: 11px; color: #c8c8e8; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .toast-name { color: #7b8cde; font-weight: 500; }
+
+  /* backdrop */
+  .backdrop { position: absolute; inset: 0; background: rgba(0,0,0,0); z-index: 9; pointer-events: none; transition: background 0.3s; }
+  .backdrop.show { background: rgba(0,0,0,0.55); pointer-events: auto; }
+
+  /* drawer */
+  .drawer { position: absolute; left: 0; right: 0; bottom: 0; background: #0f0f20; border-radius: 16px 16px 0 0; border-top: 1px solid #2a2a45; z-index: 10; display: flex; flex-direction: column; transform: translateY(100%); transition: transform 0.32s cubic-bezier(0.32,0.72,0,1); }
+  .drawer.open { transform: translateY(0); }
+  .drawer-handle-zone { padding: 8px 0 4px; display: flex; justify-content: center; cursor: grab; flex-shrink: 0; }
+  .drawer-handle { width: 40px; height: 4px; background: #2a2a50; border-radius: 2px; }
+  .drawer-header { display: flex; align-items: center; justify-content: space-between; padding: 0 14px 10px; flex-shrink: 0; }
+  .dh-left { display: flex; align-items: center; gap: 6px; }
+  .dh-dot { width: 7px; height: 7px; border-radius: 50%; background: #4ade80; }
+  .dh-label { font-size: 10px; color: #a0a0c0; font-weight: 500; letter-spacing: 0.06em; }
+  .dh-avatars { display: flex; gap: 4px; }
+  .dh-av { width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 8px; font-weight: 600; }
+  .msg-list { flex: 1; background: #12121f; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 10px; min-height: 0; }
+  .msg-list::-webkit-scrollbar { width: 0; }
+  .msg-row { display: flex; align-items: flex-end; gap: 6px; }
+  .msg-row.you { flex-direction: row-reverse; }
+  .msg-av { width: 22px; height: 22px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 8px; font-weight: 600; }
+  .msg-body { display: flex; flex-direction: column; gap: 2px; max-width: 75%; }
+  .msg-row.you .msg-body { align-items: flex-end; }
+  .msg-sender { font-size: 10px; color: #555580; }
+  .msg-bubble { padding: 7px 10px; font-size: 13px; line-height: 1.4; border-radius: 10px 10px 10px 2px; background: #1e1e35; color: #c8c8e8; }
+  .msg-row.you .msg-bubble { border-radius: 10px 10px 2px 10px; background: #1a3b2b; color: #a8f0c8; }
+  .msg-bubble.new { animation: popIn 0.18s ease-out; }
+  .msg-system { display: flex; justify-content: center; }
+  .msg-sys-pill { background: #1e1e2e; border-radius: 20px; padding: 4px 10px; font-size: 11px; color: #555580; }
+  @keyframes popIn { from { opacity:0; transform: scale(0.92); } to { opacity:1; transform: scale(1); } }
+
+  .input-row { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-top: 0.5px solid #1e1e35; flex-shrink: 0; }
+  .chat-input { flex: 1; background: #1e1e35; border: 0.5px solid #2a2a50; border-radius: 20px; padding: 8px 14px; font-size: 13px; color: #c8c8e8; font-family: var(--font-sans); outline: none; }
+  .chat-input::placeholder { color: #444460; }
+  .send-btn { width: 34px; height: 34px; border-radius: 50%; background: #1e1e35; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: background 0.15s; }
+  .send-btn.active { background: #3b4fd4; }
+  .chips { display: flex; gap: 6px; padding: 0 12px 10px; overflow-x: auto; flex-shrink: 0; }
+  .chips::-webkit-scrollbar { display: none; }
+  .chip { background: #1e1e35; border: 0.5px solid #2a2a50; border-radius: 20px; padding: 5px 12px; font-size: 12px; color: #7070a0; white-space: nowrap; cursor: pointer; flex-shrink: 0; font-family: var(--font-sans); transition: background 0.1s; }
+  .chip:active { background: #2a2a50; }
+
+  /* new msg pill */
+  .new-msg-pill { position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%); background: #3b4fd4; border-radius: 20px; padding: 5px 14px; font-size: 11px; color: #fff; cursor: pointer; display: none; z-index: 2; white-space: nowrap; }
+</style>
+
+<div class="root">
+<div class="phone-wrap" id="phone">
+
+  <div class="game" id="game">
+    <div class="g-top">
+      <span class="g-round">Round: 1</span>
+      <div class="g-check">CHECK</div>
+    </div>
+    <div class="g-opponents">
+      <div class="g-opp">
+        <div class="g-av av-fe">FE</div>
+        <span class="g-opp-name">Felix</span>
+        <div style="flex:1"></div>
+        <div class="g-opp-cards"><div class="g-mini-card"></div><div class="g-mini-card"></div><div class="g-mini-card"></div><div class="g-mini-card"></div></div>
+        <span style="font-size:10px;color:#555580;margin-left:6px;">0</span>
+      </div>
+      <div class="g-opp">
+        <div class="g-av av-mi">MI</div>
+        <span class="g-opp-name">Mila</span>
+        <div style="flex:1"></div>
+        <div class="g-opp-cards"><div class="g-mini-card"></div><div class="g-mini-card"></div><div class="g-mini-card"></div><div class="g-mini-card"></div></div>
+        <span style="font-size:10px;color:#555580;margin-left:6px;">0</span>
+      </div>
+    </div>
+    <div class="g-table">
+      <div class="g-timer-row">
+        <div class="g-timer-dot">31</div>
+        <span class="g-timer-label">your turn</span>
+        <div class="g-timer-bar"><div class="g-timer-fill"></div></div>
+      </div>
+      <div class="g-cards-row">
+        <div style="display:flex;flex-direction:column;align-items:center;gap:4px;">
+          <div class="g-deck"><div class="g-deck-diamond"></div></div>
+          <span style="font-size:9px;color:#555580;">draw pile</span>
+        </div>
+        <div class="g-arrow">→</div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:4px;">
+          <div class="g-discard"><span class="g-card-num">6</span><span class="g-card-suit">♥</span></div>
+          <span style="font-size:9px;color:#555580;">discard</span>
+        </div>
+      </div>
+    </div>
+    <div>
+      <div class="g-hand">
+        <div class="g-hand-card"></div>
+        <div class="g-hand-card"></div>
+        <div class="g-hand-card"></div>
+        <div class="g-hand-card"></div>
+      </div>
+      <div class="g-hand-label" style="margin-top:4px;">your hand</div>
+    </div>
+  </div>
+
+  <div class="bottom-bar">
+    <div class="bb-tab active">
+      <svg width="18" height="18" viewBox="0 0 20 20" fill="none"><rect x="2" y="3" width="16" height="11" rx="3" stroke="#7b8cde" stroke-width="1.4"/><path d="M6 17l4-3h6" stroke="#7b8cde" stroke-width="1.4" stroke-linecap="round"/></svg>
+      <span class="bb-tab-label" style="color:#7b8cde;">game</span>
+    </div>
+    <div class="bb-tab" id="chat-tab" onclick="openDrawer()">
+      <svg width="18" height="18" viewBox="0 0 20 20" fill="none"><path d="M4 6h12M4 10h8M4 14h5" stroke="#888" stroke-width="1.4" stroke-linecap="round"/></svg>
+      <span class="bb-tab-label">chat</span>
+      <div class="bb-badge" id="badge">2</div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" onclick="openDrawer()">
+    <div class="g-av av-fe" style="width:18px;height:18px;font-size:7px;flex-shrink:0;">FE</div>
+    <span class="toast-text"><span class="toast-name">Felix:</span> gg no way you drew a 6</span>
+  </div>
+
+  <div class="backdrop" id="backdrop" onclick="closeDrawer()"></div>
+
+  <div class="drawer" id="drawer" style="height: 72%;">
+    <div class="drawer-handle-zone">
+      <div class="drawer-handle"></div>
+    </div>
+    <div class="drawer-header">
+      <div class="dh-left">
+        <div class="dh-dot"></div>
+        <span class="dh-label">TABLE CHAT</span>
+      </div>
+      <div class="dh-avatars">
+        <div class="dh-av av-fe">FE</div>
+        <div class="dh-av av-mi">MI</div>
+        <div class="dh-av av-yo">YO</div>
+      </div>
+    </div>
+    <div class="msg-list" id="msgList">
+      <div class="msg-row">
+        <div class="msg-av av-fe">FE</div>
+        <div class="msg-body"><span class="msg-sender">Felix</span><div class="msg-bubble">gg no way you drew a 6 😂</div></div>
+      </div>
+      <div class="msg-row">
+        <div class="msg-av av-mi">MI</div>
+        <div class="msg-body"><span class="msg-sender">Mila</span><div class="msg-bubble">lol good luck with that hand</div></div>
+      </div>
+      <div class="msg-system"><span class="msg-sys-pill">Felix played a card</span></div>
+      <div class="msg-row you">
+        <div class="msg-av av-yo">YO</div>
+        <div class="msg-body"><span class="msg-sender">You</span><div class="msg-bubble">watch me cook</div></div>
+      </div>
+      <div class="msg-row">
+        <div class="msg-av av-fe">FE</div>
+        <div class="msg-body"><span class="msg-sender">Felix</span><div class="msg-bubble">your turn, good luck</div></div>
+      </div>
+      <div class="msg-system"><span class="msg-sys-pill">Mila drew a card</span></div>
+      <div class="msg-row">
+        <div class="msg-av av-mi">MI</div>
+        <div class="msg-body"><span class="msg-sender">Mila</span><div class="msg-bubble">ok this is getting interesting</div></div>
+      </div>
+    </div>
+    <div class="new-msg-pill" id="newMsgPill" onclick="scrollToBottom()">↓ new messages</div>
+    <div class="input-row">
+      <input class="chat-input" id="chatInput" placeholder="say something..." oninput="onInput()" onkeydown="onKey(event)" />
+      <button class="send-btn" id="sendBtn" onclick="sendMsg()">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 7L12 7M12 7L8 3M12 7L8 11" stroke="#444460" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" id="sendArrow"/></svg>
+      </button>
+    </div>
+    <div class="chips">
+      <button class="chip" onclick="sendChip('😂')">😂</button>
+      <button class="chip" onclick="sendChip('🔥')">🔥</button>
+      <button class="chip" onclick="sendChip('gg')">gg</button>
+      <button class="chip" onclick="sendChip('no way!')">no way!</button>
+      <button class="chip" onclick="sendChip('nice')">nice</button>
+      <button class="chip" onclick="sendChip('rip')">rip</button>
+    </div>
+  </div>
+
+</div>
+</div>
+
+<script>
+var drawerOpen = false;
+var toastTimer = null;
+
+function openDrawer() {
+  drawerOpen = true;
+  document.getElementById('drawer').classList.add('open');
+  document.getElementById('backdrop').classList.add('show');
+  document.getElementById('game').classList.add('dimmed');
+  document.getElementById('badge').classList.remove('show');
+  hideToast();
+  scrollToBottom();
+  setTimeout(() => document.getElementById('chatInput').focus(), 350);
+}
+
+function closeDrawer() {
+  drawerOpen = false;
+  document.getElementById('drawer').classList.remove('open');
+  document.getElementById('backdrop').classList.remove('show');
+  document.getElementById('game').classList.remove('dimmed');
+}
+
+function hideToast() {
+  document.getElementById('toast').classList.remove('show');
+  if (toastTimer) clearTimeout(toastTimer);
+}
+
+function onInput() {
+  var val = document.getElementById('chatInput').value.trim();
+  var btn = document.getElementById('sendBtn');
+  var arrow = document.getElementById('sendArrow');
+  if (val) {
+    btn.classList.add('active');
+    arrow.setAttribute('stroke', 'white');
+  } else {
+    btn.classList.remove('active');
+    arrow.setAttribute('stroke', '#444460');
+  }
+}
+
+function onKey(e) {
+  if (e.key === 'Enter') sendMsg();
+  if (e.key === 'Escape') closeDrawer();
+}
+
+function sendMsg() {
+  var input = document.getElementById('chatInput');
+  var val = input.value.trim();
+  if (!val) return;
+  appendMsg('you', 'You', val);
+  input.value = '';
+  onInput();
+  simulateReply(val);
+}
+
+function sendChip(text) {
+  appendMsg('you', 'You', text);
+  simulateReply(text);
+}
+
+var replies = [
+  ['fe', 'Felix', 'haha okay okay'],
+  ['mi', 'Mila', 'bold move'],
+  ['fe', 'Felix', 'we shall see about that'],
+  ['mi', 'Mila', '👀'],
+  ['fe', 'Felix', 'this round is mine'],
+  ['mi', 'Mila', 'both of you are cooked'],
+];
+var replyIdx = 0;
+
+function simulateReply(trigger) {
+  var delay = 1200 + Math.random() * 1000;
+  setTimeout(function() {
+    var r = replies[replyIdx % replies.length];
+    replyIdx++;
+    if (!drawerOpen) {
+      showToast(r[1], r[2], r[0]);
+      document.getElementById('badge').textContent = '1';
+      document.getElementById('badge').classList.add('show');
+    } else {
+      appendMsg(r[0], r[1], r[2]);
+    }
+  }, delay);
+}
+
+function showToast(name, text, who) {
+  var toast = document.getElementById('toast');
+  var av = toast.querySelector('.g-av');
+  av.className = 'g-av av-' + who;
+  av.textContent = who === 'fe' ? 'FE' : 'MI';
+  toast.querySelector('.toast-name').textContent = name + ':';
+  toast.querySelector('.toast-text').childNodes[1].textContent = ' ' + text;
+  toast.classList.add('show');
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(hideToast, 3000);
+}
+
+function appendMsg(who, name, text) {
+  var list = document.getElementById('msgList');
+  var atBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 60;
+  var row = document.createElement('div');
+  row.className = 'msg-row' + (who === 'you' ? ' you' : '');
+  var av = document.createElement('div');
+  av.className = 'msg-av av-' + (who === 'you' ? 'yo' : who);
+  av.textContent = who === 'you' ? 'YO' : (who === 'fe' ? 'FE' : 'MI');
+  var body = document.createElement('div');
+  body.className = 'msg-body';
+  var sender = document.createElement('span');
+  sender.className = 'msg-sender';
+  sender.textContent = name;
+  var bubble = document.createElement('div');
+  bubble.className = 'msg-bubble new';
+  bubble.textContent = text;
+  body.appendChild(sender);
+  body.appendChild(bubble);
+  row.appendChild(av);
+  row.appendChild(body);
+  list.appendChild(row);
+  if (atBottom) {
+    scrollToBottom();
+  } else {
+    var pill = document.getElementById('newMsgPill');
+    pill.style.display = 'block';
+  }
+}
+
+function scrollToBottom() {
+  var list = document.getElementById('msgList');
+  list.scrollTop = list.scrollHeight;
+  document.getElementById('newMsgPill').style.display = 'none';
+}
+
+setTimeout(function() {
+  if (!drawerOpen) {
+    showToast('Felix', 'gg no way you drew a 6', 'fe');
+    document.getElementById('badge').classList.add('show');
+  }
+}, 1500);
+</script>
