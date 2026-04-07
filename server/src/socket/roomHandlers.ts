@@ -27,7 +27,13 @@ import {
 import { emitYourTurn, broadcastGameState } from './gameHandlers';
 import { scheduleBotTurnIfNeeded } from '../utils/botScheduler';
 import { computeGameEndResult } from '../game/Scoring';
-import type { GameState, BotDifficulty, ClientGameState, PeekedCard } from '../types/game.types';
+import type {
+  GameState,
+  GameMode,
+  BotDifficulty,
+  ClientGameState,
+  PeekedCard,
+} from '../types/game.types';
 
 // ============================================================
 // Constants
@@ -112,6 +118,7 @@ async function broadcastRoomUpdate(io: SocketIOServer, roomCode: string): Promis
     status: room.status,
     maxPlayers: MAX_PLAYERS,
     minPlayers: MIN_PLAYERS,
+    gameMode: (room as any).gameMode ?? 'classic',
   });
 }
 
@@ -126,7 +133,7 @@ export function registerRoomHandlers(io: SocketIOServer, socket: Socket): void {
   socket.on(
     'createRoom',
     async (
-      data: { username: string; guestId?: string },
+      data: { username: string; guestId?: string; gameMode?: string },
       callback?: (response: {
         success: boolean;
         roomCode?: string;
@@ -138,6 +145,7 @@ export function registerRoomHandlers(io: SocketIOServer, socket: Socket): void {
           status: string;
           maxPlayers: number;
           minPlayers: number;
+          gameMode: string;
         };
         error?: string;
         gameState?: ClientGameState;
@@ -178,6 +186,12 @@ export function registerRoomHandlers(io: SocketIOServer, socket: Socket): void {
 
         const playerId = generatePlayerId();
 
+        // Validate and default gameMode
+        const validModes: GameMode[] = ['classic', 'suddenDeath', 'bountyHunt', 'blindRounds'];
+        const gameMode: GameMode = validModes.includes(data?.gameMode as GameMode)
+          ? (data.gameMode as GameMode)
+          : 'classic';
+
         // Create room in DB (F-021: status starts as 'lobby')
         const room = new RoomModel({
           roomCode,
@@ -185,6 +199,7 @@ export function registerRoomHandlers(io: SocketIOServer, socket: Socket): void {
           players: [{ id: playerId, username }],
           gameState: null,
           status: 'lobby',
+          gameMode,
         });
         await room.save();
 
@@ -205,6 +220,7 @@ export function registerRoomHandlers(io: SocketIOServer, socket: Socket): void {
             status: room.status,
             maxPlayers: MAX_PLAYERS,
             minPlayers: MIN_PLAYERS,
+            gameMode,
           },
         });
         await broadcastRoomUpdate(io, roomCode);
@@ -261,6 +277,16 @@ export function registerRoomHandlers(io: SocketIOServer, socket: Socket): void {
         // F-364: Allow joining rooms in 'lobby' or 'playing' status
         if (room.status !== 'lobby' && room.status !== 'playing') {
           callback?.({ success: false, error: 'Cannot join this room' });
+          return;
+        }
+
+        // Block mid-game join for non-classic modes
+        if (
+          room.status === 'playing' &&
+          (room as any).gameMode &&
+          (room as any).gameMode !== 'classic'
+        ) {
+          callback?.({ success: false, error: 'Mid-game join is not available in this mode' });
           return;
         }
 
@@ -461,6 +487,18 @@ export function registerRoomHandlers(io: SocketIOServer, socket: Socket): void {
           targetScore = parsed;
         }
 
+        // Determine game mode from room
+        const gameMode: GameMode = ((room as any).gameMode as GameMode) ?? 'classic';
+
+        // Mode-specific player cap validation
+        if (gameMode === 'suddenDeath' && room.players.length > 6) {
+          callback?.({
+            success: false,
+            error: 'Sudden Death mode supports a maximum of 6 players',
+          });
+          return;
+        }
+
         // Initialize game state (F-028, F-029, F-032)
         const gameState = initializeGameState(
           room.players.map((p) => ({
@@ -472,6 +510,7 @@ export function registerRoomHandlers(io: SocketIOServer, socket: Socket): void {
           undefined,
           1,
           targetScore,
+          gameMode,
         );
 
         // Update room in DB

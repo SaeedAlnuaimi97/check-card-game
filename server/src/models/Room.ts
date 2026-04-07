@@ -1,5 +1,12 @@
 import mongoose, { Schema, Document } from 'mongoose';
-import type { Card, GameState, HandSlot, PlayerState, RoomStatus } from '../types/game.types';
+import type {
+  Card,
+  GameState,
+  HandSlot,
+  PlayerState,
+  RoomStatus,
+  GameMode,
+} from '../types/game.types';
 
 // ============================================================
 // Sub-Schemas
@@ -79,6 +86,15 @@ const GameStateSchema = new Schema<GameState>(
     pausedAt: { type: Number, default: null },
     turnTimeRemainingMs: { type: Number, default: null },
     targetScore: { type: Number, required: true, default: 70 },
+    gameMode: {
+      type: String,
+      required: true,
+      enum: ['classic', 'suddenDeath', 'bountyHunt', 'blindRounds'],
+      default: 'classic',
+    },
+    bountyRank: { type: String, default: undefined },
+    bountyBurnCounts: { type: Schema.Types.Mixed, default: undefined },
+    isBlindRound: { type: Boolean, default: undefined },
   },
   { _id: false },
 );
@@ -110,6 +126,7 @@ export interface RoomDocument extends Document {
   }[];
   gameState: GameState | null;
   status: RoomStatus;
+  gameMode: GameMode;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -133,6 +150,12 @@ const RoomSchema = new Schema<RoomDocument>(
       required: true,
       enum: ['lobby', 'playing', 'finished'],
       default: 'lobby',
+    },
+    gameMode: {
+      type: String,
+      required: true,
+      enum: ['classic', 'suddenDeath', 'bountyHunt', 'blindRounds'],
+      default: 'classic',
     },
   },
   {

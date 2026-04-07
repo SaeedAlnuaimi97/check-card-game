@@ -2,39 +2,47 @@ import {
   BotDifficulty,
   ClientGameState,
   ClientPlayerState,
+  GameMode,
   GameState,
   HandSlot,
   PeekedCard,
   PlayerState,
   SlotLabel,
 } from '../types/game.types';
-import { createShuffledDeck, createDebugDeck, drawFromDeck } from './Deck';
+import { createShuffledDeck, createDebugDeck, drawFromDeck, shuffleDeck } from './Deck';
 
 // ============================================================
 // Constants
 // ============================================================
 
 const INITIAL_SLOTS: SlotLabel[] = ['A', 'B', 'C', 'D'];
+const INITIAL_SLOTS_SD: SlotLabel[] = ['A', 'B', 'C', 'D', 'E', 'F'];
 const CARDS_PER_PLAYER = 4;
+const CARDS_PER_PLAYER_SD = 6;
 
 // ============================================================
 // F-028: Deal Cards
 // ============================================================
 
 /**
- * Deals CARDS_PER_PLAYER cards from the deck to each player into slots A-D.
+ * Deals cards from the deck to each player.
+ * Classic: 4 cards (A-D). Sudden Death: 6 cards (A-F).
  * Mutates the gameState.deck (cards are removed) and each player's hand.
  */
 export function dealCards(gameState: GameState): void {
+  const isSuddenDeath = gameState.gameMode === 'suddenDeath';
+  const count = isSuddenDeath ? CARDS_PER_PLAYER_SD : CARDS_PER_PLAYER;
+  const slots = isSuddenDeath ? INITIAL_SLOTS_SD : INITIAL_SLOTS;
+
   for (const player of gameState.players) {
     player.hand = [];
-    for (let i = 0; i < CARDS_PER_PLAYER; i++) {
+    for (let i = 0; i < count; i++) {
       const card = drawFromDeck(gameState);
       if (!card) {
         throw new Error('Not enough cards in deck to deal');
       }
       player.hand.push({
-        slot: INITIAL_SLOTS[i],
+        slot: slots[i],
         card,
       });
     }
@@ -46,13 +54,17 @@ export function dealCards(gameState: GameState): void {
 // ============================================================
 
 const PEEK_SLOTS: SlotLabel[] = ['C', 'D'];
+const PEEK_SLOTS_SD: SlotLabel[] = ['E', 'F'];
 
 /**
- * Returns the fixed peek slots (C and D) for the initial peek phase.
- * Players always peek at their bottom two cards.
+ * Returns the peek slots for the initial peek phase.
+ * Classic: C, D. Sudden Death: E, F (last two dealt slots).
  */
-export function selectInitialPeekSlots(_player: PlayerState): SlotLabel[] {
-  return [...PEEK_SLOTS];
+export function selectInitialPeekSlots(
+  _player: PlayerState,
+  gameMode: GameMode = 'classic',
+): SlotLabel[] {
+  return gameMode === 'suddenDeath' ? [...PEEK_SLOTS_SD] : [...PEEK_SLOTS];
 }
 
 /**
@@ -98,12 +110,14 @@ export function selectFirstPlayer(playerCount: number): number {
  * @param existingScores Optional scores carried over from previous rounds.
  * @param roundNumber The current round number (default 1).
  * @param targetScore Custom score threshold for game end (default 70, F-310).
+ * @param gameMode The game mode for this session (default 'classic').
  */
 export function initializeGameState(
   players: { id: string; username: string; isBot?: boolean; botDifficulty?: BotDifficulty }[],
   existingScores?: Record<string, number>,
   roundNumber = 1,
   targetScore = 70,
+  gameMode: GameMode = 'classic',
 ): GameState {
   const deck = process.env.DEBUG_DECK === 'true' ? createDebugDeck() : createShuffledDeck();
 
@@ -144,10 +158,23 @@ export function initializeGameState(
     pausedAt: null,
     turnTimeRemainingMs: null,
     targetScore,
+    gameMode,
   };
 
   // Deal 4 cards to each player (F-028)
   dealCards(gameState);
+
+  // Bounty Hunt: draw a card to determine bountyRank, shuffle it back
+  if (gameMode === 'bountyHunt') {
+    const bountyCard = drawFromDeck(gameState);
+    if (bountyCard) {
+      gameState.bountyRank = bountyCard.rank;
+      gameState.bountyBurnCounts = {};
+      // Put the card back and reshuffle the deck
+      gameState.deck.push(bountyCard);
+      shuffleDeck(gameState.deck);
+    }
+  }
 
   // Flip top card of deck to start discard pile
   const firstDiscard = drawFromDeck(gameState);
@@ -156,15 +183,28 @@ export function initializeGameState(
   }
 
   // Select peek slots for each player (F-029)
-  for (const player of gameState.players) {
-    player.peekedSlots = selectInitialPeekSlots(player);
+  // Blind Rounds: compute isBlindRound and skip peek on blind rounds
+  const isBlindRound = gameMode === 'blindRounds' && roundNumber % 3 === 0 && roundNumber > 0;
+  if (gameMode === 'blindRounds') {
+    gameState.isBlindRound = isBlindRound;
+  }
+
+  if (isBlindRound) {
+    // Blind round: no peek — all peekedSlots stay empty, skip straight to playing
+    for (const player of gameState.players) {
+      player.peekedSlots = [];
+    }
+  } else {
+    for (const player of gameState.players) {
+      player.peekedSlots = selectInitialPeekSlots(player, gameMode);
+    }
   }
 
   // Select random first player (F-032)
   gameState.currentTurnIndex = selectFirstPlayer(gameState.players.length);
 
-  // Set phase to peeking
-  gameState.phase = 'peeking';
+  // Set phase — blind rounds skip peeking
+  gameState.phase = isBlindRound ? 'playing' : 'peeking';
 
   return gameState;
 }
@@ -220,7 +260,7 @@ export function addPlayerToActiveGame(
   }
 
   // Set peek slots (same as initial game setup)
-  newPlayer.peekedSlots = selectInitialPeekSlots(newPlayer);
+  newPlayer.peekedSlots = selectInitialPeekSlots(newPlayer, gameState.gameMode);
 
   // Add the player to the game state
   gameState.players.push(newPlayer);
@@ -239,7 +279,23 @@ export function addPlayerToActiveGame(
  * - All other players' cards are null (hidden).
  */
 export function sanitizeGameState(gameState: GameState, _forPlayerId: string): ClientGameState {
+  const isBlind = gameState.isBlindRound === true;
+
   const players: ClientPlayerState[] = gameState.players.map((p) => {
+    const isMe = p.playerId === _forPlayerId;
+
+    // Blind rounds: hide opponent hand entirely (empty array, cardCount 0)
+    if (isBlind && !isMe) {
+      return {
+        playerId: p.playerId,
+        username: p.username,
+        hand: [],
+        cardCount: 0,
+        totalScore: p.totalScore,
+        isBot: p.isBot || undefined,
+      };
+    }
+
     return {
       playerId: p.playerId,
       username: p.username,
@@ -266,5 +322,11 @@ export function sanitizeGameState(gameState: GameState, _forPlayerId: string): C
     paused: gameState.paused,
     pausedBy: gameState.pausedBy,
     targetScore: gameState.targetScore,
+    gameMode: gameState.gameMode,
+    ...(gameState.bountyRank !== undefined ? { bountyRank: gameState.bountyRank } : {}),
+    ...(gameState.bountyBurnCounts !== undefined
+      ? { bountyBurnCounts: gameState.bountyBurnCounts }
+      : {}),
+    ...(gameState.isBlindRound !== undefined ? { isBlindRound: gameState.isBlindRound } : {}),
   };
 }

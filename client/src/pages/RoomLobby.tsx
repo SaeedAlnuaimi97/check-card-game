@@ -410,6 +410,60 @@ export const RoomLobby: FC = () => {
             </Text>
           </Box>
 
+          {/* Game Mode Badge */}
+          {roomData.gameMode && roomData.gameMode !== 'classic' && (
+            <Box textAlign="center">
+              <Box
+                display="inline-flex"
+                alignItems="center"
+                gap="6px"
+                px="12px"
+                py="5px"
+                borderRadius="8px"
+                bg={
+                  roomData.gameMode === 'suddenDeath'
+                    ? '#2a1a1a'
+                    : roomData.gameMode === 'bountyHunt'
+                      ? '#2a1a0a'
+                      : '#1a1a2a'
+                }
+                border={`1px solid ${
+                  roomData.gameMode === 'suddenDeath'
+                    ? '#5a2a2a'
+                    : roomData.gameMode === 'bountyHunt'
+                      ? '#5a3a1a'
+                      : '#2a2a5a'
+                }`}
+              >
+                <Text
+                  fontSize="11px"
+                  fontWeight="700"
+                  letterSpacing="0.06em"
+                  color={
+                    roomData.gameMode === 'suddenDeath'
+                      ? '#cf5e5e'
+                      : roomData.gameMode === 'bountyHunt'
+                        ? '#d4a020'
+                        : '#7a7aee'
+                  }
+                >
+                  {roomData.gameMode === 'suddenDeath'
+                    ? 'SUDDEN DEATH'
+                    : roomData.gameMode === 'bountyHunt'
+                      ? 'BOUNTY HUNT'
+                      : 'BLIND ROUNDS'}
+                </Text>
+              </Box>
+              <Text fontSize="11px" color="#555" mt="4px">
+                {roomData.gameMode === 'suddenDeath'
+                  ? 'One round, 6 cards, instant check, no doubling'
+                  : roomData.gameMode === 'bountyHunt'
+                    ? 'Bounty rank each round \u2014 hold it at your peril or burn it for a bonus'
+                    : 'Every 3rd round: no peek, hidden opponents'}
+              </Text>
+            </Box>
+          )}
+
           {/* Room Code */}
           <Box textAlign="center">
             <Text
@@ -638,40 +692,42 @@ export const RoomLobby: FC = () => {
                 </Box>
               )}
 
-              {/* Target Score slider */}
-              <Box display="flex" flexDirection="column" gap="6px">
-                <HStack justify="space-between">
-                  <Text fontSize="12px" color="#555">
-                    Game ends at:
-                  </Text>
-                  <Text fontSize="12px" color="#c9a227" fontWeight="600">
-                    {targetScore} points
-                  </Text>
-                </HStack>
-                <HStack spacing="8px" align="center">
-                  <Text fontSize="10px" color="#333" minW="20px" textAlign="right">
-                    30
-                  </Text>
-                  <Box flex={1}>
-                    <Slider
-                      min={30}
-                      max={150}
-                      step={5}
-                      value={targetScore}
-                      onChange={(val) => setTargetScore(val)}
-                      colorScheme="green"
-                    >
-                      <SliderTrack bg="#1a1a28" h="4px" borderRadius="2px">
-                        <SliderFilledTrack bg="#4a8a5a" />
-                      </SliderTrack>
-                      <SliderThumb boxSize={4} bg="#eee" border="2px solid #4a8a5a" />
-                    </Slider>
-                  </Box>
-                  <Text fontSize="10px" color="#333" minW="24px">
-                    150
-                  </Text>
-                </HStack>
-              </Box>
+              {/* Target Score slider — hidden for Sudden Death (single round, no threshold) */}
+              {roomData.gameMode !== 'suddenDeath' && (
+                <Box display="flex" flexDirection="column" gap="6px">
+                  <HStack justify="space-between">
+                    <Text fontSize="12px" color="#555">
+                      Game ends at:
+                    </Text>
+                    <Text fontSize="12px" color="#c9a227" fontWeight="600">
+                      {targetScore} points
+                    </Text>
+                  </HStack>
+                  <HStack spacing="8px" align="center">
+                    <Text fontSize="10px" color="#333" minW="20px" textAlign="right">
+                      30
+                    </Text>
+                    <Box flex={1}>
+                      <Slider
+                        min={30}
+                        max={150}
+                        step={5}
+                        value={targetScore}
+                        onChange={(val) => setTargetScore(val)}
+                        colorScheme="green"
+                      >
+                        <SliderTrack bg="#1a1a28" h="4px" borderRadius="2px">
+                          <SliderFilledTrack bg="#4a8a5a" />
+                        </SliderTrack>
+                        <SliderThumb boxSize={4} bg="#eee" border="2px solid #4a8a5a" />
+                      </Slider>
+                    </Box>
+                    <Text fontSize="10px" color="#333" minW="24px">
+                      150
+                    </Text>
+                  </HStack>
+                </Box>
+              )}
 
               {/* Start Game */}
               <Box

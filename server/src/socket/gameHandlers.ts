@@ -82,6 +82,7 @@ async function executeStartNextRound(io: SocketIOServer, roomCode: string): Prom
       oldGameState.scores,
       oldGameState.roundNumber + 1,
       oldGameState.targetScore,
+      oldGameState.gameMode,
     );
 
     // Preserve gameStartedAt from the first round (F-234)
@@ -314,10 +315,16 @@ async function advanceTurnAndCheckRoundEnd(
   room: InstanceType<typeof RoomModel>,
   gameState: GameState,
 ): Promise<boolean> {
-  advanceTurn(gameState);
+  // Sudden Death: if check was called, round ends immediately after checker's action
+  // (no other players get a turn)
+  const instantEnd = gameState.gameMode === 'suddenDeath' && gameState.checkCalledBy !== null;
 
-  // F-064: Check if round is over (turn returned to checker)
-  if (!isRoundOver(gameState)) {
+  if (!instantEnd) {
+    advanceTurn(gameState);
+  }
+
+  // F-064: Check if round is over (turn returned to checker, or instant end in SD)
+  if (!instantEnd && !isRoundOver(gameState)) {
     return false;
   }
 

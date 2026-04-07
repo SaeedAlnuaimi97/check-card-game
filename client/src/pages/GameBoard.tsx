@@ -954,7 +954,9 @@ export const GameBoard: FC = () => {
   }, [gameState?.turnStartedAt, gameState?.phase, gameState?.paused, pendingEffect?.turnStartedAt]);
 
   // Burn result — play sound, haptics, and show inline feedback banner (RS-006) (F-044 to F-048)
-  const [burnBanner, setBurnBanner] = useState<{ success: boolean } | null>(null);
+  const [burnBanner, setBurnBanner] = useState<{ success: boolean; isBountyBurn?: boolean } | null>(
+    null,
+  );
   useEffect(() => {
     if (!lastBurnResult) return;
     playBurnSound();
@@ -963,7 +965,12 @@ export const GameBoard: FC = () => {
     } else {
       vibrateWarning();
     }
-    setBurnBanner({ success: lastBurnResult.burnSuccess });
+    const isBountyBurn =
+      lastBurnResult.burnSuccess &&
+      gameState?.gameMode === 'bountyHunt' &&
+      !!gameState?.bountyRank &&
+      lastBurnResult.burnedCard?.rank === gameState.bountyRank;
+    setBurnBanner({ success: lastBurnResult.burnSuccess, isBountyBurn });
     const t = setTimeout(() => setBurnBanner(null), 2500);
     return () => clearTimeout(t);
   }, [lastBurnResult]);
@@ -1458,13 +1465,42 @@ export const GameBoard: FC = () => {
               <EyeOutlined style={{ fontSize: '14px', color: 'white' }} />
             </Box>
           )}
-          <Text fontSize="13px" color="#e8e8f0" fontWeight="500" whiteSpace="nowrap">
-            Round: {gameState.roundNumber}
-          </Text>
-          {gameState.targetScore !== 70 && (
-            <Text fontSize="11px" color="#c9a227" fontWeight="500" whiteSpace="nowrap">
-              Target: {gameState.targetScore}pts
+          {gameState.gameMode === 'suddenDeath' ? (
+            <Text
+              fontSize="13px"
+              color="#e85d5d"
+              fontWeight="700"
+              whiteSpace="nowrap"
+              letterSpacing="0.5px"
+            >
+              SUDDEN DEATH
             </Text>
+          ) : (
+            <>
+              <Text fontSize="13px" color="#e8e8f0" fontWeight="500" whiteSpace="nowrap">
+                Round: {gameState.roundNumber}
+              </Text>
+              {gameState.gameMode === 'bountyHunt' && (
+                <Text fontSize="11px" color="#c9a227" fontWeight="600" whiteSpace="nowrap">
+                  BOUNTY
+                </Text>
+              )}
+              {gameState.gameMode === 'blindRounds' && (
+                <Text
+                  fontSize="11px"
+                  color={gameState.isBlindRound ? '#7a7aee' : '#666'}
+                  fontWeight="600"
+                  whiteSpace="nowrap"
+                >
+                  {gameState.isBlindRound ? 'BLIND' : 'BLIND ROUNDS'}
+                </Text>
+              )}
+              {gameState.targetScore !== 70 && (
+                <Text fontSize="11px" color="#c9a227" fontWeight="500" whiteSpace="nowrap">
+                  Target: {gameState.targetScore}pts
+                </Text>
+              )}
+            </>
           )}
         </Flex>
 
@@ -2483,18 +2519,73 @@ export const GameBoard: FC = () => {
                 px="14px"
                 py="6px"
                 borderRadius="8px"
-                bg={burnBanner.success ? 'rgba(94,207,94,0.12)' : 'rgba(207,94,94,0.12)'}
-                border={`1px solid ${burnBanner.success ? '#5ecf5e' : '#cf5e5e'}`}
+                bg={
+                  burnBanner.isBountyBurn
+                    ? 'rgba(201,162,39,0.15)'
+                    : burnBanner.success
+                      ? 'rgba(94,207,94,0.12)'
+                      : 'rgba(207,94,94,0.12)'
+                }
+                border={`1px solid ${
+                  burnBanner.isBountyBurn ? '#c9a227' : burnBanner.success ? '#5ecf5e' : '#cf5e5e'
+                }`}
                 textAlign="center"
               >
                 <Text
                   fontSize="13px"
                   fontWeight="600"
-                  color={burnBanner.success ? '#5ecf5e' : '#cf5e5e'}
+                  color={
+                    burnBanner.isBountyBurn ? '#c9a227' : burnBanner.success ? '#5ecf5e' : '#cf5e5e'
+                  }
                 >
-                  {burnBanner.success ? '✓ Burned!' : 'X No match! +1 penalty card'}
+                  {burnBanner.isBountyBurn
+                    ? 'BOUNTY BURN -5'
+                    : burnBanner.success
+                      ? '✓ Burned!'
+                      : 'X No match! +1 penalty card'}
                 </Text>
               </Box>
+            )}
+
+            {/* Bounty Hunt: bounty rank badge */}
+            {gameState.gameMode === 'bountyHunt' && gameState.bountyRank && (
+              <Flex
+                justify="center"
+                align="center"
+                gap="6px"
+                px="10px"
+                py="4px"
+                borderRadius="8px"
+                bg="rgba(201,162,39,0.1)"
+                border="1px solid rgba(201,162,39,0.3)"
+              >
+                <Text
+                  fontSize="10px"
+                  color="#c9a227"
+                  fontWeight="600"
+                  letterSpacing="0.08em"
+                  textTransform="uppercase"
+                >
+                  Bounty
+                </Text>
+                <Box
+                  w="24px"
+                  h="32px"
+                  borderRadius="3px"
+                  bg="#1a1a2a"
+                  border="1.5px solid #c9a227"
+                  display="flex"
+                  alignItems="center"
+                  justifyContent="center"
+                >
+                  <Text fontSize="12px" fontWeight="800" color="#c9a227">
+                    {gameState.bountyRank}
+                  </Text>
+                </Box>
+                <Text fontSize="9px" color="#8a7a3a">
+                  2x in hand / -5 per burn
+                </Text>
+              </Flex>
             )}
 
             {/* Pile area — draw pile ⇄ discard pile; drawn card replaces draw pile when held */}
@@ -2597,6 +2688,7 @@ export const GameBoard: FC = () => {
                     <Box>
                       <CardBack
                         size="lg"
+                        isBlindRound={gameState.isBlindRound}
                         isClickable={
                           canAct &&
                           !hasDrawnCard &&
@@ -3064,6 +3156,7 @@ export const GameBoard: FC = () => {
                             <CardBack
                               isSelected={isPeekedSlot(h.slot)}
                               isClickable={isClickable}
+                              isBlindRound={gameState.isBlindRound}
                               onClick={handleClick}
                               size={cardSize}
                             />
@@ -3388,18 +3481,81 @@ export const GameBoard: FC = () => {
                         px="14px"
                         py="6px"
                         borderRadius="8px"
-                        bg={burnBanner.success ? 'rgba(94,207,94,0.12)' : 'rgba(207,94,94,0.12)'}
-                        border={`1px solid ${burnBanner.success ? '#5ecf5e' : '#cf5e5e'}`}
+                        bg={
+                          burnBanner.isBountyBurn
+                            ? 'rgba(201,162,39,0.15)'
+                            : burnBanner.success
+                              ? 'rgba(94,207,94,0.12)'
+                              : 'rgba(207,94,94,0.12)'
+                        }
+                        border={`1px solid ${
+                          burnBanner.isBountyBurn
+                            ? '#c9a227'
+                            : burnBanner.success
+                              ? '#5ecf5e'
+                              : '#cf5e5e'
+                        }`}
                         textAlign="center"
                       >
                         <Text
                           fontSize="13px"
                           fontWeight="600"
-                          color={burnBanner.success ? '#5ecf5e' : '#cf5e5e'}
+                          color={
+                            burnBanner.isBountyBurn
+                              ? '#c9a227'
+                              : burnBanner.success
+                                ? '#5ecf5e'
+                                : '#cf5e5e'
+                          }
                         >
-                          {burnBanner.success ? '✓ Burned!' : 'X No match! +1 penalty card'}
+                          {burnBanner.isBountyBurn
+                            ? 'BOUNTY BURN -5'
+                            : burnBanner.success
+                              ? '✓ Burned!'
+                              : 'X No match! +1 penalty card'}
                         </Text>
                       </Box>
+                    )}
+
+                    {/* Bounty Hunt: bounty rank badge */}
+                    {gameState.gameMode === 'bountyHunt' && gameState.bountyRank && (
+                      <Flex
+                        justify="center"
+                        align="center"
+                        gap="6px"
+                        px="10px"
+                        py="4px"
+                        borderRadius="8px"
+                        bg="rgba(201,162,39,0.1)"
+                        border="1px solid rgba(201,162,39,0.3)"
+                      >
+                        <Text
+                          fontSize="10px"
+                          color="#c9a227"
+                          fontWeight="600"
+                          letterSpacing="0.08em"
+                          textTransform="uppercase"
+                        >
+                          Bounty
+                        </Text>
+                        <Box
+                          w="24px"
+                          h="32px"
+                          borderRadius="3px"
+                          bg="#1a1a2a"
+                          border="1.5px solid #c9a227"
+                          display="flex"
+                          alignItems="center"
+                          justifyContent="center"
+                        >
+                          <Text fontSize="12px" fontWeight="800" color="#c9a227">
+                            {gameState.bountyRank}
+                          </Text>
+                        </Box>
+                        <Text fontSize="9px" color="#8a7a3a">
+                          2x in hand / -5 per burn
+                        </Text>
+                      </Flex>
                     )}
 
                     {/* Pile area */}
@@ -3423,6 +3579,7 @@ export const GameBoard: FC = () => {
                           <Box>
                             <CardBack
                               size="lg"
+                              isBlindRound={gameState.isBlindRound}
                               isClickable={
                                 canAct &&
                                 !hasDrawnCard &&
@@ -3866,6 +4023,7 @@ export const GameBoard: FC = () => {
                                       <CardBack
                                         isSelected={isPeekedSlot(h.slot)}
                                         isClickable={isClickable}
+                                        isBlindRound={gameState.isBlindRound}
                                         onClick={handleClick}
                                         size="lg"
                                       />
@@ -5336,8 +5494,14 @@ export const GameBoard: FC = () => {
             alignItems="center"
             justifyContent="space-between"
           >
-            <Text fontSize="11px" color="#aaa" fontWeight="500">
-              Round {roundEndData?.roundNumber} complete
+            <Text
+              fontSize="11px"
+              color={gameState?.gameMode === 'suddenDeath' ? '#e85d5d' : '#aaa'}
+              fontWeight="500"
+            >
+              {gameState?.gameMode === 'suddenDeath'
+                ? 'SUDDEN DEATH — Game Over'
+                : `Round ${roundEndData?.roundNumber} complete`}
             </Text>
           </Box>
 
@@ -5363,17 +5527,19 @@ export const GameBoard: FC = () => {
                       letterSpacing="0.12em"
                       textTransform="uppercase"
                       fontWeight="600"
-                      color="#7a7aee"
+                      color={gameState?.gameMode === 'suddenDeath' ? '#e85d5d' : '#7a7aee'}
                       mb="4px"
                     >
-                      Round {roundEndData?.roundNumber}
+                      {gameState?.gameMode === 'suddenDeath'
+                        ? 'Sudden Death'
+                        : `Round ${roundEndData?.roundNumber}`}
                     </Text>
                     <Text fontSize="24px" fontWeight="800" lineHeight="1.1" color="#eee" mb="4px">
                       {iWon ? 'You won!' : `${winnerName} won!`}
                     </Text>
                     <Text fontSize="12px" color="#555">
                       {checkerName
-                        ? `${checkerName} called check${roundEndData?.checkerDoubled ? ' · score doubled!' : ''}`
+                        ? `${checkerName} called check${roundEndData?.checkerDoubled && gameState?.gameMode !== 'suddenDeath' ? ' · score doubled!' : ''}`
                         : iWon
                           ? 'You burned all your cards!'
                           : `${winnerName} burned all their cards!`}
@@ -5669,132 +5835,194 @@ export const GameBoard: FC = () => {
                           </Text>
                         </Flex>
                         <Flex gap="5px" flexWrap="wrap">
-                          {hand.cards.map((c, i) => (
-                            <Box
-                              key={i}
-                              display="flex"
-                              flexDirection="column"
-                              alignItems="center"
-                              gap="3px"
-                            >
+                          {hand.cards.map((c, i) => {
+                            const isBountyCard =
+                              gameState?.gameMode === 'bountyHunt' &&
+                              !!gameState?.bountyRank &&
+                              c.rank === gameState.bountyRank;
+                            return (
                               <Box
-                                w="38px"
-                                h="52px"
-                                borderRadius="5px"
-                                bg="white"
-                                border="1px solid"
-                                borderColor={
-                                  c.value === 0 ? '#5ecf5e' : c.value >= 10 ? '#cf5e5e40' : '#ddd'
-                                }
-                                boxShadow={c.value === 0 ? '0 0 0 1px #5ecf5e30' : 'none'}
-                                position="relative"
+                                key={i}
                                 display="flex"
+                                flexDirection="column"
                                 alignItems="center"
-                                justifyContent="center"
-                                color={c.isRed ? '#c0392b' : '#222'}
-                                fontSize="13px"
-                                fontWeight="700"
+                                gap="3px"
                               >
-                                <Text
-                                  position="absolute"
-                                  top="2px"
-                                  left="3px"
-                                  fontSize="7px"
-                                  fontWeight="700"
-                                  lineHeight="1.1"
+                                <Box
+                                  w="38px"
+                                  h="52px"
+                                  borderRadius="5px"
+                                  bg="white"
+                                  border={isBountyCard ? '1.5px solid' : '1px solid'}
+                                  borderColor={
+                                    isBountyCard
+                                      ? '#c9a227'
+                                      : c.value === 0
+                                        ? '#5ecf5e'
+                                        : c.value >= 10
+                                          ? '#cf5e5e40'
+                                          : '#ddd'
+                                  }
+                                  boxShadow={
+                                    isBountyCard
+                                      ? '0 0 0 1px rgba(201,162,39,0.3)'
+                                      : c.value === 0
+                                        ? '0 0 0 1px #5ecf5e30'
+                                        : 'none'
+                                  }
+                                  position="relative"
+                                  display="flex"
+                                  alignItems="center"
+                                  justifyContent="center"
                                   color={c.isRed ? '#c0392b' : '#222'}
+                                  fontSize="13px"
+                                  fontWeight="700"
                                 >
-                                  {c.rank}
-                                  <br />
-                                  {c.suit}
+                                  <Text
+                                    position="absolute"
+                                    top="2px"
+                                    left="3px"
+                                    fontSize="7px"
+                                    fontWeight="700"
+                                    lineHeight="1.1"
+                                    color={c.isRed ? '#c0392b' : '#222'}
+                                  >
+                                    {c.rank}
+                                    <br />
+                                    {c.suit}
+                                  </Text>
+                                  <Text fontSize="9px">{c.suit}</Text>
+                                  <Text
+                                    position="absolute"
+                                    bottom="2px"
+                                    right="3px"
+                                    fontSize="7px"
+                                    fontWeight="700"
+                                    lineHeight="1.1"
+                                    color={c.isRed ? '#c0392b' : '#222'}
+                                    transform="rotate(180deg)"
+                                  >
+                                    {c.rank}
+                                    <br />
+                                    {c.suit}
+                                  </Text>
+                                </Box>
+                                <Text fontSize="8px" color="#444">
+                                  {hand.slots[i]}
                                 </Text>
-                                <Text fontSize="9px">{c.suit}</Text>
                                 <Text
-                                  position="absolute"
-                                  bottom="2px"
-                                  right="3px"
-                                  fontSize="7px"
-                                  fontWeight="700"
-                                  lineHeight="1.1"
-                                  color={c.isRed ? '#c0392b' : '#222'}
-                                  transform="rotate(180deg)"
+                                  fontSize="8px"
+                                  color={
+                                    isBountyCard
+                                      ? '#c9a227'
+                                      : c.value === 0
+                                        ? '#5ecf5e'
+                                        : c.value >= 10
+                                          ? '#cf5e5e'
+                                          : '#555'
+                                  }
                                 >
-                                  {c.rank}
-                                  <br />
-                                  {c.suit}
+                                  {isBountyCard ? `${c.value} → ${c.value * 2}` : `${c.value} pts`}
                                 </Text>
                               </Box>
-                              <Text fontSize="8px" color="#444">
-                                {hand.slots[i]}
-                              </Text>
-                              <Text
-                                fontSize="8px"
-                                color={
-                                  c.value === 0 ? '#5ecf5e' : c.value >= 10 ? '#cf5e5e' : '#555'
-                                }
-                              >
-                                {c.value} pts
-                              </Text>
-                            </Box>
-                          ))}
+                            );
+                          })}
                         </Flex>
+                        {/* Bounty Hunt: burn bonus annotation */}
+                        {gameState?.gameMode === 'bountyHunt' &&
+                          gameState?.bountyBurnCounts &&
+                          (gameState.bountyBurnCounts[hand.playerId] ?? 0) > 0 && (
+                            <Text fontSize="9px" color="#c9a227" mt="4px" fontWeight="600">
+                              Bounty burns: {gameState.bountyBurnCounts[hand.playerId]} x (-5) = -
+                              {gameState.bountyBurnCounts[hand.playerId] * 5}
+                            </Text>
+                          )}
                       </Box>
                     );
                   })}
                 </VStack>
               </Box>
 
-              {/* ── score progress bars ── */}
-              {(() => {
-                const target = gameState?.targetScore ?? 100;
-                const sorted = (gameState?.players ?? [])
-                  .slice()
-                  .sort(
-                    (a, b) =>
-                      (roundEndData?.updatedScores[a.playerId] ?? 0) -
-                      (roundEndData?.updatedScores[b.playerId] ?? 0),
+              {/* ── score progress bars (hidden for Sudden Death — single round) ── */}
+              {gameState?.gameMode !== 'suddenDeath' &&
+                (() => {
+                  const target = gameState?.targetScore ?? 100;
+                  const sorted = (gameState?.players ?? [])
+                    .slice()
+                    .sort(
+                      (a, b) =>
+                        (roundEndData?.updatedScores[a.playerId] ?? 0) -
+                        (roundEndData?.updatedScores[b.playerId] ?? 0),
+                    );
+                  return (
+                    <Box>
+                      <Text
+                        fontSize="10px"
+                        color="#333"
+                        textTransform="uppercase"
+                        letterSpacing="0.08em"
+                        fontWeight="600"
+                        mb="8px"
+                      >
+                        score progress · game ends at {target}
+                      </Text>
+                      <VStack spacing="6px" align="stretch">
+                        {sorted.map((p) => {
+                          const total = roundEndData?.updatedScores[p.playerId] ?? 0;
+                          const pct = Math.min(100, Math.round((total / target) * 100));
+                          const isMe = p.playerId === playerId;
+                          const isDanger = total >= target * 0.75;
+                          const barColor =
+                            total >= target ? '#cf5e5e' : isDanger ? '#cf7070' : '#5ecf5e';
+                          return (
+                            <Box key={p.playerId}>
+                              <Flex justify="space-between" fontSize="10px" mb="3px">
+                                <Text color={isMe ? '#7a7aee' : '#888'}>
+                                  {p.username}
+                                  {isMe ? ' (You)' : ''}
+                                </Text>
+                                <Text color={isDanger ? '#cf5e5e' : '#5ecf5e'}>
+                                  {total} / {target}
+                                </Text>
+                              </Flex>
+                              <Box h="3px" bg="#1a1a24" borderRadius="2px" overflow="hidden">
+                                <Box h="100%" borderRadius="2px" bg={barColor} w={`${pct}%`} />
+                              </Box>
+                            </Box>
+                          );
+                        })}
+                      </VStack>
+                    </Box>
                   );
-                return (
-                  <Box>
+                })()}
+
+              {/* Blind Rounds: warning about next round being blind */}
+              {gameState?.gameMode === 'blindRounds' &&
+                roundEndData &&
+                !roundEndData.gameEnded &&
+                (roundEndData.roundNumber + 1) % 3 === 0 && (
+                  <Box
+                    px="12px"
+                    py="8px"
+                    borderRadius="8px"
+                    bg="rgba(122,122,238,0.08)"
+                    border="1px solid rgba(122,122,238,0.2)"
+                    textAlign="center"
+                  >
                     <Text
                       fontSize="10px"
-                      color="#333"
+                      color="#7a7aee"
+                      fontWeight="700"
                       textTransform="uppercase"
                       letterSpacing="0.08em"
-                      fontWeight="600"
-                      mb="8px"
                     >
-                      score progress · game ends at {target}
+                      Next round: BLIND ROUND
                     </Text>
-                    <VStack spacing="6px" align="stretch">
-                      {sorted.map((p) => {
-                        const total = roundEndData?.updatedScores[p.playerId] ?? 0;
-                        const pct = Math.min(100, Math.round((total / target) * 100));
-                        const isMe = p.playerId === playerId;
-                        const isDanger = total >= target * 0.75;
-                        const barColor =
-                          total >= target ? '#cf5e5e' : isDanger ? '#cf7070' : '#5ecf5e';
-                        return (
-                          <Box key={p.playerId}>
-                            <Flex justify="space-between" fontSize="10px" mb="3px">
-                              <Text color={isMe ? '#7a7aee' : '#888'}>
-                                {p.username}
-                                {isMe ? ' (You)' : ''}
-                              </Text>
-                              <Text color={isDanger ? '#cf5e5e' : '#5ecf5e'}>
-                                {total} / {target}
-                              </Text>
-                            </Flex>
-                            <Box h="3px" bg="#1a1a24" borderRadius="2px" overflow="hidden">
-                              <Box h="100%" borderRadius="2px" bg={barColor} w={`${pct}%`} />
-                            </Box>
-                          </Box>
-                        );
-                      })}
-                    </VStack>
+                    <Text fontSize="9px" color="#5a5a9e" mt="2px">
+                      No peek phase. Opponent card counts hidden.
+                    </Text>
                   </Box>
-                );
-              })()}
+                )}
             </VStack>
           </Box>
 
@@ -5927,8 +6155,14 @@ export const GameBoard: FC = () => {
             alignItems="center"
             justifyContent="space-between"
           >
-            <Text fontSize="11px" color="#aaa" fontWeight="500">
-              Game over · Round {gameState?.roundNumber}
+            <Text
+              fontSize="11px"
+              color={gameState?.gameMode === 'suddenDeath' ? '#e85d5d' : '#aaa'}
+              fontWeight="500"
+            >
+              {gameState?.gameMode === 'suddenDeath'
+                ? 'SUDDEN DEATH — Game Over'
+                : `Game over · Round ${gameState?.roundNumber}`}
             </Text>
           </Box>
 
@@ -5948,10 +6182,10 @@ export const GameBoard: FC = () => {
                       letterSpacing="0.12em"
                       textTransform="uppercase"
                       fontWeight="600"
-                      color="#c9a227"
+                      color={gameState?.gameMode === 'suddenDeath' ? '#e85d5d' : '#c9a227'}
                       mb="4px"
                     >
-                      Game over
+                      {gameState?.gameMode === 'suddenDeath' ? 'Sudden Death' : 'Game over'}
                     </Text>
                     {iWon ? (
                       <motion.div
@@ -5981,8 +6215,9 @@ export const GameBoard: FC = () => {
                       </Text>
                     )}
                     <Text fontSize="12px" color="#555">
-                      {loserIsMe ? 'You' : loserName} reached {gameEndData?.loser.score} points —
-                      game ends
+                      {gameState?.gameMode === 'suddenDeath'
+                        ? `${loserIsMe ? 'You had' : `${loserName} had`} the highest score — ${gameEndData?.loser.score} points`
+                        : `${loserIsMe ? 'You' : loserName} reached ${gameEndData?.loser.score} points — game ends`}
                     </Text>
                   </Box>
                 );
@@ -6266,74 +6501,100 @@ export const GameBoard: FC = () => {
                             </Text>
                           </Flex>
                           <Flex gap="5px" flexWrap="wrap">
-                            {hand.cards.map((c, i) => (
-                              <Box
-                                key={i}
-                                display="flex"
-                                flexDirection="column"
-                                alignItems="center"
-                                gap="3px"
-                              >
+                            {hand.cards.map((c, i) => {
+                              const isBountyCard =
+                                gameState?.gameMode === 'bountyHunt' &&
+                                !!gameState?.bountyRank &&
+                                c.rank === gameState.bountyRank;
+                              return (
                                 <Box
-                                  w="38px"
-                                  h="52px"
-                                  borderRadius="5px"
-                                  bg="white"
-                                  border="1px solid"
-                                  borderColor={
-                                    c.value === 0 ? '#5ecf5e' : c.value >= 10 ? '#cf5e5e40' : '#ddd'
-                                  }
-                                  boxShadow={c.value === 0 ? '0 0 0 1px #5ecf5e30' : 'none'}
-                                  position="relative"
+                                  key={i}
                                   display="flex"
+                                  flexDirection="column"
                                   alignItems="center"
-                                  justifyContent="center"
-                                  color={c.isRed ? '#c0392b' : '#222'}
-                                  fontSize="13px"
-                                  fontWeight="700"
+                                  gap="3px"
                                 >
-                                  <Text
-                                    position="absolute"
-                                    top="2px"
-                                    left="3px"
-                                    fontSize="7px"
-                                    fontWeight="700"
-                                    lineHeight="1.1"
+                                  <Box
+                                    w="38px"
+                                    h="52px"
+                                    borderRadius="5px"
+                                    bg="white"
+                                    border={isBountyCard ? '1.5px solid' : '1px solid'}
+                                    borderColor={
+                                      isBountyCard
+                                        ? '#c9a227'
+                                        : c.value === 0
+                                          ? '#5ecf5e'
+                                          : c.value >= 10
+                                            ? '#cf5e5e40'
+                                            : '#ddd'
+                                    }
+                                    boxShadow={
+                                      isBountyCard
+                                        ? '0 0 0 1px rgba(201,162,39,0.3)'
+                                        : c.value === 0
+                                          ? '0 0 0 1px #5ecf5e30'
+                                          : 'none'
+                                    }
+                                    position="relative"
+                                    display="flex"
+                                    alignItems="center"
+                                    justifyContent="center"
                                     color={c.isRed ? '#c0392b' : '#222'}
+                                    fontSize="13px"
+                                    fontWeight="700"
                                   >
-                                    {c.rank}
-                                    <br />
-                                    {c.suit}
+                                    <Text
+                                      position="absolute"
+                                      top="2px"
+                                      left="3px"
+                                      fontSize="7px"
+                                      fontWeight="700"
+                                      lineHeight="1.1"
+                                      color={c.isRed ? '#c0392b' : '#222'}
+                                    >
+                                      {c.rank}
+                                      <br />
+                                      {c.suit}
+                                    </Text>
+                                    <Text fontSize="9px">{c.suit}</Text>
+                                    <Text
+                                      position="absolute"
+                                      bottom="2px"
+                                      right="3px"
+                                      fontSize="7px"
+                                      fontWeight="700"
+                                      lineHeight="1.1"
+                                      color={c.isRed ? '#c0392b' : '#222'}
+                                      transform="rotate(180deg)"
+                                    >
+                                      {c.rank}
+                                      <br />
+                                      {c.suit}
+                                    </Text>
+                                  </Box>
+                                  <Text fontSize="8px" color="#444">
+                                    {hand.slots[i]}
                                   </Text>
-                                  <Text fontSize="9px">{c.suit}</Text>
                                   <Text
-                                    position="absolute"
-                                    bottom="2px"
-                                    right="3px"
-                                    fontSize="7px"
-                                    fontWeight="700"
-                                    lineHeight="1.1"
-                                    color={c.isRed ? '#c0392b' : '#222'}
-                                    transform="rotate(180deg)"
+                                    fontSize="8px"
+                                    color={
+                                      isBountyCard
+                                        ? '#c9a227'
+                                        : c.value === 0
+                                          ? '#5ecf5e'
+                                          : c.value >= 10
+                                            ? '#cf5e5e'
+                                            : '#555'
+                                    }
                                   >
-                                    {c.rank}
-                                    <br />
-                                    {c.suit}
+                                    {isBountyCard
+                                      ? `${c.value} → ${c.value * 2}`
+                                      : `${c.value} pts`}
                                   </Text>
                                 </Box>
-                                <Text fontSize="8px" color="#444">
-                                  {hand.slots[i]}
-                                </Text>
-                                <Text
-                                  fontSize="8px"
-                                  color={
-                                    c.value === 0 ? '#5ecf5e' : c.value >= 10 ? '#cf5e5e' : '#555'
-                                  }
-                                >
-                                  {c.value} pts
-                                </Text>
-                              </Box>
-                            ))}
+                              );
+                            })}
                           </Flex>
                         </Box>
                       );
