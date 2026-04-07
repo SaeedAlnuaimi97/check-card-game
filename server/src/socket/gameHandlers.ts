@@ -1003,6 +1003,56 @@ export function registerGameHandlers(io: SocketIOServer, socket: Socket): void {
   );
 
   // ----------------------------------------------------------
+  // debugStackDeck — fabricate a card and place it on top of the deck (debug only)
+  // ----------------------------------------------------------
+  socket.on(
+    'debugStackDeck',
+    async (
+      data: { roomCode: string; rank: string; suit: string },
+      callback?: (response: { success: boolean; error?: string }) => void,
+    ) => {
+      try {
+        const room = await RoomModel.findOne({ roomCode: data.roomCode });
+        if (!room || !room.gameState) {
+          callback?.({ success: false, error: 'Room or game not found' });
+          return;
+        }
+
+        const gameState = room.gameState as unknown as GameState;
+        const rank = data.rank as import('../types/game.types').Rank;
+        const suit = data.suit as import('../types/game.types').Suit;
+        const isRed = suit === '♥' || suit === '♦';
+
+        // Compute value
+        let value: number;
+        if (rank === '10' && isRed) value = 0;
+        else if (rank === 'A') value = 1;
+        else if (rank === 'J' || rank === 'Q' || rank === 'K') value = 10;
+        else value = parseInt(rank, 10);
+
+        const card: import('../types/game.types').Card = {
+          id: `debug-${rank}${suit}-${Date.now()}`,
+          rank,
+          suit,
+          value,
+          isRed,
+        };
+
+        // Insert at top of deck
+        gameState.deck.unshift(card);
+
+        room.markModified('gameState');
+        await room.save();
+
+        callback?.({ success: true });
+      } catch (error) {
+        console.error('Error in debugStackDeck:', error);
+        callback?.({ success: false, error: 'Failed to stack deck' });
+      }
+    },
+  );
+
+  // ----------------------------------------------------------
   // redJackSwap — Red Jack special effect (F-049)
   // ----------------------------------------------------------
   socket.on(

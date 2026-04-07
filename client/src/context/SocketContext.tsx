@@ -145,6 +145,8 @@ interface SocketContextValue {
     targetPlayerId: string,
     slot: string,
   ) => Promise<{ success: boolean; card?: Card; error?: string }>;
+  /** Debug: move a specific card (by rank+suit) to top of deck */
+  debugStackDeck: (rank: string, suit: string) => Promise<{ success: boolean; error?: string }>;
   /** Clear round end data (used by UI after showing modal) */
   clearRoundEndData: () => void;
   /** Clear game end data (used by UI after showing modal) */
@@ -1123,6 +1125,28 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
   );
 
   // ----------------------------------------------------------
+  // Debug Stack Deck — move a specific card to top of deck (debug only)
+  // ----------------------------------------------------------
+  const debugStackDeck = useCallback(
+    (rank: string, suit: string): Promise<{ success: boolean; error?: string }> => {
+      return new Promise((resolve) => {
+        if (!roomData) {
+          resolve({ success: false, error: 'Not in a room' });
+          return;
+        }
+        socket.emit(
+          'debugStackDeck',
+          { roomCode: roomData.roomCode, rank, suit },
+          (response: { success: boolean; error?: string }) => {
+            resolve(response);
+          },
+        );
+      });
+    },
+    [roomData],
+  );
+
+  // ----------------------------------------------------------
   // Clear round/game end data (for UI after showing modals)
   // ----------------------------------------------------------
   const clearRoundEndData = useCallback(() => {
@@ -1337,6 +1361,7 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
       redQueenPeek,
       redKingChoice,
       debugPeek,
+      debugStackDeck,
       clearRoundEndData,
       clearGameEndData,
       sendReaction,
@@ -1389,6 +1414,7 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
       redQueenPeek,
       redKingChoice,
       debugPeek,
+      debugStackDeck,
       clearRoundEndData,
       clearGameEndData,
       sendReaction,

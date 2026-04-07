@@ -333,10 +333,9 @@ export const ChatDrawer: FC<ChatDrawerProps> = ({ isOpen, onClose }) => {
 
       // Snap based on direction + current state
       if (delta > 60) {
-        // Dragged down
+        // Dragged down — close from half or peek, step down from full
         if (drawerState === 'full') setDrawerState('half');
-        else if (drawerState === 'half') setDrawerState('peek');
-        else onClose();
+        else onClose(); // half → close, peek → close
       } else if (delta < -60) {
         // Dragged up
         if (drawerState === 'peek') setDrawerState('half');

@@ -4,7 +4,6 @@ import {
   Box,
   Button,
   Flex,
-  IconButton,
   Modal,
   ModalBody,
   ModalCloseButton,
@@ -14,21 +13,12 @@ import {
   Text,
   VStack,
   HStack,
-  Badge,
   Tooltip,
   useBreakpointValue,
   useDisclosure,
   useToast,
 } from '@chakra-ui/react';
-import {
-  MenuOutlined,
-  PauseCircleOutlined,
-  PlayCircleOutlined,
-  LogoutOutlined,
-  EyeOutlined,
-  FireOutlined,
-  SoundOutlined,
-} from '@ant-design/icons';
+import { EyeOutlined, FireOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { useSocket } from '../context/SocketContext';
 import { DEBUG_MODE } from '../context/SocketContext';
@@ -95,12 +85,12 @@ interface DiscardHistoryCard {
 const SX_KEYFRAMES_PIP_SWAP_FLASH = {
   '@keyframes pipSwapFlash': {
     '0%': { opacity: 0, boxShadow: 'none' },
-    '10%': { opacity: 1, boxShadow: '0 0 6px 3px #00e5cccc' },
-    '45%': { opacity: 0.85, boxShadow: '0 0 5px 2px #00e5cc88' },
+    '10%': { opacity: 1, boxShadow: '0 0 6px 3px #e24b4bcc' },
+    '45%': { opacity: 0.85, boxShadow: '0 0 5px 2px #e24b4b88' },
     '100%': { opacity: 0, boxShadow: 'none' },
   },
   animation: 'pipSwapFlash 1.8s ease-out forwards',
-  background: '#00e5cc',
+  background: '#e24b4b',
 };
 
 const SX_KEYFRAMES_BG_FLASH = {
@@ -124,12 +114,30 @@ const SX_KEYFRAMES_TIMER_PULSE = {
 const SX_KEYFRAMES_SWAP_FLASH = {
   '@keyframes swapFlash': {
     '0%': { opacity: 0, boxShadow: 'none' },
-    '10%': { opacity: 0.82, boxShadow: '0 0 18px 6px #00e5ccbb' },
-    '45%': { opacity: 0.7, boxShadow: '0 0 14px 4px #00e5cc88' },
+    '10%': { opacity: 0.82, boxShadow: '0 0 18px 6px #e24b4bbb' },
+    '45%': { opacity: 0.7, boxShadow: '0 0 14px 4px #e24b4b88' },
     '100%': { opacity: 0, boxShadow: 'none' },
   },
   animation: 'swapFlash 1.8s ease-out forwards',
-  background: '#00e5cc',
+  background: '#e24b4b',
+};
+
+const SX_KEYFRAMES_SWAP_PULSE = {
+  '@keyframes swapPulse': {
+    '0%': { transform: 'scale(1)' },
+    '30%': { transform: 'scale(1.08)' },
+    '100%': { transform: 'scale(1)' },
+  },
+  animation: 'swapPulse 0.5s ease-out',
+};
+
+const SX_KEYFRAMES_SWAP_BADGE_POP = {
+  '@keyframes swapBadgePop': {
+    '0%': { opacity: 0, transform: 'scale(0)' },
+    '60%': { opacity: 1, transform: 'scale(1.2)' },
+    '100%': { opacity: 1, transform: 'scale(1)' },
+  },
+  animation: 'swapBadgePop 0.35s cubic-bezier(0.34,1.56,0.64,1) forwards',
 };
 
 // ============================================================
@@ -610,6 +618,7 @@ export const GameBoard: FC = () => {
     leaveRoom,
     kickPlayer,
     debugPeek,
+    debugStackDeck,
     endGame,
     startNextRound,
     pauseGame,
@@ -706,6 +715,15 @@ export const GameBoard: FC = () => {
 
   // Red card flash state (UI-006)
   const [showRedFlash, setShowRedFlash] = useState(false);
+
+  // Red Jack swap banner state
+  const [swapBannerData, setSwapBannerData] = useState<{
+    swapperUsername: string;
+    targetSlot: string;
+    role: 'target' | 'swapper' | 'bystander';
+    targetUsername?: string;
+    swapperSlot?: string;
+  } | null>(null);
 
   // Round countdown timer state (seconds remaining before next round auto-starts)
   const [roundCountdown, setRoundCountdown] = useState<number | null>(null);
@@ -986,7 +1004,7 @@ export const GameBoard: FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lastBurnResult, playerId, toast]);
 
-  // Red Jack swap toast notification
+  // Red Jack swap banner notification (replaces toast)
   useEffect(() => {
     if (!lastSwapResult) return;
     const { swapperSlot, swapperUsername, targetPlayerId, targetSlot, targetUsername } =
@@ -994,38 +1012,32 @@ export const GameBoard: FC = () => {
     if (!swapperSlot || !targetSlot) return;
 
     playSwapSound();
-    let title: string;
-    let description: string;
 
+    let role: 'target' | 'swapper' | 'bystander';
     if (lastSwapResult.playerId === playerId) {
-      // I am the swapper
-      title = 'Card Swapped!';
-      description = `You swapped slot ${swapperSlot} with ${targetUsername}'s slot ${targetSlot}`;
+      role = 'swapper';
     } else if (targetPlayerId === playerId) {
-      // I am the target
-      title = 'Card Swapped!';
-      description = `${swapperUsername} swapped their slot ${swapperSlot} with your slot ${targetSlot}`;
+      role = 'target';
     } else {
-      // I am a bystander
-      title = 'Card Swap';
-      description = `${swapperUsername} swapped a card with ${targetUsername}`;
+      role = 'bystander';
     }
 
-    toast({
-      id: 'swap-result',
-      title,
-      description,
-      status: 'info',
-      duration: 2000,
-      isClosable: true,
-      position: 'top',
+    setSwapBannerData({
+      swapperUsername: swapperUsername ?? 'Someone',
+      targetSlot,
+      role,
+      targetUsername,
+      swapperSlot,
     });
-  }, [lastSwapResult, playerId, toast]);
+
+    // Banner persists until the player takes a new action (cleared in action handlers)
+  }, [lastSwapResult, playerId]);
 
   // Check called — toast removed (F-062); banner UI still shows
 
   // Handle calling check
   const handleCallCheck = useCallback(async () => {
+    setSwapBannerData(null);
     const result = await callCheck();
     if (!result.success && result.error) {
       toast({ title: result.error, status: 'error', duration: 2000, position: 'top' });
@@ -1110,6 +1122,7 @@ export const GameBoard: FC = () => {
 
   const handleDrawDeck = useCallback(async () => {
     if (!canAct || hasDrawnCard || !turnData?.availableActions.includes('drawDeck')) return;
+    setSwapBannerData(null);
     const result = await performAction('drawDeck');
     if (!result.success && result.error) {
       toast({ title: result.error, status: 'error', duration: 2000, position: 'top' });
@@ -1121,6 +1134,7 @@ export const GameBoard: FC = () => {
 
   const handleTakeDiscard = useCallback(async () => {
     if (!canAct || hasDrawnCard || !turnData?.availableActions.includes('takeDiscard')) return;
+    setSwapBannerData(null);
     const result = await performAction('takeDiscard');
     if (!result.success && result.error) {
       toast({ title: result.error, status: 'error', duration: 2000, position: 'top' });
@@ -1140,6 +1154,7 @@ export const GameBoard: FC = () => {
   const handleBurnCard = useCallback(
     async (slot: string) => {
       if (!canAct || hasDrawnCard || !turnData?.availableActions.includes('burn')) return;
+      setSwapBannerData(null);
       // F-308: trigger shake animation on the burning slot
       setBurningSlot(slot);
       if (burningSlotTimerRef.current) clearTimeout(burningSlotTimerRef.current);
@@ -1159,6 +1174,7 @@ export const GameBoard: FC = () => {
   const handleDiscardChoice = useCallback(
     async (slot: string | null) => {
       if (!canAct || !hasDrawnCard) return;
+      setSwapBannerData(null);
       const result = await discardChoice(slot);
       if (!result.success && result.error) {
         toast({ title: result.error, status: 'error', duration: 2000, position: 'top' });
@@ -1268,6 +1284,7 @@ export const GameBoard: FC = () => {
   // Red Jack: submit swap or skip
   const handleJackSubmit = useCallback(
     async (skip: boolean) => {
+      setSwapBannerData(null);
       setJackLoading(true);
       const result = await redJackSwap(
         skip,
@@ -1286,6 +1303,7 @@ export const GameBoard: FC = () => {
   // Red Queen: peek at a slot
   const handleQueenPeek = useCallback(
     async (slot: string) => {
+      setSwapBannerData(null);
       setQueenLoading(true);
       setQueenSelectedSlot(slot);
       const result = await redQueenPeek(slot);
@@ -1310,6 +1328,7 @@ export const GameBoard: FC = () => {
 
   // Red King: submit choice (return both — separate skip button)
   const handleKingSkip = useCallback(async () => {
+    setSwapBannerData(null);
     setKingLoading(true);
     const result = await redKingChoice({ type: 'returnBoth' });
     setKingLoading(false);
@@ -1321,6 +1340,7 @@ export const GameBoard: FC = () => {
   // Red King: submit keep choice
   const handleKingSubmit = useCallback(async () => {
     if (!kingReady) return;
+    setSwapBannerData(null);
     setKingLoading(true);
 
     let result: { success: boolean; error?: string };
@@ -1337,16 +1357,23 @@ export const GameBoard: FC = () => {
         replaceSlot: slot,
       });
     } else {
-      // keepBoth
+      // keepBoth — kingReplaceSlots[i] is the slot for kingSelectedIndices[i]'s drawn card.
+      // The server expects replaceSlots[i] = slot for drawnCards[i], so reorder
+      // to match drawnCards indices (0, 1) rather than selection order.
       const slot0 = kingReplaceSlots[0];
       const slot1 = kingReplaceSlots[1];
       if (!slot0 || !slot1) {
         setKingLoading(false);
         return;
       }
+      // Build a map: drawnCards index -> slot
+      const slotByDrawnIndex: [string | null, string | null] = [null, null];
+      slotByDrawnIndex[kingSelectedIndices[0]] = slot0;
+      slotByDrawnIndex[kingSelectedIndices[1]] = slot1;
+
       result = await redKingChoice({
         type: 'keepBoth',
-        replaceSlots: [slot0, slot1],
+        replaceSlots: [slotByDrawnIndex[0]!, slotByDrawnIndex[1]!],
       });
     }
 
@@ -1409,16 +1436,10 @@ export const GameBoard: FC = () => {
       </AnimatePresence>
       {/* Pause overlay removed — pause/resume handled via menu modal & header badge */}
       {/* Score / Round info */}
-      <Flex
-        px={{ base: 4, md: 5 }}
-        py={{ base: 2, md: 3 }}
-        bg="#13131a"
-        borderBottom="0.5px solid #222"
-        justify="space-between"
-        align="center"
-        flexShrink={0}
-      >
-        <HStack spacing={3}>
+      {/* ── HEADER (redesigned) ── */}
+      <Flex px="12px" h="44px" bg="#0d0d1a" align="center" gap="8px" flexShrink={0}>
+        {/* Left: Debug + Round number */}
+        <Flex align="center" gap="8px" flexShrink={0}>
           {DEBUG_MODE && (
             <Box
               as="button"
@@ -1437,69 +1458,96 @@ export const GameBoard: FC = () => {
               <EyeOutlined style={{ fontSize: '14px', color: 'white' }} />
             </Box>
           )}
-          <Text fontSize={{ base: 'sm', md: 'md' }} color="gray.400">
-            Round:{' '}
-            <Text as="span" color="gray.100" fontWeight="bold">
-              {gameState.roundNumber}
-            </Text>
+          <Text fontSize="13px" color="#e8e8f0" fontWeight="500" whiteSpace="nowrap">
+            Round: {gameState.roundNumber}
           </Text>
           {gameState.targetScore !== 70 && (
-            <Text fontSize={{ base: 'sm', md: 'md' }} color="warning.a10">
-              Target:{' '}
-              <Text as="span" fontWeight="bold">
-                {gameState.targetScore}pts
-              </Text>
+            <Text fontSize="11px" color="#c9a227" fontWeight="500" whiteSpace="nowrap">
+              Target: {gameState.targetScore}pts
             </Text>
           )}
-        </HStack>
-        <HStack spacing={{ base: 2, md: 3 }}>
-          {/* Paused badge */}
-          {gameState.paused && (
-            <Badge colorScheme="yellow" fontSize={{ base: 'xs', md: 'sm' }} px={2} py={1}>
-              PAUSED
-              {gameState.pausedBy
-                ? ` (${gameState.pausedBy === playerId ? 'You' : (gameState.players.find((p) => p.playerId === gameState.pausedBy)?.username ?? 'Host')})`
-                : ''}
-            </Badge>
-          )}
-          {/* Check called banner */}
-          {checkCalledData && (
-            <Badge colorScheme="red" fontSize={{ base: 'xs', md: 'sm' }} px={2} py={1}>
-              CHECK ({checkCalledData.playerId === playerId ? 'You' : checkCalledData.username})
-            </Badge>
-          )}
-          {/* CHECK button — gold styling (RS-003) */}
-          {turnData?.canCheck && !hasDrawnCard && !pendingEffect && (
-            <Button
-              px="12px"
-              py="4px"
-              h="auto"
-              minH="28px"
-              borderRadius="6px"
+        </Flex>
+
+        {/* Center: CHECK pill / Paused badge */}
+        <Flex flex={1} justify="center">
+          {gameState.paused ? (
+            <Box
+              h="26px"
+              minW="70px"
+              borderRadius="13px"
+              border="1.5px solid #c9a227"
               bg="#c9a227"
-              color="#1a1200"
-              fontSize={{ base: '11px', md: '12px' }}
-              fontWeight="600"
-              border="none"
+              display="flex"
+              alignItems="center"
+              justifyContent="center"
+              px="10px"
+            >
+              <Text fontSize="11px" fontWeight="600" color="#1a0e00" whiteSpace="nowrap">
+                PAUSED
+                {gameState.pausedBy
+                  ? ` (${gameState.pausedBy === playerId ? 'You' : (gameState.players.find((p) => p.playerId === gameState.pausedBy)?.username ?? 'Host')})`
+                  : ''}
+              </Text>
+            </Box>
+          ) : checkCalledData ? (
+            <Box
+              h="26px"
+              minW="70px"
+              borderRadius="13px"
+              border="1.5px solid #4ade80"
+              bg={checkCalledData.playerId === playerId ? '#1a3b1a' : 'transparent'}
+              display="flex"
+              alignItems="center"
+              justifyContent="center"
+              px="10px"
+              overflow="hidden"
+            >
+              <Text
+                fontSize={checkCalledData.playerId === playerId ? '10px' : '11px'}
+                fontWeight="600"
+                color="#4ade80"
+                whiteSpace="nowrap"
+              >
+                CHECK ({checkCalledData.playerId === playerId ? 'YOU' : checkCalledData.username})
+              </Text>
+            </Box>
+          ) : turnData?.canCheck && !hasDrawnCard && !pendingEffect ? (
+            <Box
+              as="button"
+              h="26px"
+              minW="70px"
+              borderRadius="13px"
+              border="1.5px solid #c9a227"
+              bg="#c9a227"
+              display="flex"
+              alignItems="center"
+              justifyContent="center"
+              px="10px"
+              cursor="pointer"
+              transition="background 0.15s"
               _hover={{ bg: '#b8911e' }}
               _active={{ bg: '#a07e18' }}
               onClick={handleCallCheck}
             >
-              CHECK
-            </Button>
-          )}
+              <Text fontSize="11px" fontWeight="600" color="#1a0e00" whiteSpace="nowrap">
+                CHECK
+              </Text>
+            </Box>
+          ) : null}
+        </Flex>
 
-          {/* ── Reaction button — visible during active gameplay only ── */}
+        {/* Right: icon buttons */}
+        <Flex align="center" gap="8px" flexShrink={0}>
+          {/* Reaction button */}
           {gameState.phase === 'playing' && (
             <Box ref={reactionBtnRef} position="relative" flexShrink={0}>
-              {/* Main circular button */}
               <Box
                 as="button"
                 w="28px"
                 h="28px"
-                borderRadius="full"
-                bg={reactionTrayOpen ? '#2a2a3e' : '#1e1e2e'}
-                border={reactionTrayOpen ? '1px solid #5a5a8a' : '1px solid #3a3a5a'}
+                borderRadius="50%"
+                bg="#1a1a2e"
+                border="0.5px solid #2a2a45"
                 display="flex"
                 alignItems="center"
                 justifyContent="center"
@@ -1508,8 +1556,8 @@ export const GameBoard: FC = () => {
                 userSelect="none"
                 position="relative"
                 flexShrink={0}
-                transition="background 0.15s, transform 0.1s"
-                _hover={reactionCooling ? {} : { bg: '#2a2a3e', transform: 'scale(1.1)' }}
+                transition="background 0.15s"
+                _hover={reactionCooling ? {} : { bg: '#2a2a3e' }}
                 onClick={() => {
                   if (reactionCooling) return;
                   setReactionTrayOpen((o) => !o);
@@ -1517,7 +1565,6 @@ export const GameBoard: FC = () => {
               >
                 {reactionCooling ? (
                   <>
-                    {/* SVG arc cooldown ring */}
                     <Box
                       as="svg"
                       position="absolute"
@@ -1552,8 +1599,6 @@ export const GameBoard: FC = () => {
                   <Box as="span">{reactionTrayOpen ? '✕' : '😄'}</Box>
                 )}
               </Box>
-
-              {/* Dropdown tray */}
               {reactionTrayOpen && (
                 <Box
                   position="absolute"
@@ -1617,15 +1662,15 @@ export const GameBoard: FC = () => {
             </Box>
           )}
 
-          {/* ── Chat button — visible whenever in a room ── */}
+          {/* Chat button */}
           <Box position="relative" flexShrink={0}>
             <Box
               as="button"
               w="28px"
               h="28px"
-              borderRadius="full"
-              bg={isChatOpen ? '#2a2a3e' : '#1e1e2e'}
-              border={isChatOpen ? '1px solid #5a5a8a' : '1px solid #3a3a5a'}
+              borderRadius="50%"
+              bg="#1a1a2e"
+              border="0.5px solid #2a2a45"
               display="flex"
               alignItems="center"
               justifyContent="center"
@@ -1633,14 +1678,13 @@ export const GameBoard: FC = () => {
               cursor="pointer"
               userSelect="none"
               flexShrink={0}
-              transition="background 0.15s, transform 0.1s"
-              _hover={{ bg: '#2a2a3e', transform: 'scale(1.1)' }}
+              transition="background 0.15s"
+              _hover={{ bg: '#2a2a3e' }}
               onClick={handleOpenChat}
               aria-label="Open chat"
             >
               💬
             </Box>
-            {/* Unread badge */}
             {unreadCount > 0 && (
               <Box
                 position="absolute"
@@ -1671,69 +1715,60 @@ export const GameBoard: FC = () => {
             )}
           </Box>
 
-          {isDesktop ? (
-            <>
-              {/* Desktop: inline menu options */}
-              <IconButton
-                aria-label={gameState.paused ? 'Resume game' : 'Pause game'}
-                size="sm"
-                variant="ghost"
-                color={gameState.paused ? 'warning.a10' : 'gray.400'}
-                _hover={{ color: 'white', bg: 'whiteAlpha.100' }}
-                isDisabled={
-                  gameState.phase === 'roundEnd' ||
-                  gameState.phase === 'gameEnd' ||
-                  gameState.phase === 'dealing'
-                }
-                onClick={async () => {
-                  const result = gameState.paused ? await resumeGame() : await pauseGame();
-                  if (!result.success && result.error) {
-                    toast({
-                      title: result.error,
-                      status: 'error',
-                      duration: 4000,
-                      position: 'top',
-                    });
-                  }
-                }}
-                icon={gameState.paused ? <PlayCircleOutlined /> : <PauseCircleOutlined />}
-              />
+          {/* Info button */}
+          <Box
+            as="button"
+            w="28px"
+            h="28px"
+            borderRadius="50%"
+            bg="#1a1a2e"
+            border="0.5px solid #2a2a45"
+            display="flex"
+            alignItems="center"
+            justifyContent="center"
+            cursor="pointer"
+            flexShrink={0}
+            transition="background 0.15s"
+            _hover={{ bg: '#2a2a3e' }}
+            onClick={onInfoOpen}
+            aria-label="How to play"
+          >
+            <Box as="svg" w="14px" h="14px" viewBox="0 0 16 16" fill="none">
+              <circle cx="8" cy="8" r="6" stroke="#7b8cde" strokeWidth="1.3" />
+              <path d="M8 7v4M8 5.5v.5" stroke="#7b8cde" strokeWidth="1.3" strokeLinecap="round" />
+            </Box>
+          </Box>
 
-              <IconButton
-                aria-label="Toggle sound"
-                size="sm"
-                variant="ghost"
-                color={soundEnabled ? 'gray.400' : 'gray.600'}
-                _hover={{ color: 'white', bg: 'whiteAlpha.100' }}
-                onClick={toggleSound}
-                icon={<SoundOutlined />}
+          {/* Menu button (hamburger) */}
+          <Box
+            as="button"
+            w="28px"
+            h="28px"
+            borderRadius="50%"
+            bg="#1a1a2e"
+            border="0.5px solid #2a2a45"
+            display="flex"
+            alignItems="center"
+            justifyContent="center"
+            cursor="pointer"
+            flexShrink={0}
+            transition="background 0.15s"
+            _hover={{ bg: '#2a2a3e' }}
+            onClick={onMenuOpen}
+            aria-label="Game menu"
+          >
+            <Box as="svg" w="14px" h="14px" viewBox="0 0 16 16" fill="none">
+              <path
+                d="M3 5h10M3 8h7M3 11h9"
+                stroke="#a0a0c0"
+                strokeWidth="1.3"
+                strokeLinecap="round"
               />
-
-              <IconButton
-                aria-label="Exit game"
-                size="sm"
-                variant="ghost"
-                color="gray.400"
-                _hover={{ color: 'danger.a10', bg: 'whiteAlpha.100' }}
-                onClick={handleExitGame}
-                icon={<LogoutOutlined />}
-              />
-            </>
-          ) : (
-            /* Mobile: single menu button */
-            <IconButton
-              aria-label="Game menu"
-              size="xs"
-              variant="ghost"
-              color="gray.400"
-              _hover={{ color: 'white', bg: 'whiteAlpha.100' }}
-              onClick={onMenuOpen}
-              icon={<MenuOutlined />}
-            />
-          )}
-        </HStack>
+            </Box>
+          </Box>
+        </Flex>
       </Flex>
-      {/* Game Menu Modal — bottom sheet style */}
+      {/* ── Game Menu — bottom sheet (redesigned) ── */}
       <Modal isOpen={isMenuOpen} onClose={onMenuClose} size="full" motionPreset="slideInBottom">
         <ModalOverlay bg="rgba(0,0,0,0.55)" />
         <ModalContent
@@ -1741,280 +1776,409 @@ export const GameBoard: FC = () => {
           color="white"
           display="flex"
           alignItems="flex-end"
-          justifyContent="center"
+          justifyContent="flex-end"
           m={0}
-          p="12px"
+          p={0}
           maxW="480px"
           mx="auto"
           shadow="none"
-          mt="auto"
         >
           <Box
             w="100%"
-            bg="#1c1c28"
-            borderRadius="14px"
-            border="0.5px solid #2a2a3a"
+            bg="#13131f"
+            borderTopRadius="16px"
+            borderTop="0.5px solid #2a2a45"
             overflow="hidden"
-            mb={2}
           >
-            {/* Drag handle row with close button */}
-            <Flex align="center" justify="center" position="relative" mt="14px" mb="10px" px="16px">
-              <Box w="36px" h="3px" bg="#333" borderRadius="2px" />
+            {/* Handle zone */}
+            <Flex justify="center" pt="8px" pb="4px">
+              <Box w="36px" h="3px" bg="#2a2a50" borderRadius="2px" />
+            </Flex>
+
+            {/* Header: MENU title + close button */}
+            <Flex
+              align="center"
+              justify="space-between"
+              px="14px"
+              py="8px"
+              pb="10px"
+              borderBottom="0.5px solid #1e1e30"
+            >
+              <Text fontSize="11px" fontWeight="500" color="#a0a0c0" letterSpacing="0.06em">
+                MENU
+              </Text>
               <Box
                 as="button"
-                position="absolute"
-                right="16px"
-                top="50%"
-                transform="translateY(-50%)"
-                fontSize="16px"
-                color="#555"
-                bg="transparent"
-                border="none"
+                w="24px"
+                h="24px"
+                borderRadius="50%"
+                bg="#1e1e35"
+                display="flex"
+                alignItems="center"
+                justifyContent="center"
                 cursor="pointer"
-                lineHeight={1}
-                px="4px"
-                _hover={{ color: '#aaa' }}
+                border="none"
+                _hover={{ bg: '#2a2a45' }}
                 onClick={onMenuClose}
                 aria-label="Close menu"
               >
-                ✕
+                <Box as="svg" w="10px" h="10px" viewBox="0 0 10 10" fill="none">
+                  <path
+                    d="M2 2l6 6M8 2l-6 6"
+                    stroke="#7070a0"
+                    strokeWidth="1.4"
+                    strokeLinecap="round"
+                  />
+                </Box>
               </Box>
             </Flex>
 
-            {/* RS-014: Score summary */}
-            <Box px="16px" pb="4px">
-              <Text
-                fontSize="10px"
-                color="#444"
-                letterSpacing="0.1em"
-                textTransform="uppercase"
-                mb="6px"
-              >
-                Scores
-              </Text>
+            {/* Scores section */}
+            <Box
+              px="14px"
+              py="10px"
+              borderBottom="0.5px solid #1a1a2e"
+              display="flex"
+              flexDirection="column"
+              gap="6px"
+            >
               {[...gameState.players]
                 .sort((a, b) => a.totalScore - b.totalScore)
-                .map((p) => (
-                  <Flex key={p.playerId} justify="space-between" align="center" py="4px">
-                    <HStack spacing="6px">
+                .map((p) => {
+                  const pIdx = gameState.players.findIndex((gp) => gp.playerId === p.playerId);
+                  const av = getAvatarColors(pIdx);
+                  return (
+                    <Flex key={p.playerId} align="center" gap="8px">
                       <Box
-                        w="6px"
-                        h="6px"
-                        borderRadius="full"
-                        bg={p.playerId === playerId ? '#c9a227' : p.isBot ? '#7a7aee' : '#4ecb4e'}
+                        w="7px"
+                        h="7px"
+                        borderRadius="50%"
+                        bg={p.playerId === playerId ? '#c9a227' : av.dot}
+                        flexShrink={0}
                       />
+                      <Text fontSize="12px" color="#e0e0f0" flex={1}>
+                        {p.username}
+                        {p.playerId === playerId && (
+                          <Text as="span" color="#555580" fontSize="10px">
+                            {' '}
+                            (you)
+                          </Text>
+                        )}
+                      </Text>
                       <Text
                         fontSize="13px"
-                        color={p.playerId === playerId ? '#c9a227' : '#ccc'}
-                        fontWeight={p.playerId === playerId ? '600' : 'normal'}
+                        fontWeight="500"
+                        color={p.totalScore >= gameState.targetScore - 20 ? '#cf7070' : '#e0e0f0'}
                       >
-                        {p.username}
-                        {p.playerId === playerId ? ' (You)' : ''}
+                        {p.totalScore}
                       </Text>
-                    </HStack>
-                    <Text
-                      fontSize="13px"
-                      fontWeight="600"
-                      color={p.totalScore >= 50 ? '#cf7070' : '#999'}
-                    >
-                      {p.totalScore}
-                    </Text>
-                  </Flex>
-                ))}
+                    </Flex>
+                  );
+                })}
             </Box>
 
-            <Box h="0.5px" bg="#1a1a24" />
+            {/* Menu items */}
+            <Box py="6px">
+              {/* How to Play */}
+              <Box
+                as="button"
+                display="flex"
+                alignItems="center"
+                gap="10px"
+                px="14px"
+                py="10px"
+                w="100%"
+                cursor="pointer"
+                border="none"
+                bg="transparent"
+                transition="background 0.1s"
+                _hover={{ bg: '#1a1a2e' }}
+                _active={{ bg: '#1a1a2e' }}
+                onClick={() => {
+                  onMenuClose();
+                  onInfoOpen();
+                }}
+              >
+                <Box
+                  w="28px"
+                  h="28px"
+                  borderRadius="8px"
+                  bg="#1e1e35"
+                  display="flex"
+                  alignItems="center"
+                  justifyContent="center"
+                  flexShrink={0}
+                >
+                  <Box as="svg" w="14px" h="14px" viewBox="0 0 16 16" fill="none">
+                    <circle cx="8" cy="8" r="5.5" stroke="#7b8cde" strokeWidth="1.3" />
+                    <path
+                      d="M8 6.5v1.5l1 1"
+                      stroke="#7b8cde"
+                      strokeWidth="1.3"
+                      strokeLinecap="round"
+                    />
+                  </Box>
+                </Box>
+                <Text fontSize="13px" color="#c8c8e0" flex={1} textAlign="left">
+                  How to play
+                </Text>
+                <Box as="svg" w="12px" h="12px" viewBox="0 0 12 12" fill="none">
+                  <path d="M4 3l3 3-3 3" stroke="#444460" strokeWidth="1.3" strokeLinecap="round" />
+                </Box>
+              </Box>
 
-            {/* How to Play */}
-            <Box
-              as="button"
-              display="flex"
-              alignItems="center"
-              gap="10px"
-              px="16px"
-              py="13px"
-              w="100%"
-              borderBottom="0.5px solid #1a1a24"
-              cursor="pointer"
-              _hover={{ bg: '#222232' }}
-              onClick={() => {
-                onMenuClose();
-                onInfoOpen();
-              }}
-            >
-              <Text fontSize="15px" color="#666" w="20px" textAlign="center">
-                ?
-              </Text>
-              <Text fontSize="14px" color="#ccc">
-                How to Play
-              </Text>
-            </Box>
-
-            {/* Pause / Resume */}
-            <Box
-              as="button"
-              display="flex"
-              alignItems="center"
-              gap="10px"
-              px="16px"
-              py="13px"
-              w="100%"
-              borderBottom="0.5px solid #1a1a24"
-              cursor="pointer"
-              opacity={
-                gameState.phase === 'roundEnd' ||
-                gameState.phase === 'gameEnd' ||
-                gameState.phase === 'dealing'
-                  ? 0.4
-                  : 1
-              }
-              _hover={{ bg: '#222232' }}
-              onClick={async () => {
-                if (
+              {/* Pause / Resume */}
+              <Box
+                as="button"
+                display="flex"
+                alignItems="center"
+                gap="10px"
+                px="14px"
+                py="10px"
+                w="100%"
+                cursor="pointer"
+                border="none"
+                bg="transparent"
+                transition="background 0.1s"
+                opacity={
                   gameState.phase === 'roundEnd' ||
                   gameState.phase === 'gameEnd' ||
                   gameState.phase === 'dealing'
-                )
-                  return;
-                const result = gameState.paused ? await resumeGame() : await pauseGame();
-                if (!result.success && result.error) {
-                  toast({ title: result.error, status: 'error', duration: 2000, position: 'top' });
+                    ? 0.4
+                    : 1
                 }
-              }}
-            >
-              <Text fontSize="15px" color="#666" w="20px" textAlign="center">
-                {gameState.paused ? '▶' : '⏸'}
-              </Text>
-              <Text fontSize="14px" color="#ccc">
-                {gameState.paused ? 'Resume Game' : 'Pause Game'}
-              </Text>
-            </Box>
-
-            {/* Sound toggle */}
-            <Flex
-              justify="space-between"
-              align="center"
-              px="16px"
-              py="12px"
-              borderBottom="0.5px solid #1a1a24"
-            >
-              <HStack spacing="10px">
-                <Text fontSize="15px" color="#666" w="20px" textAlign="center">
-                  ♪
-                </Text>
-                <Text fontSize="14px" color="#ccc">
-                  Sound
-                </Text>
-              </HStack>
-              {/* Custom toggle */}
-              <Box
-                as="button"
-                w="38px"
-                h="22px"
-                borderRadius="11px"
-                bg={soundEnabled ? '#3a6a4a' : '#2a2a3a'}
-                position="relative"
-                cursor="pointer"
-                transition="background 0.2s"
-                onClick={toggleSound}
-                flexShrink={0}
+                _hover={{ bg: '#1a1a2e' }}
+                _active={{ bg: '#1a1a2e' }}
+                onClick={async () => {
+                  if (
+                    gameState.phase === 'roundEnd' ||
+                    gameState.phase === 'gameEnd' ||
+                    gameState.phase === 'dealing'
+                  )
+                    return;
+                  const result = gameState.paused ? await resumeGame() : await pauseGame();
+                  if (!result.success && result.error) {
+                    toast({
+                      title: result.error,
+                      status: 'error',
+                      duration: 2000,
+                      position: 'top',
+                    });
+                  }
+                }}
               >
                 <Box
-                  w="16px"
-                  h="16px"
-                  borderRadius="full"
-                  bg={soundEnabled ? '#5ecf5e' : '#555'}
-                  position="absolute"
-                  top="3px"
-                  left={soundEnabled ? '19px' : '3px'}
-                  transition="left 0.2s, background 0.2s"
-                />
+                  w="28px"
+                  h="28px"
+                  borderRadius="8px"
+                  bg="#1e1e35"
+                  display="flex"
+                  alignItems="center"
+                  justifyContent="center"
+                  flexShrink={0}
+                >
+                  {gameState.paused ? (
+                    <Box as="svg" w="14px" h="14px" viewBox="0 0 16 16" fill="none">
+                      <path d="M5 3l8 5-8 5V3z" fill="#7b8cde" />
+                    </Box>
+                  ) : (
+                    <Box as="svg" w="14px" h="14px" viewBox="0 0 16 16" fill="none">
+                      <rect x="4" y="3" width="3" height="10" rx="1" fill="#7b8cde" />
+                      <rect x="9" y="3" width="3" height="10" rx="1" fill="#7b8cde" />
+                    </Box>
+                  )}
+                </Box>
+                <Text fontSize="13px" color="#c8c8e0" flex={1} textAlign="left">
+                  {gameState.paused ? 'Resume game' : 'Pause game'}
+                </Text>
               </Box>
-            </Flex>
 
-            {/* Players section — host-only */}
-            {roomData?.host === playerId &&
-              gameState.players.filter((p) => p.playerId !== playerId).length > 0 && (
-                <>
-                  <Text
-                    fontSize="10px"
-                    color="#444"
-                    letterSpacing="0.1em"
-                    textTransform="uppercase"
-                    px="16px"
-                    pt="10px"
-                    pb="4px"
-                  >
-                    Players
-                  </Text>
-                  {gameState.players
-                    .filter((p) => p.playerId !== playerId)
-                    .map((p) => (
-                      <Flex
-                        key={p.playerId}
-                        justify="space-between"
-                        align="center"
-                        px="16px"
-                        py="10px"
-                        borderTop="0.5px solid #1a1a24"
-                      >
-                        <Text fontSize="13px" color="#ccc">
-                          {p.username}
-                          {p.isBot ? ' (Bot)' : ''}
-                        </Text>
+              {/* Sound toggle */}
+              <Flex align="center" gap="10px" px="14px" py="10px">
+                <Box
+                  w="28px"
+                  h="28px"
+                  borderRadius="8px"
+                  bg="#1e1e35"
+                  display="flex"
+                  alignItems="center"
+                  justifyContent="center"
+                  flexShrink={0}
+                >
+                  <Box as="svg" w="14px" h="14px" viewBox="0 0 16 16" fill="none">
+                    <path
+                      d="M3 13l4-8 2 4 2-3 2 7"
+                      stroke="#7b8cde"
+                      strokeWidth="1.3"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </Box>
+                </Box>
+                <Text fontSize="13px" color="#c8c8e0" flex={1}>
+                  Sound
+                </Text>
+                <Box
+                  as="button"
+                  w="32px"
+                  h="18px"
+                  borderRadius="9px"
+                  bg={soundEnabled ? '#3b4fd4' : '#2a2a45'}
+                  position="relative"
+                  cursor="pointer"
+                  border="none"
+                  transition="background 0.2s"
+                  onClick={toggleSound}
+                  flexShrink={0}
+                >
+                  <Box
+                    w="14px"
+                    h="14px"
+                    borderRadius="50%"
+                    bg="#fff"
+                    position="absolute"
+                    top="2px"
+                    left={soundEnabled ? '16px' : '2px'}
+                    transition="left 0.2s"
+                  />
+                </Box>
+              </Flex>
+            </Box>
+
+            {/* Players section */}
+            {gameState.players.filter((p) => p.playerId !== playerId).length > 0 && (
+              <>
+                <Text
+                  fontSize="9px"
+                  color="#444460"
+                  letterSpacing="0.08em"
+                  textTransform="uppercase"
+                  px="14px"
+                  pt="8px"
+                  pb="4px"
+                >
+                  PLAYERS
+                </Text>
+                {gameState.players
+                  .filter((p) => p.playerId !== playerId)
+                  .map((p) => {
+                    const pIdx = gameState.players.findIndex((gp) => gp.playerId === p.playerId);
+                    const av = getAvatarColors(pIdx);
+                    return (
+                      <Flex key={p.playerId} align="center" gap="8px" px="14px" py="6px">
                         <Box
-                          as="span"
-                          fontSize="14px"
-                          color="#3a2a2a"
-                          cursor="pointer"
-                          px="6px"
-                          py="2px"
-                          borderRadius="4px"
-                          sx={{ '&:hover': { color: '#cf5e5e' } }}
-                          onClick={async () => {
-                            onMenuClose();
-                            const result = await kickPlayer(p.playerId);
-                            toast({
-                              title: result.success
-                                ? `${p.username} was removed`
-                                : (result.error ?? 'Failed to kick player'),
-                              status: result.success ? 'info' : 'error',
-                              duration: 2500,
-                              position: 'top',
-                            });
-                          }}
+                          w="26px"
+                          h="26px"
+                          borderRadius="50%"
+                          bg={av.bg}
+                          display="flex"
+                          alignItems="center"
+                          justifyContent="center"
+                          fontSize="9px"
+                          color={av.color}
+                          fontWeight="600"
+                          flexShrink={0}
                         >
-                          ✕
+                          {p.username.slice(0, 2).toUpperCase()}
                         </Box>
+                        <Text fontSize="12px" color="#c8c8e0" flex={1}>
+                          {p.username}
+                        </Text>
+                        {p.isBot && (
+                          <Text
+                            fontSize="9px"
+                            color="#444460"
+                            bg="#1a1a2e"
+                            borderRadius="4px"
+                            px="5px"
+                            py="1px"
+                          >
+                            bot
+                          </Text>
+                        )}
+                        {roomData?.host === playerId && (
+                          <Box
+                            as="button"
+                            fontSize="12px"
+                            color="#3a2a2a"
+                            cursor="pointer"
+                            px="6px"
+                            py="2px"
+                            borderRadius="4px"
+                            border="none"
+                            bg="transparent"
+                            _hover={{ color: '#cf5e5e' }}
+                            onClick={async () => {
+                              onMenuClose();
+                              const result = await kickPlayer(p.playerId);
+                              toast({
+                                title: result.success
+                                  ? `${p.username} was removed`
+                                  : (result.error ?? 'Failed to kick player'),
+                                status: result.success ? 'info' : 'error',
+                                duration: 2500,
+                                position: 'top',
+                              });
+                            }}
+                          >
+                            ✕
+                          </Box>
+                        )}
                       </Flex>
-                    ))}
-                  <Box h="0.5px" bg="#1a1a24" />
-                </>
-              )}
+                    );
+                  })}
+              </>
+            )}
 
-            {/* Exit Game — danger row */}
+            {/* Exit game */}
             <Box
               as="button"
               display="flex"
               alignItems="center"
               gap="10px"
-              px="16px"
-              py="13px"
+              px="14px"
+              py="10px"
               w="100%"
               cursor="pointer"
+              border="none"
+              bg="transparent"
+              borderTop="0.5px solid #1a1a2e"
+              mt="4px"
+              transition="background 0.1s"
               _hover={{ bg: '#1a1010' }}
+              _active={{ bg: '#1a1010' }}
               onClick={() => {
                 onMenuClose();
                 handleExitGame();
               }}
             >
-              <Text fontSize="15px" color="#7a3a3a" w="20px" textAlign="center">
-                ⎋
-              </Text>
-              <Text fontSize="14px" color="#cf7070">
-                Exit Game
+              <Box
+                w="28px"
+                h="28px"
+                borderRadius="8px"
+                bg="#2a1515"
+                display="flex"
+                alignItems="center"
+                justifyContent="center"
+                flexShrink={0}
+              >
+                <Box as="svg" w="14px" h="14px" viewBox="0 0 16 16" fill="none">
+                  <path
+                    d="M6 3H4a1 1 0 00-1 1v8a1 1 0 001 1h2M10 11l3-3-3-3M13 8H7"
+                    stroke="#e24b4b"
+                    strokeWidth="1.3"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </Box>
+              </Box>
+              <Text fontSize="13px" color="#e24b4b" textAlign="left">
+                Exit game
               </Text>
             </Box>
+
+            {/* Safe area spacing */}
+            <Box h="10px" />
           </Box>
         </ModalContent>
       </Modal>
@@ -2072,23 +2236,10 @@ export const GameBoard: FC = () => {
           </ModalBody>
         </ModalContent>
       </Modal>
-      {/* Final Round banner (UI-005) */}
+      {/* Final Round banner (UI-005) — matches green bar from mock */}
       {checkCalledData && (
-        <Box
-          bg="danger.a0"
-          px={4}
-          py={2}
-          textAlign="center"
-          flexShrink={0}
-          animation="pulse 2s ease-in-out infinite"
-        >
-          <Text
-            fontSize={{ base: 'sm', md: 'md' }}
-            fontWeight="bold"
-            color="white"
-            textTransform="uppercase"
-            letterSpacing="wider"
-          >
+        <Box bg="#0d1a0d" px="12px" py="6px" borderBottom="0.5px solid #1a2e1a" flexShrink={0}>
+          <Text fontSize="10px" fontWeight="500" color="#4ade80">
             {checkCalledData.playerId === playerId ? 'YOU' : checkCalledData.username.toUpperCase()}{' '}
             CALLED CHECK — FINAL TURN
           </Text>
@@ -2348,6 +2499,61 @@ export const GameBoard: FC = () => {
 
             {/* Pile area — draw pile ⇄ discard pile; drawn card replaces draw pile when held */}
             <Flex justify="center" align="center" gap={{ base: '28px', md: '40px' }}>
+              {/* Debug: action card buttons to stack the deck */}
+              {DEBUG_MODE && !hasDrawnCard && (
+                <VStack spacing="4px" flexShrink={0}>
+                  {(
+                    [
+                      { label: 'K', rank: 'K', suit: '♥' },
+                      { label: 'J', rank: 'J', suit: '♥' },
+                      { label: 'Q', rank: 'Q', suit: '♥' },
+                    ] as const
+                  ).map((c) => (
+                    <Box
+                      key={c.label}
+                      as="button"
+                      w="34px"
+                      h="44px"
+                      borderRadius="6px"
+                      bg="#1a0a0a"
+                      border="1px solid #3a1a1a"
+                      display="flex"
+                      flexDirection="column"
+                      alignItems="center"
+                      justifyContent="center"
+                      cursor="pointer"
+                      fontSize="11px"
+                      fontWeight="700"
+                      color="#c0392b"
+                      lineHeight={1.1}
+                      transition="background 0.1s, border-color 0.15s"
+                      _hover={{ bg: '#2a1010', borderColor: '#c0392b' }}
+                      _active={{ bg: '#3a1515' }}
+                      onClick={async () => {
+                        const res = await debugStackDeck(c.rank, c.suit);
+                        if (!res.success) {
+                          toast({
+                            title: res.error ?? 'Not in deck',
+                            status: 'warning',
+                            duration: 1500,
+                            position: 'top',
+                          });
+                        }
+                      }}
+                      title={`Stack ${c.rank}${c.suit} on top of deck`}
+                    >
+                      <Box as="span">{c.rank}</Box>
+                      <Box as="span" fontSize="10px">
+                        {c.suit}
+                      </Box>
+                    </Box>
+                  ))}
+                  <Text fontSize="7px" color="#333" whiteSpace="nowrap">
+                    debug
+                  </Text>
+                </VStack>
+              )}
+
               {/* Left slot: draw pile normally, drawn card when held */}
               <VStack spacing="5px">
                 {hasDrawnCard && drawnCard ? (
@@ -2564,6 +2770,82 @@ export const GameBoard: FC = () => {
           boxShadow={canAct ? '0 -4px 18px 0 #00e5cc44' : 'none'}
           transition="border-color 0.3s, box-shadow 0.3s"
         >
+          {/* ── Swap event banner ── */}
+          <AnimatePresence>
+            {swapBannerData && (
+              <motion.div
+                key="swap-banner"
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 6 }}
+                transition={{ duration: 0.3, ease: 'easeOut' }}
+              >
+                <Flex
+                  mx="4px"
+                  mb="10px"
+                  bg="#1a0d0d"
+                  border="1px solid #4a1515"
+                  borderRadius="10px"
+                  px="10px"
+                  py="8px"
+                  align="flex-start"
+                  gap="8px"
+                >
+                  <Box
+                    w="28px"
+                    h="28px"
+                    borderRadius="6px"
+                    bg="#2a1515"
+                    display="flex"
+                    alignItems="center"
+                    justifyContent="center"
+                    flexShrink={0}
+                  >
+                    <Box as="svg" w="14px" h="14px" viewBox="0 0 16 16" fill="none">
+                      <path
+                        d="M3 5h10M3 5l2-2M3 5l2 2M13 11H3M13 11l-2-2M13 11l-2 2"
+                        stroke="#e24b4b"
+                        strokeWidth="1.3"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </Box>
+                  </Box>
+                  <Box flex={1}>
+                    <Text fontSize="11px" fontWeight="500" color="#f09595" mb="2px">
+                      {swapBannerData.role === 'target' ? (
+                        <>
+                          {swapBannerData.swapperUsername} swapped with your slot{' '}
+                          <Text as="span" color="#e24b4b" fontWeight="500">
+                            {swapBannerData.targetSlot}
+                          </Text>
+                        </>
+                      ) : swapBannerData.role === 'swapper' ? (
+                        <>
+                          You swapped slot {swapBannerData.swapperSlot} with{' '}
+                          {swapBannerData.targetUsername}&apos;s slot{' '}
+                          <Text as="span" color="#e24b4b" fontWeight="500">
+                            {swapBannerData.targetSlot}
+                          </Text>
+                        </>
+                      ) : (
+                        <>
+                          {swapBannerData.swapperUsername} swapped a card with{' '}
+                          {swapBannerData.targetUsername}
+                        </>
+                      )}
+                    </Text>
+                    {swapBannerData.role === 'target' && (
+                      <Text fontSize="10px" color="#7a4040" lineHeight="1.4">
+                        Your card is now unknown — use a Red Queen peek when you get the chance.
+                      </Text>
+                    )}
+                  </Box>
+                </Flex>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           {/* hand label */}
           {isPeeking ? (
             /* Option C memo pill — replaces plain label during peeking phase */
@@ -2683,6 +2965,12 @@ export const GameBoard: FC = () => {
                   playerId !== null &&
                   modifiedSlots.some((m) => m.playerId === playerId && m.slot === h.slot);
 
+                // Is this slot the one that was just swapped (Red Jack target)?
+                const isSwapTarget =
+                  swapBannerData?.role === 'target' && swapBannerData.targetSlot === h.slot;
+
+                const cardSize = isDesktop ? 'lg' : isPeeking ? 'md' : 'sm';
+
                 return (
                   <Tooltip
                     key={h.slot}
@@ -2722,7 +3010,12 @@ export const GameBoard: FC = () => {
                         position="relative"
                         flexShrink={0}
                       >
-                        <Box position="relative" overflow="visible" borderRadius="md">
+                        <Box
+                          position="relative"
+                          overflow="visible"
+                          borderRadius="md"
+                          sx={isSwapTarget ? SX_KEYFRAMES_SWAP_PULSE : undefined}
+                        >
                           {showFaceUp && peekedCard ? (
                             <FlippableCard
                               card={peekedCard}
@@ -2730,7 +3023,7 @@ export const GameBoard: FC = () => {
                               isSelected={true}
                               isClickable={isClickable}
                               onClick={handleClick}
-                              size={isDesktop ? 'lg' : isPeeking ? 'md' : 'sm'}
+                              size={cardSize}
                             />
                           ) : visibleCard ? (
                             <Card
@@ -2738,16 +3031,44 @@ export const GameBoard: FC = () => {
                               isSelected={isPeekedSlot(h.slot)}
                               isClickable={isClickable}
                               onClick={handleClick}
-                              size={isDesktop ? 'lg' : isPeeking ? 'md' : 'sm'}
+                              size={cardSize}
                             />
+                          ) : isSwapTarget ? (
+                            /* Swapped unknown card — red border + red "?" */
+                            <Box
+                              w={cardSize === 'lg' ? '100px' : cardSize === 'md' ? '80px' : '52px'}
+                              h={cardSize === 'lg' ? '140px' : cardSize === 'md' ? '112px' : '74px'}
+                              borderRadius="md"
+                              border="2px solid"
+                              borderColor="#e24b4b"
+                              bg="card.back"
+                              cursor={isClickable ? 'pointer' : 'default'}
+                              onClick={handleClick}
+                              display="flex"
+                              alignItems="center"
+                              justifyContent="center"
+                              position="relative"
+                              userSelect="none"
+                            >
+                              <Text
+                                fontSize={
+                                  cardSize === 'lg' ? '28px' : cardSize === 'md' ? '22px' : '16px'
+                                }
+                                fontWeight="700"
+                                color="#e24b4b"
+                              >
+                                ?
+                              </Text>
+                            </Box>
                           ) : (
                             <CardBack
                               isSelected={isPeekedSlot(h.slot)}
                               isClickable={isClickable}
                               onClick={handleClick}
-                              size={isDesktop ? 'lg' : isPeeking ? 'md' : 'sm'}
+                              size={cardSize}
                             />
                           )}
+                          {/* Swap glow overlay */}
                           {isModified && (
                             <Box
                               position="absolute"
@@ -2758,6 +3079,33 @@ export const GameBoard: FC = () => {
                               sx={SX_KEYFRAMES_SWAP_FLASH}
                             />
                           )}
+                          {/* Swap badge — red circle at top-right */}
+                          {isSwapTarget && (
+                            <Box
+                              position="absolute"
+                              top="-7px"
+                              right="-7px"
+                              w="18px"
+                              h="18px"
+                              bg="#e24b4b"
+                              borderRadius="50%"
+                              border="2px solid #09090f"
+                              display="flex"
+                              alignItems="center"
+                              justifyContent="center"
+                              zIndex={12}
+                              sx={SX_KEYFRAMES_SWAP_BADGE_POP}
+                            >
+                              <Box as="svg" w="8px" h="8px" viewBox="0 0 10 10" fill="none">
+                                <path
+                                  d="M2 5h6M2 5l1.5-1.5M2 5l1.5 1.5M8 5l-1.5-1.5M8 5l-1.5 1.5"
+                                  stroke="white"
+                                  strokeWidth="1.2"
+                                  strokeLinecap="round"
+                                />
+                              </Box>
+                            </Box>
+                          )}
                         </Box>
                         {/* Plain slot label — not a Badge */}
                         <Text
@@ -2767,9 +3115,11 @@ export const GameBoard: FC = () => {
                               ? '#c9a227'
                               : pendingBurnSlot === h.slot
                                 ? '#cf5e5e'
-                                : '#555'
+                                : isSwapTarget
+                                  ? '#e24b4b'
+                                  : '#555'
                           }
-                          fontWeight={isPeekedSlot(h.slot) ? '700' : '500'}
+                          fontWeight={isPeekedSlot(h.slot) || isSwapTarget ? '700' : '500'}
                         >
                           {h.slot}
                         </Text>
@@ -3423,6 +3773,12 @@ export const GameBoard: FC = () => {
                           const isModified =
                             playerId !== null &&
                             modifiedSlots.some((m) => m.playerId === playerId && m.slot === h.slot);
+
+                          // Is this slot the one that was just swapped (Red Jack target)?
+                          const isSwapTarget =
+                            swapBannerData?.role === 'target' &&
+                            swapBannerData.targetSlot === h.slot;
+
                           return (
                             <Tooltip
                               key={h.slot}
@@ -3462,7 +3818,12 @@ export const GameBoard: FC = () => {
                                   position="relative"
                                   flexShrink={0}
                                 >
-                                  <Box position="relative" overflow="visible" borderRadius="md">
+                                  <Box
+                                    position="relative"
+                                    overflow="visible"
+                                    borderRadius="md"
+                                    sx={isSwapTarget ? SX_KEYFRAMES_SWAP_PULSE : undefined}
+                                  >
                                     {showFaceUp && peekedCard ? (
                                       <FlippableCard
                                         card={peekedCard}
@@ -3480,6 +3841,27 @@ export const GameBoard: FC = () => {
                                         onClick={handleClick}
                                         size="lg"
                                       />
+                                    ) : isSwapTarget ? (
+                                      /* Swapped unknown card — red border + red "?" */
+                                      <Box
+                                        w="100px"
+                                        h="140px"
+                                        borderRadius="md"
+                                        border="2px solid"
+                                        borderColor="#e24b4b"
+                                        bg="card.back"
+                                        cursor={isClickable ? 'pointer' : 'default'}
+                                        onClick={handleClick}
+                                        display="flex"
+                                        alignItems="center"
+                                        justifyContent="center"
+                                        position="relative"
+                                        userSelect="none"
+                                      >
+                                        <Text fontSize="28px" fontWeight="700" color="#e24b4b">
+                                          ?
+                                        </Text>
+                                      </Box>
                                     ) : (
                                       <CardBack
                                         isSelected={isPeekedSlot(h.slot)}
@@ -3488,6 +3870,7 @@ export const GameBoard: FC = () => {
                                         size="lg"
                                       />
                                     )}
+                                    {/* Swap glow overlay */}
                                     {isModified && (
                                       <Box
                                         position="absolute"
@@ -3498,6 +3881,39 @@ export const GameBoard: FC = () => {
                                         sx={SX_KEYFRAMES_SWAP_FLASH}
                                       />
                                     )}
+                                    {/* Swap badge — red circle at top-right */}
+                                    {isSwapTarget && (
+                                      <Box
+                                        position="absolute"
+                                        top="-7px"
+                                        right="-7px"
+                                        w="18px"
+                                        h="18px"
+                                        bg="#e24b4b"
+                                        borderRadius="50%"
+                                        border="2px solid #09090f"
+                                        display="flex"
+                                        alignItems="center"
+                                        justifyContent="center"
+                                        zIndex={12}
+                                        sx={SX_KEYFRAMES_SWAP_BADGE_POP}
+                                      >
+                                        <Box
+                                          as="svg"
+                                          w="8px"
+                                          h="8px"
+                                          viewBox="0 0 10 10"
+                                          fill="none"
+                                        >
+                                          <path
+                                            d="M2 5h6M2 5l1.5-1.5M2 5l1.5 1.5M8 5l-1.5-1.5M8 5l-1.5 1.5"
+                                            stroke="white"
+                                            strokeWidth="1.2"
+                                            strokeLinecap="round"
+                                          />
+                                        </Box>
+                                      </Box>
+                                    )}
                                   </Box>
                                   <Text
                                     fontSize="10px"
@@ -3506,9 +3922,13 @@ export const GameBoard: FC = () => {
                                         ? '#c9a227'
                                         : pendingBurnSlot === h.slot
                                           ? '#cf5e5e'
-                                          : '#555'
+                                          : isSwapTarget
+                                            ? '#e24b4b'
+                                            : '#555'
                                     }
-                                    fontWeight={isPeekedSlot(h.slot) ? '700' : '500'}
+                                    fontWeight={
+                                      isPeekedSlot(h.slot) || isSwapTarget ? '700' : '500'
+                                    }
                                   >
                                     {h.slot}
                                   </Text>
