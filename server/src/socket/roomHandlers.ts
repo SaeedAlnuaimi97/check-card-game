@@ -559,6 +559,100 @@ export function registerRoomHandlers(io: SocketIOServer, socket: Socket): void {
   );
 
   // ----------------------------------------------------------
+  // Play Again — create a new room with same mode, redirect all players
+  // ----------------------------------------------------------
+  socket.on(
+    'playAgain',
+    async (
+      data: { roomCode: string; playerId: string },
+      callback?: (response: { success: boolean; newRoomCode?: string; error?: string }) => void,
+    ) => {
+      const roomCode = validateRoomCode(data?.roomCode);
+      if (!roomCode) {
+        callback?.({ success: false, error: 'Invalid room code' });
+        return;
+      }
+
+      const release = await getRoomMutex(roomCode).acquire();
+      try {
+        const room = await RoomModel.findOne({ roomCode });
+        if (!room) {
+          callback?.({ success: false, error: 'Room not found' });
+          return;
+        }
+
+        // Only allow play-again when the game has ended
+        const gameState = room.gameState as unknown as GameState | null;
+        if (!gameState || gameState.phase !== 'gameEnd') {
+          callback?.({ success: false, error: 'Game has not ended' });
+          return;
+        }
+
+        // Verify the requesting player is in this room
+        const playerInRoom = room.players.find((p) => p.id === data.playerId);
+        if (!playerInRoom) {
+          callback?.({ success: false, error: 'Not a player in this room' });
+          return;
+        }
+
+        // Get game mode from old room
+        const gameMode: GameMode = (room as any).gameMode || 'classic';
+
+        // Collect human (non-bot) players with their current socket-registered usernames
+        const humanPlayers = room.players
+          .filter((p) => !gameState.players.find((gs) => gs.playerId === p.id)?.isBot)
+          .map((p) => ({ id: p.id, username: p.username }));
+
+        // Generate a new room code
+        let newRoomCode: string;
+        let attempts = 0;
+        do {
+          newRoomCode = generateRoomCode();
+          attempts++;
+          if (attempts > 10) {
+            callback?.({ success: false, error: 'Failed to generate room code' });
+            return;
+          }
+        } while (await RoomModel.exists({ roomCode: newRoomCode }));
+
+        // Create new room — requesting player becomes host
+        const newRoom = new RoomModel({
+          roomCode: newRoomCode,
+          host: data.playerId,
+          players: [{ id: data.playerId, username: playerInRoom.username }],
+          gameState: null,
+          status: 'lobby',
+          gameMode,
+        });
+        await newRoom.save();
+
+        console.log(
+          `Play Again: ${playerInRoom.username} created new room ${newRoomCode} (mode: ${gameMode}) from ${roomCode}`,
+        );
+
+        // Broadcast redirect to ALL players in the old room (including the requester)
+        for (const player of humanPlayers) {
+          const sid = getSocketByPlayer(player.id);
+          if (sid) {
+            io.to(sid).emit('playAgainRedirect', {
+              newRoomCode,
+              gameMode,
+              oldRoomCode: roomCode,
+            });
+          }
+        }
+
+        callback?.({ success: true, newRoomCode });
+      } catch (error) {
+        console.error('Error in playAgain:', error);
+        callback?.({ success: false, error: 'Failed to create new room' });
+      } finally {
+        release();
+      }
+    },
+  );
+
+  // ----------------------------------------------------------
   // Disconnect handler — grace period for in-game players
   // ----------------------------------------------------------
   socket.on('disconnect', async () => {

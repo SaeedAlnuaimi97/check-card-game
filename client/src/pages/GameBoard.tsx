@@ -628,6 +628,7 @@ export const GameBoard: FC = () => {
     undoTakeDiscard,
     sendReaction,
     lastReaction,
+    playAgain,
   } = useSocket();
   const toast = useToast();
 
@@ -644,6 +645,12 @@ export const GameBoard: FC = () => {
   const [isPeeking, setIsPeeking] = useState(false);
   const [peekProgress, setPeekProgress] = useState(100);
 
+  // Blind round countdown state
+  const [isBlindCountdown, setIsBlindCountdown] = useState(false);
+  const [blindCountdownSec, setBlindCountdownSec] = useState(0);
+  const BLIND_COUNTDOWN_SEC = 5;
+  const blindCountdownShownForRound = useRef<number | null>(null);
+
   // Reset peeking state when a new round starts
   useEffect(() => {
     if (peekedCards && peekedCards.length > 0 && gameState?.phase === 'peeking') {
@@ -651,6 +658,35 @@ export const GameBoard: FC = () => {
       setPeekProgress(100);
     }
   }, [peekedCards, gameState?.phase]);
+
+  // Blind round countdown — show message when a blind round starts
+  useEffect(() => {
+    if (
+      gameState?.isBlindRound &&
+      gameState?.phase === 'playing' &&
+      peekedCards &&
+      peekedCards.length === 0 &&
+      gameState?.roundNumber > 0 &&
+      blindCountdownShownForRound.current !== gameState.roundNumber
+    ) {
+      blindCountdownShownForRound.current = gameState.roundNumber;
+      setIsBlindCountdown(true);
+      setBlindCountdownSec(BLIND_COUNTDOWN_SEC);
+    }
+  }, [gameState?.isBlindRound, gameState?.phase, gameState?.roundNumber, peekedCards]);
+
+  // Blind countdown timer
+  useEffect(() => {
+    if (!isBlindCountdown) return;
+    if (blindCountdownSec <= 0) {
+      setIsBlindCountdown(false);
+      return;
+    }
+    const timer = setTimeout(() => {
+      setBlindCountdownSec((prev) => prev - 1);
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [isBlindCountdown, blindCountdownSec]);
 
   // Debug: track revealed cards by key `${playerId}:${slot}`
   const [debugRevealed, setDebugRevealed] = useState<Record<string, CardType>>({});
@@ -1058,6 +1094,21 @@ export const GameBoard: FC = () => {
     leaveRoom();
     navigate('/');
   }, [clearGameEndData, clearRoundEndData, leaveRoom, navigate]);
+
+  // Handle play again — create new room, redirect all players
+  const handlePlayAgain = useCallback(async () => {
+    const result = await playAgain();
+    if (!result.success) {
+      toast({
+        title: 'Failed to create new game',
+        description: result.error,
+        status: 'error',
+        duration: 3000,
+        position: 'top',
+      });
+    }
+    // The playAgainRedirect event in SocketContext handles navigation
+  }, [playAgain, toast]);
 
   // Play win sound for round winners (skip if game also ended — gameEnded effect handles that)
   useEffect(() => {
@@ -1642,12 +1693,12 @@ export const GameBoard: FC = () => {
                   right={0}
                   bg="#1e1e2e"
                   border="1px solid #3a3a5a"
-                  borderRadius="20px"
+                  borderRadius="14px"
                   px="8px"
                   py="6px"
-                  display="flex"
+                  display="grid"
+                  gridTemplateColumns="repeat(3, 1fr)"
                   gap="4px"
-                  alignItems="center"
                   zIndex={40}
                   filter="drop-shadow(0 4px 12px rgba(0,0,0,0.4))"
                   sx={{
@@ -1671,7 +1722,7 @@ export const GameBoard: FC = () => {
                     },
                   }}
                 >
-                  {(['🖕', '😛', '🥲', '💀', '🤌', '🔥', '😤'] as const).map((emoji) => (
+                  {(['🖕', '😛', '🥲', '💀', '🤌', '🔥'] as const).map((emoji) => (
                     <Box
                       key={emoji}
                       as="button"
@@ -2939,35 +2990,127 @@ export const GameBoard: FC = () => {
           </AnimatePresence>
 
           {/* hand label */}
-          {isPeeking ? (
-            /* Option C memo pill — replaces plain label during peeking phase */
-            <Flex align="center" justify="center" mb="10px">
+          {isBlindCountdown ? (
+            /* Blind round interstitial — no peeking */
+            <Flex direction="column" align="center" justify="center" gap="8px" mb="10px" py="12px">
               <Flex
                 align="center"
-                gap="6px"
-                bg="#1e1a08"
-                border="1px solid #4a3a00"
-                borderRadius="20px"
-                px="12px"
-                py="4px"
+                gap="8px"
+                bg="rgba(26,26,58,0.6)"
+                border="1px solid #2a2a5a"
+                borderRadius="12px"
+                px="16px"
+                py="10px"
               >
-                <Text fontSize="11px" color="#c9a227" fontWeight="600">
-                  memorize
-                </Text>
-                <Text
-                  fontSize="13px"
-                  fontWeight="800"
-                  color="#c9a227"
-                  minW="20px"
-                  textAlign="center"
-                >
-                  {Math.ceil((peekProgress / 100) * (PEEK_DURATION_MS / 1000))}
-                </Text>
-                <Text fontSize="11px" color="#c9a227" fontWeight="600">
-                  sec
-                </Text>
+                {/* Crossed-out eye icon */}
+                <Box w="24px" h="24px" flexShrink={0}>
+                  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path
+                      d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7S2 12 2 12z"
+                      stroke="#5a5a8a"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                    <circle cx="12" cy="12" r="3" stroke="#5a5a8a" strokeWidth="1.5" />
+                    <line
+                      x1="4"
+                      y1="4"
+                      x2="20"
+                      y2="20"
+                      stroke="#7a4040"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                    />
+                  </svg>
+                </Box>
+                <Box>
+                  <Text fontSize="14px" fontWeight="700" color="#8a8acc" lineHeight="1.3">
+                    BLIND ROUND
+                  </Text>
+                  <Text fontSize="11px" color="#5a5a7a" lineHeight="1.3">
+                    No peeking this round
+                  </Text>
+                </Box>
               </Flex>
+              <Text fontSize="24px" fontWeight="800" color="#8a8acc">
+                {blindCountdownSec}
+              </Text>
+              <Text fontSize="10px" color="#5a5a7a">
+                starting in {blindCountdownSec}s...
+              </Text>
             </Flex>
+          ) : isPeeking ? (
+            /* Option C memo pill — replaces plain label during peeking phase */
+            <VStack spacing="6px" mb="10px">
+              {/* Bounty rank badge during peek (so it's visible at game start) */}
+              {gameState.gameMode === 'bountyHunt' && gameState.bountyRank && (
+                <Flex
+                  justify="center"
+                  align="center"
+                  gap="6px"
+                  px="10px"
+                  py="4px"
+                  borderRadius="8px"
+                  bg="rgba(201,162,39,0.1)"
+                  border="1px solid rgba(201,162,39,0.3)"
+                >
+                  <Text
+                    fontSize="10px"
+                    color="#c9a227"
+                    fontWeight="600"
+                    letterSpacing="0.08em"
+                    textTransform="uppercase"
+                  >
+                    Bounty
+                  </Text>
+                  <Box
+                    w="24px"
+                    h="32px"
+                    borderRadius="3px"
+                    bg="#1a1a2a"
+                    border="1.5px solid #c9a227"
+                    display="flex"
+                    alignItems="center"
+                    justifyContent="center"
+                  >
+                    <Text fontSize="12px" fontWeight="800" color="#c9a227">
+                      {gameState.bountyRank}
+                    </Text>
+                  </Box>
+                  <Text fontSize="9px" color="#8a7a3a">
+                    2x in hand / -5 per burn
+                  </Text>
+                </Flex>
+              )}
+              <Flex align="center" justify="center">
+                <Flex
+                  align="center"
+                  gap="6px"
+                  bg="#1e1a08"
+                  border="1px solid #4a3a00"
+                  borderRadius="20px"
+                  px="12px"
+                  py="4px"
+                >
+                  <Text fontSize="11px" color="#c9a227" fontWeight="600">
+                    memorize
+                  </Text>
+                  <Text
+                    fontSize="13px"
+                    fontWeight="800"
+                    color="#c9a227"
+                    minW="20px"
+                    textAlign="center"
+                  >
+                    {Math.ceil((peekProgress / 100) * (PEEK_DURATION_MS / 1000))}
+                  </Text>
+                  <Text fontSize="11px" color="#c9a227" fontWeight="600">
+                    sec
+                  </Text>
+                </Flex>
+              </Flex>
+            </VStack>
           ) : (
             <Text
               fontSize="10px"
@@ -3022,7 +3165,7 @@ export const GameBoard: FC = () => {
           >
             <HStack
               spacing={{ base: '6px', md: '10px' }}
-              justify="center"
+              justify={isPeeking && myPlayer.hand.length > 4 ? 'flex-start' : 'center'}
               minW="max-content"
               w="100%"
               px={2}
@@ -3816,35 +3959,133 @@ export const GameBoard: FC = () => {
                     transition="border-color 0.3s, box-shadow 0.3s"
                   >
                     {/* hand label */}
-                    {isPeeking ? (
-                      /* Option C memo pill for desktop */
-                      <Flex align="center" justify="center" mb="10px">
+                    {isBlindCountdown ? (
+                      /* Blind round interstitial — no peeking */
+                      <Flex
+                        direction="column"
+                        align="center"
+                        justify="center"
+                        gap="8px"
+                        mb="10px"
+                        py="12px"
+                      >
                         <Flex
                           align="center"
-                          gap="6px"
-                          bg="#1e1a08"
-                          border="1px solid #4a3a00"
-                          borderRadius="20px"
-                          px="12px"
-                          py="4px"
+                          gap="8px"
+                          bg="rgba(26,26,58,0.6)"
+                          border="1px solid #2a2a5a"
+                          borderRadius="12px"
+                          px="16px"
+                          py="10px"
                         >
-                          <Text fontSize="11px" color="#c9a227" fontWeight="600">
-                            memorize
-                          </Text>
-                          <Text
-                            fontSize="13px"
-                            fontWeight="800"
-                            color="#c9a227"
-                            minW="20px"
-                            textAlign="center"
-                          >
-                            {Math.ceil((peekProgress / 100) * (PEEK_DURATION_MS / 1000))}
-                          </Text>
-                          <Text fontSize="11px" color="#c9a227" fontWeight="600">
-                            sec
-                          </Text>
+                          <Box w="24px" h="24px" flexShrink={0}>
+                            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                              <path
+                                d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7S2 12 2 12z"
+                                stroke="#5a5a8a"
+                                strokeWidth="1.5"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
+                              <circle cx="12" cy="12" r="3" stroke="#5a5a8a" strokeWidth="1.5" />
+                              <line
+                                x1="4"
+                                y1="4"
+                                x2="20"
+                                y2="20"
+                                stroke="#7a4040"
+                                strokeWidth="2"
+                                strokeLinecap="round"
+                              />
+                            </svg>
+                          </Box>
+                          <Box>
+                            <Text fontSize="14px" fontWeight="700" color="#8a8acc" lineHeight="1.3">
+                              BLIND ROUND
+                            </Text>
+                            <Text fontSize="11px" color="#5a5a7a" lineHeight="1.3">
+                              No peeking this round
+                            </Text>
+                          </Box>
                         </Flex>
+                        <Text fontSize="24px" fontWeight="800" color="#8a8acc">
+                          {blindCountdownSec}
+                        </Text>
+                        <Text fontSize="10px" color="#5a5a7a">
+                          starting in {blindCountdownSec}s...
+                        </Text>
                       </Flex>
+                    ) : isPeeking ? (
+                      /* Option C memo pill for desktop */
+                      <VStack spacing="6px" mb="10px">
+                        {/* Bounty rank badge during peek */}
+                        {gameState.gameMode === 'bountyHunt' && gameState.bountyRank && (
+                          <Flex
+                            justify="center"
+                            align="center"
+                            gap="6px"
+                            px="10px"
+                            py="4px"
+                            borderRadius="8px"
+                            bg="rgba(201,162,39,0.1)"
+                            border="1px solid rgba(201,162,39,0.3)"
+                          >
+                            <Text
+                              fontSize="10px"
+                              color="#c9a227"
+                              fontWeight="600"
+                              letterSpacing="0.08em"
+                              textTransform="uppercase"
+                            >
+                              Bounty
+                            </Text>
+                            <Box
+                              w="24px"
+                              h="32px"
+                              borderRadius="3px"
+                              bg="#1a1a2a"
+                              border="1.5px solid #c9a227"
+                              display="flex"
+                              alignItems="center"
+                              justifyContent="center"
+                            >
+                              <Text fontSize="12px" fontWeight="800" color="#c9a227">
+                                {gameState.bountyRank}
+                              </Text>
+                            </Box>
+                            <Text fontSize="9px" color="#8a7a3a">
+                              2x in hand / -5 per burn
+                            </Text>
+                          </Flex>
+                        )}
+                        <Flex align="center" justify="center">
+                          <Flex
+                            align="center"
+                            gap="6px"
+                            bg="#1e1a08"
+                            border="1px solid #4a3a00"
+                            borderRadius="20px"
+                            px="12px"
+                            py="4px"
+                          >
+                            <Text fontSize="11px" color="#c9a227" fontWeight="600">
+                              memorize
+                            </Text>
+                            <Text
+                              fontSize="13px"
+                              fontWeight="800"
+                              color="#c9a227"
+                              minW="20px"
+                              textAlign="center"
+                            >
+                              {Math.ceil((peekProgress / 100) * (PEEK_DURATION_MS / 1000))}
+                            </Text>
+                            <Text fontSize="11px" color="#c9a227" fontWeight="600">
+                              sec
+                            </Text>
+                          </Flex>
+                        </Flex>
+                      </VStack>
                     ) : (
                       <Text
                         fontSize="10px"
@@ -3897,7 +4138,7 @@ export const GameBoard: FC = () => {
                     >
                       <HStack
                         spacing={{ base: '6px', md: '10px' }}
-                        justify="center"
+                        justify={isPeeking && myPlayer.hand.length > 4 ? 'flex-start' : 'center'}
                         minW="max-content"
                         w="100%"
                         px={2}
@@ -6665,7 +6906,7 @@ export const GameBoard: FC = () => {
                   bg="transparent"
                   border="1px solid #2a2a4a"
                   color="#7a7aee"
-                  onClick={handleReturnToLobby}
+                  onClick={handlePlayAgain}
                   _hover={{ bg: '#0a0a1a' }}
                 >
                   Play again

@@ -166,6 +166,8 @@ interface SocketContextValue {
   sendChatMessage: (text: string) => Promise<{ success: boolean; error?: string }>;
   /** Fetch chat history for the current room (call on drawer open / reconnect) */
   getChatHistory: () => Promise<{ success: boolean; messages?: ChatMessage[]; error?: string }>;
+  /** Play again — creates a new room with the same mode and redirects all players */
+  playAgain: () => Promise<{ success: boolean; newRoomCode?: string; error?: string }>;
 }
 
 const SocketContext = createContext<SocketContextValue | null>(null);
@@ -512,6 +514,67 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
       setLastChatMessage(msg);
     });
 
+    // Play Again redirect — another player initiated play-again, join the new room
+    socket.on(
+      'playAgainRedirect',
+      (data: { newRoomCode: string; gameMode: string; oldRoomCode: string }) => {
+        console.log('Play again redirect to new room:', data.newRoomCode);
+        const storedUsername = localStorage.getItem('username') || 'Player';
+        // Clear current game state
+        setGameState(null);
+        setPeekedCards(null);
+        setDrawnCard(null);
+        setDrawnFromDiscard(false);
+        setPendingEffect(null);
+        setLastBurnResult(null);
+        setCheckCalledData(null);
+        setRoundEndData(null);
+        setGameEndData(null);
+        setIsMyTurn(false);
+        setTurnData(null);
+        setNextRoundStartsAt(null);
+        setLastSwapResult(null);
+        setLastReaction(null);
+        setChatMessages([]);
+        // Leave old socket.io room
+        socket.emit('leaveRoom', { roomCode: data.oldRoomCode, playerId: playerIdRef.current });
+        // Auto-join the new room
+        socket.emit(
+          'joinRoom',
+          { roomCode: data.newRoomCode, username: storedUsername },
+          (response: {
+            success: boolean;
+            playerId?: string;
+            room?: {
+              roomCode: string;
+              host: string;
+              players: { id: string; username: string }[];
+              status: string;
+              gameMode?: string;
+            };
+            error?: string;
+          }) => {
+            if (response.success && response.playerId && response.room) {
+              const newPlayerId = response.playerId;
+              localStorage.setItem('playerId', newPlayerId);
+              localStorage.setItem('roomCode', data.newRoomCode);
+              setPlayerId(newPlayerId);
+              playerIdRef.current = newPlayerId;
+              setUsername(storedUsername);
+              setRoomData({
+                roomCode: data.newRoomCode,
+                host: response.room.host,
+                players: response.room.players,
+                status: response.room.status as RoomData['status'],
+                gameMode: (response.room.gameMode || data.gameMode) as RoomData['gameMode'],
+              });
+              navigateRef.current(`/lobby/${data.newRoomCode}`);
+            }
+          },
+        );
+      },
+    );
+
     // F-203/F-306: Host kicked this player from the lobby
     socket.on('kicked', (_data: { roomCode: string; reason: string }) => {
       console.log('You were kicked from the room');
@@ -564,6 +627,7 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
       socket.off('reactionReceived');
       socket.off('chatMessage');
       socket.off('kicked');
+      socket.off('playAgainRedirect');
       socket.disconnect();
     };
   }, []);
@@ -1322,6 +1386,31 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
     });
   }, [roomData, playerId]);
 
+  // ----------------------------------------------------------
+  // playAgain — create a new room with the same mode and redirect all players
+  // ----------------------------------------------------------
+  const playAgain = useCallback((): Promise<{
+    success: boolean;
+    newRoomCode?: string;
+    error?: string;
+  }> => {
+    return new Promise((resolve) => {
+      const roomCode = roomData?.roomCode;
+      const pid = playerId;
+      if (!roomCode || !pid) {
+        resolve({ success: false, error: 'Not in a room' });
+        return;
+      }
+      socket.emit(
+        'playAgain',
+        { roomCode, playerId: pid },
+        (response: { success: boolean; newRoomCode?: string; error?: string }) => {
+          resolve(response);
+        },
+      );
+    });
+  }, [roomData, playerId]);
+
   const value: SocketContextValue = useMemo(
     () => ({
       isConnected,
@@ -1375,6 +1464,7 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
       clearLastChatMessage,
       sendChatMessage,
       getChatHistory,
+      playAgain,
     }),
     [
       isConnected,
@@ -1428,6 +1518,7 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
       clearLastChatMessage,
       sendChatMessage,
       getChatHistory,
+      playAgain,
     ],
   );
 
