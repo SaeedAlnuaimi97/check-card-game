@@ -85,8 +85,9 @@ const CheckLogo: FC = () => (
 );
 
 export const HomePage: FC = () => {
-  const [username, setUsername] = useState('');
-  const [usernameConfirmed, setUsernameConfirmed] = useState(false);
+  const savedUsername = localStorage.getItem('username') || '';
+  const [username, setUsername] = useState(savedUsername);
+  const [usernameConfirmed, setUsernameConfirmed] = useState(!!savedUsername);
   const [roomCode, setRoomCode] = useState('');
   const [isJoining, setIsJoining] = useState(false);
 
@@ -104,6 +105,7 @@ export const HomePage: FC = () => {
       toast({ title: 'Enter a username', status: 'warning', duration: 2000, position: 'top' });
       return;
     }
+    localStorage.setItem('username', username.trim());
     setUsernameConfirmed(true);
   };
 
