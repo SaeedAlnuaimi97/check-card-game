@@ -93,6 +93,7 @@ interface SocketContextValue {
   lastReaction: { fromPlayerId: string; emoji: string; id: number } | null;
   createRoom: (
     username: string,
+    gameMode?: string,
   ) => Promise<{ success: boolean; roomCode?: string; error?: string }>;
   joinRoom: (roomCode: string, username: string) => Promise<{ success: boolean; error?: string }>;
   leaveRoom: () => void;
@@ -571,11 +572,14 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
   // Create Room
   // ----------------------------------------------------------
   const createRoom = useCallback(
-    (name: string): Promise<{ success: boolean; roomCode?: string; error?: string }> => {
+    (
+      name: string,
+      gameMode?: string,
+    ): Promise<{ success: boolean; roomCode?: string; error?: string }> => {
       return new Promise((resolve) => {
         socket.emit(
           'createRoom',
-          { username: name },
+          { username: name, gameMode: gameMode ?? 'classic' },
           (response: {
             success: boolean;
             roomCode?: string;

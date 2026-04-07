@@ -51,14 +51,36 @@ export interface RoundResult {
  * Mutates gameState: updates scores, player totalScore, and phase.
  */
 export function computeRoundResult(gameState: GameState): RoundResult {
+  const isBountyHunt = gameState.gameMode === 'bountyHunt';
+  const bountyRank = gameState.bountyRank;
+
   // Build per-player results
-  const allHands: PlayerRoundResult[] = gameState.players.map((player) => ({
-    playerId: player.playerId,
-    username: player.username,
-    cards: player.hand.map((h) => h.card),
-    slots: player.hand.map((h) => h.slot),
-    handSum: calculateHandValue(player.hand),
-  }));
+  const allHands: PlayerRoundResult[] = gameState.players.map((player) => {
+    let handSum = calculateHandValue(player.hand);
+
+    // Bounty Hunt: double the value of cards matching the bounty rank
+    if (isBountyHunt && bountyRank) {
+      for (const h of player.hand) {
+        if (h.card.rank === bountyRank) {
+          handSum += h.card.value; // add value again to effectively double it
+        }
+      }
+    }
+
+    // Bounty Hunt: subtract burn bonuses (-5 per successful bounty burn, floor 0)
+    if (isBountyHunt && gameState.bountyBurnCounts) {
+      const burnCount = gameState.bountyBurnCounts[player.playerId] ?? 0;
+      handSum = Math.max(0, handSum - burnCount * 5);
+    }
+
+    return {
+      playerId: player.playerId,
+      username: player.username,
+      cards: player.hand.map((h) => h.card),
+      slots: player.hand.map((h) => h.slot),
+      handSum,
+    };
+  });
 
   // Find the minimum hand sum
   const minSum = Math.min(...allHands.map((h) => h.handSum));
@@ -69,6 +91,9 @@ export function computeRoundResult(gameState: GameState): RoundResult {
   const checkerId = gameState.checkCalledBy ?? null;
   const checkerIsWinner = checkerId ? roundWinners.includes(checkerId) : true;
 
+  // Sudden Death: no checker doubling
+  const isSuddenDeath = gameState.gameMode === 'suddenDeath';
+
   // Update scores
   const updatedScores: Record<string, number> = { ...gameState.scores };
   for (const hand of allHands) {
@@ -77,8 +102,8 @@ export function computeRoundResult(gameState: GameState): RoundResult {
       if (updatedScores[hand.playerId] === undefined) {
         updatedScores[hand.playerId] = 0;
       }
-    } else if (checkerId && hand.playerId === checkerId && !checkerIsWinner) {
-      // Checker is NOT the lowest — double their hand sum
+    } else if (!isSuddenDeath && checkerId && hand.playerId === checkerId && !checkerIsWinner) {
+      // Checker is NOT the lowest — double their hand sum (not in Sudden Death)
       updatedScores[hand.playerId] = (updatedScores[hand.playerId] ?? 0) + hand.handSum * 2;
     } else {
       updatedScores[hand.playerId] = (updatedScores[hand.playerId] ?? 0) + hand.handSum;
@@ -92,8 +117,10 @@ export function computeRoundResult(gameState: GameState): RoundResult {
   }
 
   // Check if game should end (F-071, F-310) — threshold is configurable (default 70, JSDoc says "100+" but actual default is targetScore)
+  // Sudden Death: always ends after 1 round
   const GAME_END_THRESHOLD = gameState.targetScore ?? 70;
-  const gameEnded = Object.values(updatedScores).some((score) => score >= GAME_END_THRESHOLD);
+  const gameEnded =
+    isSuddenDeath || Object.values(updatedScores).some((score) => score >= GAME_END_THRESHOLD);
 
   // Set phase
   gameState.phase = gameEnded ? 'gameEnd' : 'roundEnd';
@@ -103,7 +130,7 @@ export function computeRoundResult(gameState: GameState): RoundResult {
     checkCalledBy: checkerId,
     allHands,
     roundWinners,
-    checkerDoubled: checkerId ? !checkerIsWinner : false,
+    checkerDoubled: !isSuddenDeath && checkerId ? !checkerIsWinner : false,
     updatedScores,
     gameEnded,
   };

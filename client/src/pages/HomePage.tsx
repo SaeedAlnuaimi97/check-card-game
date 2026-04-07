@@ -88,10 +88,9 @@ export const HomePage: FC = () => {
   const [username, setUsername] = useState('');
   const [usernameConfirmed, setUsernameConfirmed] = useState(false);
   const [roomCode, setRoomCode] = useState('');
-  const [isCreating, setIsCreating] = useState(false);
   const [isJoining, setIsJoining] = useState(false);
 
-  const { isConnected, connectionPhase, createRoom, joinRoom } = useSocket();
+  const { isConnected, connectionPhase, joinRoom } = useSocket();
   const navigate = useNavigate();
   const toast = useToast();
   const {
@@ -113,21 +112,7 @@ export const HomePage: FC = () => {
   };
 
   const handleCreateRoom = async () => {
-    setIsCreating(true);
-    const result = await createRoom(username.trim());
-    setIsCreating(false);
-
-    if (result.success && result.roomCode) {
-      navigate(`/lobby/${result.roomCode}`);
-    } else {
-      toast({
-        title: 'Failed to create room',
-        description: result.error,
-        status: 'error',
-        duration: 3000,
-        position: 'top',
-      });
-    }
+    navigate('/create');
   };
 
   const handleJoinRoom = async () => {
@@ -292,19 +277,19 @@ export const HomePage: FC = () => {
               w="100%"
               py="13px"
               borderRadius="10px"
-              bg={!isConnected || isCreating ? '#2a5a3a' : '#4a8a5a'}
+              bg={!isConnected ? '#2a5a3a' : '#4a8a5a'}
               color="#e8f5ec"
               fontSize="15px"
               fontWeight="600"
               border="none"
-              cursor={!isConnected || isCreating ? 'not-allowed' : 'pointer'}
-              opacity={!isConnected || isCreating ? 0.7 : 1}
+              cursor={!isConnected ? 'not-allowed' : 'pointer'}
+              opacity={!isConnected ? 0.7 : 1}
               onClick={handleCreateRoom}
               sx={{
                 '&:hover:not([disabled])': { background: '#3a7a4a' },
               }}
             >
-              {isCreating ? 'Creating...' : 'Create Room'}
+              Create Room
             </Box>
 
             {/* OR Divider */}

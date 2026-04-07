@@ -474,3 +474,61 @@ Design system source of truth: `reskin/` folder (spec MD + two HTML mockups). Sk
 - [x] **CHAT-002**: SocketContext chat integration — `chatMessages` state, `lastChatMessage` state (drives toast preview), `sendChatMessage()` method, `getChatHistory()` method, `clearLastChatMessage()` helper; `chatMessage` socket event listener
 - [x] **CHAT-003**: ChatDrawer component — slide-up drawer with 4 snap states (closed/peek/half/full), drag gesture handling with velocity-based close, backdrop with proportional opacity, header with player avatars, message list with auto-scroll + "↓ new messages" pill, consecutive message grouping, system event pills, empty state, input row with send button, quick-react chips strip, Escape key handler, popIn animation on new bubbles
 - [x] **CHAT-004**: GameBoard integration — chat bubble button in top bar (next to emoji button), unread badge (red pill, capped at `9+`), toast preview (slide-up pill with sender name + text, 3s auto-dismiss, tap to open drawer)
+
+---
+
+### 42. Challenge Modes
+
+#### Shared Infrastructure
+
+- [x] **CM-001**: `GameMode` type — `'classic' | 'suddenDeath' | 'bountyHunt' | 'blindRounds'` on server and client types
+- [x] **CM-002**: Room schema — `gameMode` field with enum validation, default `'classic'`
+- [x] **CM-003**: GameState schema — `bountyRank`, `bountyBurnCounts`, `isBlindRound` optional fields
+- [x] **CM-004**: `createRoom` accepts and validates `gameMode` parameter
+- [x] **CM-005**: `broadcastRoomUpdate` includes `gameMode`
+- [x] **CM-006**: `joinRoom` blocks mid-game join for non-classic modes
+- [x] **CM-007**: `initializeGameState` accepts `gameMode` param, next-round init preserves mode
+- [x] **CM-008**: `sanitizeGameState` includes mode-specific fields
+- [x] **CM-009**: `SocketContext.createRoom(name, gameMode?)` updated signature
+- [x] **CM-010**: ModePicker page — mode selection screen with 4 illustrated mode cards
+- [x] **CM-011**: App route `/create` → ModePicker, HomePage navigates to ModePicker on "Create Room"
+- [x] **CM-012**: RoomLobby — mode badge for non-classic modes, targetScore slider hidden for SD
+
+#### Sudden Death Mode
+
+- [x] **CM-020**: 6-card deal (A-F) for Sudden Death, E/F peek slots
+- [x] **CM-021**: Double burn penalty (+2 cards) for Sudden Death
+- [x] **CM-022**: No checker doubling for Sudden Death
+- [x] **CM-023**: Single round — always `gameEnded = true` after round
+- [x] **CM-024**: Instant check — skip remaining turns, end round immediately
+- [x] **CM-025**: Max 6 player validation for Sudden Death
+- [x] **CM-026**: GameBoard header — "SUDDEN DEATH" indicator replaces round counter
+- [x] **CM-027**: Round-end/game-end modals — Sudden Death styling, no score progress bars
+- [x] **CM-028**: SuddenDeath.test.ts — setup, scoring, check behavior, burn penalty tests
+
+#### Bounty Hunt Mode
+
+- [x] **CM-030**: Bounty rank selection — draw card, store rank, shuffle back into deck each round
+- [x] **CM-031**: Bounty burn tracking — `bountyBurnCounts` incremented on successful bounty-rank burns
+- [x] **CM-032**: Bounty scoring — double bounty-rank card values, -5 per bounty burn bonus (floor 0)
+- [x] **CM-033**: Bounty modifiers applied before winner determination
+- [x] **CM-034**: Checker doubling still applies in Bounty Hunt
+- [x] **CM-035**: GameBoard header — "BOUNTY" mode indicator alongside round number
+- [x] **CM-036**: Bounty rank badge — card-shaped badge near draw/discard pile (mobile + desktop)
+- [x] **CM-037**: Bounty burn banner — "BOUNTY BURN -5" gold banner on successful bounty burns
+- [x] **CM-038**: Round-end modal — bounty-rank cards highlighted with gold border, "value → doubled" annotation
+- [x] **CM-039**: Round-end modal — bounty burn bonus line item per player
+- [x] **CM-040**: BountyHunt.test.ts — setup, scoring, burn tracking, edge case tests
+
+#### Blind Rounds Mode
+
+- [x] **CM-050**: Blind round detection — `isBlindRound = roundNumber % 3 === 0 && roundNumber > 0`
+- [x] **CM-051**: Blind round peek skip — phase set to `'playing'` directly, peekedSlots empty
+- [x] **CM-052**: Opponent hand hiding — sanitizeGameState returns empty hand/cardCount for opponents during blind rounds
+- [x] **CM-053**: Non-blind rounds play identically to classic
+- [x] **CM-054**: GameBoard header — "BLIND" indicator during blind rounds, "BLIND ROUNDS" otherwise
+- [x] **CM-055**: CardBack blind variant — darker bg (#1a1a3a), crossed-out eye icon SVG replacing diamond pattern
+- [x] **CM-056**: Peek UI naturally skipped (server sends phase='playing', peekedCards=[])
+- [x] **CM-057**: Opponent card pips hidden (server sends hand=[] for opponents)
+- [x] **CM-058**: Round-end modal — "Next round: BLIND ROUND" warning when applicable
+- [x] **CM-059**: BlindRounds.test.ts — blind detection, peek skipping, opponent hiding, edge case tests

@@ -2,6 +2,12 @@ import type { Card } from './card.types';
 import type { ClientPlayerState, SlotLabel } from './player.types';
 
 // ============================================================
+// Game Mode Types
+// ============================================================
+
+export type GameMode = 'classic' | 'suddenDeath' | 'bountyHunt' | 'blindRounds';
+
+// ============================================================
 // Game Phase
 // ============================================================
 
@@ -28,6 +34,14 @@ export interface ClientGameState {
   pausedBy: string | null;
   /** Custom score threshold at which the game ends (F-310). Defaults to 70. */
   targetScore: number;
+  /** The game mode for this game session */
+  gameMode: GameMode;
+  /** Bounty Hunt: the rank that is the bounty target this round */
+  bountyRank?: string;
+  /** Bounty Hunt: count of successful bounty burns per player this round */
+  bountyBurnCounts?: Record<string, number>;
+  /** Blind Rounds: true during blind rounds (every 3rd round) */
+  isBlindRound?: boolean;
 }
 
 // ============================================================
@@ -52,6 +66,8 @@ export interface RoomData {
   host: string;
   players: RoomPlayer[];
   status: RoomStatus;
+  /** The game mode for this room */
+  gameMode: GameMode;
 }
 
 // ============================================================

@@ -2,6 +2,12 @@
 // Card Types (F-010)
 // ============================================================
 
+// ============================================================
+// Game Mode Types
+// ============================================================
+
+export type GameMode = 'classic' | 'suddenDeath' | 'bountyHunt' | 'blindRounds';
+
 export type Suit = '\u2665' | '\u2666' | '\u2660' | '\u2663';
 
 export type Rank = 'A' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '10' | 'J' | 'Q' | 'K';
@@ -97,6 +103,14 @@ export interface GameState {
   turnTimeRemainingMs: number | null;
   /** Custom score threshold at which the game ends (F-310). Defaults to 70. */
   targetScore: number;
+  /** The game mode for this game session */
+  gameMode: GameMode;
+  /** Bounty Hunt: the rank that is the bounty target this round */
+  bountyRank?: Rank;
+  /** Bounty Hunt: count of successful bounty burns per player this round */
+  bountyBurnCounts?: Record<string, number>;
+  /** Blind Rounds: true during blind rounds (every 3rd round) */
+  isBlindRound?: boolean;
 }
 
 // ============================================================
@@ -123,6 +137,8 @@ export interface Room {
   gameState: GameState | null;
   status: RoomStatus;
   createdAt: Date;
+  /** The game mode for this room */
+  gameMode: GameMode;
 }
 
 // ============================================================
@@ -164,6 +180,14 @@ export interface ClientGameState {
   pausedBy: string | null;
   /** Custom score threshold at which the game ends (F-310). Defaults to 70. */
   targetScore: number;
+  /** The game mode for this game session */
+  gameMode: GameMode;
+  /** Bounty Hunt: the rank that is the bounty target this round */
+  bountyRank?: string;
+  /** Bounty Hunt: count of successful bounty burns per player this round */
+  bountyBurnCounts?: Record<string, number>;
+  /** Blind Rounds: true during blind rounds (every 3rd round) */
+  isBlindRound?: boolean;
 }
 
 // ============================================================

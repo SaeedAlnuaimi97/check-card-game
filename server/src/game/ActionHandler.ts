@@ -308,6 +308,17 @@ export function handleBurnAttempt(
     cardToBurn.isBurned = true;
     addToDiscard(gameState, cardToBurn);
 
+    // Bounty Hunt: track successful bounty burns for scoring bonus
+    if (
+      gameState.gameMode === 'bountyHunt' &&
+      gameState.bountyRank &&
+      cardToBurn.rank === gameState.bountyRank
+    ) {
+      if (!gameState.bountyBurnCounts) gameState.bountyBurnCounts = {};
+      gameState.bountyBurnCounts[player.playerId] =
+        (gameState.bountyBurnCounts[player.playerId] ?? 0) + 1;
+    }
+
     return {
       success: true,
       burnSuccess: true,
@@ -315,14 +326,22 @@ export function handleBurnAttempt(
       burnedSlot: slot,
     };
   } else {
-    // F-047: Burn failure — card stays, penalty card drawn face-down
-    const penaltyCard = drawFromDeck(gameState);
+    // F-047: Burn failure — card stays, penalty card(s) drawn face-down
+    // Sudden Death: 2 penalty cards instead of 1
+    const penaltyCount = gameState.gameMode === 'suddenDeath' ? 2 : 1;
     let penaltySlot: string | undefined;
+    const penaltySlots: string[] = [];
 
-    if (penaltyCard) {
-      const existingSlots = player.hand.map((h) => h.slot);
-      penaltySlot = getNextPenaltySlot(existingSlots);
-      player.hand.push({ slot: penaltySlot, card: penaltyCard });
+    for (let i = 0; i < penaltyCount; i++) {
+      const penaltyCard = drawFromDeck(gameState);
+      if (penaltyCard) {
+        const existingSlots = player.hand.map((h) => h.slot);
+        const slot = getNextPenaltySlot(existingSlots);
+        player.hand.push({ slot, card: penaltyCard });
+        penaltySlots.push(slot);
+        // Keep first penalty slot for backward-compat return value
+        if (!penaltySlot) penaltySlot = slot;
+      }
     }
 
     return {
