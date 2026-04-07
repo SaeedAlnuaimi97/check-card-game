@@ -565,7 +565,12 @@ export function registerRoomHandlers(io: SocketIOServer, socket: Socket): void {
     'playAgain',
     async (
       data: { roomCode: string; playerId: string },
-      callback?: (response: { success: boolean; newRoomCode?: string; error?: string }) => void,
+      callback?: (response: {
+        success: boolean;
+        newRoomCode?: string;
+        newPlayerId?: string;
+        error?: string;
+      }) => void,
     ) => {
       const roomCode = validateRoomCode(data?.roomCode);
       if (!roomCode) {
@@ -616,22 +621,34 @@ export function registerRoomHandlers(io: SocketIOServer, socket: Socket): void {
         } while (await RoomModel.exists({ roomCode: newRoomCode }));
 
         // Create new room — requesting player becomes host
+        const newPlayerId = generatePlayerId();
         const newRoom = new RoomModel({
           roomCode: newRoomCode,
-          host: data.playerId,
-          players: [{ id: data.playerId, username: playerInRoom.username }],
+          host: newPlayerId,
+          players: [{ id: newPlayerId, username: playerInRoom.username }],
           gameState: null,
           status: 'lobby',
           gameMode,
         });
         await newRoom.save();
 
+        // Register the host in the new room
+        const hostSocketId = getSocketByPlayer(data.playerId);
+        if (hostSocketId) {
+          const hostSocket = io.sockets.sockets.get(hostSocketId);
+          if (hostSocket) {
+            await hostSocket.join(newRoomCode);
+          }
+          registerPlayer(hostSocketId, newPlayerId, newRoomCode, playerInRoom.username);
+        }
+
         console.log(
           `Play Again: ${playerInRoom.username} created new room ${newRoomCode} (mode: ${gameMode}) from ${roomCode}`,
         );
 
-        // Broadcast redirect to ALL players in the old room (including the requester)
+        // Broadcast redirect to non-host players in the old room
         for (const player of humanPlayers) {
+          if (player.id === data.playerId) continue; // host handled separately
           const sid = getSocketByPlayer(player.id);
           if (sid) {
             io.to(sid).emit('playAgainRedirect', {
@@ -642,7 +659,9 @@ export function registerRoomHandlers(io: SocketIOServer, socket: Socket): void {
           }
         }
 
-        callback?.({ success: true, newRoomCode });
+        await broadcastRoomUpdate(io, newRoomCode);
+
+        callback?.({ success: true, newRoomCode, newPlayerId });
       } catch (error) {
         console.error('Error in playAgain:', error);
         callback?.({ success: false, error: 'Failed to create new room' });

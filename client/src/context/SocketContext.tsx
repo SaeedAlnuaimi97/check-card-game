@@ -167,7 +167,12 @@ interface SocketContextValue {
   /** Fetch chat history for the current room (call on drawer open / reconnect) */
   getChatHistory: () => Promise<{ success: boolean; messages?: ChatMessage[]; error?: string }>;
   /** Play again — creates a new room with the same mode and redirects all players */
-  playAgain: () => Promise<{ success: boolean; newRoomCode?: string; error?: string }>;
+  playAgain: () => Promise<{
+    success: boolean;
+    newRoomCode?: string;
+    newPlayerId?: string;
+    error?: string;
+  }>;
 }
 
 const SocketContext = createContext<SocketContextValue | null>(null);
@@ -1392,6 +1397,7 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
   const playAgain = useCallback((): Promise<{
     success: boolean;
     newRoomCode?: string;
+    newPlayerId?: string;
     error?: string;
   }> => {
     return new Promise((resolve) => {
@@ -1404,7 +1410,45 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
       socket.emit(
         'playAgain',
         { roomCode, playerId: pid },
-        (response: { success: boolean; newRoomCode?: string; error?: string }) => {
+        (response: {
+          success: boolean;
+          newRoomCode?: string;
+          newPlayerId?: string;
+          error?: string;
+        }) => {
+          if (response.success && response.newRoomCode && response.newPlayerId) {
+            // Host transition: update local state to the new room
+            const storedUsername = localStorage.getItem('username') || 'Player';
+            localStorage.setItem('playerId', response.newPlayerId);
+            localStorage.setItem('roomCode', response.newRoomCode);
+            setPlayerId(response.newPlayerId);
+            playerIdRef.current = response.newPlayerId;
+            setUsername(storedUsername);
+            // Clear old game state
+            setGameState(null);
+            setPeekedCards(null);
+            setDrawnCard(null);
+            setDrawnFromDiscard(false);
+            setPendingEffect(null);
+            setLastBurnResult(null);
+            setCheckCalledData(null);
+            setRoundEndData(null);
+            setGameEndData(null);
+            setIsMyTurn(false);
+            setTurnData(null);
+            setNextRoundStartsAt(null);
+            setLastSwapResult(null);
+            setLastReaction(null);
+            setChatMessages([]);
+            setRoomData({
+              roomCode: response.newRoomCode,
+              host: response.newPlayerId,
+              players: [{ id: response.newPlayerId, username: storedUsername }],
+              status: 'lobby' as RoomData['status'],
+              gameMode: (roomData as any)?.gameMode || 'classic',
+            });
+            navigateRef.current(`/lobby/${response.newRoomCode}`);
+          }
           resolve(response);
         },
       );

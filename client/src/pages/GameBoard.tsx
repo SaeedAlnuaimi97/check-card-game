@@ -49,6 +49,17 @@ import type { PeekedCard, PlayerRoundResult } from '../types/game.types';
 const PEEK_DURATION_MS = 8000;
 const PEEK_TICK_MS = 250; // 250ms is smooth enough; CSS transition handles visual interpolation
 
+/** Create a display-only Card object for the bounty rank badge */
+function makeBountyDisplayCard(rank: string): CardType {
+  return {
+    id: `bounty-${rank}`,
+    suit: '♠',
+    rank: rank as CardType['rank'],
+    value: 0,
+    isRed: false,
+  };
+}
+
 // ============================================================
 // Avatar color palette (deterministic by player index)
 // ============================================================
@@ -2603,7 +2614,7 @@ export const GameBoard: FC = () => {
               <Flex
                 justify="center"
                 align="center"
-                gap="6px"
+                gap="8px"
                 px="10px"
                 py="4px"
                 borderRadius="8px"
@@ -2619,19 +2630,8 @@ export const GameBoard: FC = () => {
                 >
                   Bounty
                 </Text>
-                <Box
-                  w="24px"
-                  h="32px"
-                  borderRadius="3px"
-                  bg="#1a1a2a"
-                  border="1.5px solid #c9a227"
-                  display="flex"
-                  alignItems="center"
-                  justifyContent="center"
-                >
-                  <Text fontSize="12px" fontWeight="800" color="#c9a227">
-                    {gameState.bountyRank}
-                  </Text>
+                <Box transform="scale(0.5)" transformOrigin="center" my="-16px" mx="-10px">
+                  <Card card={makeBountyDisplayCard(gameState.bountyRank)} size="sm" />
                 </Box>
                 <Text fontSize="9px" color="#8a7a3a">
                   2x in hand / -5 per burn
@@ -3048,7 +3048,7 @@ export const GameBoard: FC = () => {
                 <Flex
                   justify="center"
                   align="center"
-                  gap="6px"
+                  gap="8px"
                   px="10px"
                   py="4px"
                   borderRadius="8px"
@@ -3064,19 +3064,8 @@ export const GameBoard: FC = () => {
                   >
                     Bounty
                   </Text>
-                  <Box
-                    w="24px"
-                    h="32px"
-                    borderRadius="3px"
-                    bg="#1a1a2a"
-                    border="1.5px solid #c9a227"
-                    display="flex"
-                    alignItems="center"
-                    justifyContent="center"
-                  >
-                    <Text fontSize="12px" fontWeight="800" color="#c9a227">
-                      {gameState.bountyRank}
-                    </Text>
+                  <Box transform="scale(0.5)" transformOrigin="center" my="-16px" mx="-10px">
+                    <Card card={makeBountyDisplayCard(gameState.bountyRank)} size="sm" />
                   </Box>
                   <Text fontSize="9px" color="#8a7a3a">
                     2x in hand / -5 per burn
@@ -3165,7 +3154,7 @@ export const GameBoard: FC = () => {
           >
             <HStack
               spacing={{ base: '6px', md: '10px' }}
-              justify={isPeeking && myPlayer.hand.length > 4 ? 'flex-start' : 'center'}
+              justify="center"
               minW="max-content"
               w="100%"
               px={2}
@@ -3204,7 +3193,11 @@ export const GameBoard: FC = () => {
                 const isSwapTarget =
                   swapBannerData?.role === 'target' && swapBannerData.targetSlot === h.slot;
 
-                const cardSize = isDesktop ? 'lg' : isPeeking ? 'md' : 'sm';
+                const cardSize = isDesktop
+                  ? 'lg'
+                  : isPeeking && myPlayer.hand.length <= 4
+                    ? 'md'
+                    : 'sm';
 
                 return (
                   <Tooltip
@@ -3665,7 +3658,7 @@ export const GameBoard: FC = () => {
                       <Flex
                         justify="center"
                         align="center"
-                        gap="6px"
+                        gap="8px"
                         px="10px"
                         py="4px"
                         borderRadius="8px"
@@ -3681,19 +3674,8 @@ export const GameBoard: FC = () => {
                         >
                           Bounty
                         </Text>
-                        <Box
-                          w="24px"
-                          h="32px"
-                          borderRadius="3px"
-                          bg="#1a1a2a"
-                          border="1.5px solid #c9a227"
-                          display="flex"
-                          alignItems="center"
-                          justifyContent="center"
-                        >
-                          <Text fontSize="12px" fontWeight="800" color="#c9a227">
-                            {gameState.bountyRank}
-                          </Text>
+                        <Box transform="scale(0.5)" transformOrigin="center" my="-16px" mx="-10px">
+                          <Card card={makeBountyDisplayCard(gameState.bountyRank)} size="sm" />
                         </Box>
                         <Text fontSize="9px" color="#8a7a3a">
                           2x in hand / -5 per burn
@@ -4023,7 +4005,7 @@ export const GameBoard: FC = () => {
                           <Flex
                             justify="center"
                             align="center"
-                            gap="6px"
+                            gap="8px"
                             px="10px"
                             py="4px"
                             borderRadius="8px"
@@ -4040,18 +4022,12 @@ export const GameBoard: FC = () => {
                               Bounty
                             </Text>
                             <Box
-                              w="24px"
-                              h="32px"
-                              borderRadius="3px"
-                              bg="#1a1a2a"
-                              border="1.5px solid #c9a227"
-                              display="flex"
-                              alignItems="center"
-                              justifyContent="center"
+                              transform="scale(0.5)"
+                              transformOrigin="center"
+                              my="-16px"
+                              mx="-10px"
                             >
-                              <Text fontSize="12px" fontWeight="800" color="#c9a227">
-                                {gameState.bountyRank}
-                              </Text>
+                              <Card card={makeBountyDisplayCard(gameState.bountyRank)} size="sm" />
                             </Box>
                             <Text fontSize="9px" color="#8a7a3a">
                               2x in hand / -5 per burn
@@ -4138,7 +4114,7 @@ export const GameBoard: FC = () => {
                     >
                       <HStack
                         spacing={{ base: '6px', md: '10px' }}
-                        justify={isPeeking && myPlayer.hand.length > 4 ? 'flex-start' : 'center'}
+                        justify="center"
                         minW="max-content"
                         w="100%"
                         px={2}
