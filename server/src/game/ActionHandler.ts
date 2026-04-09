@@ -260,6 +260,8 @@ export interface BurnResult {
   burnedSlot?: string;
   /** Penalty slot label added on failure */
   penaltySlot?: string;
+  /** True if a Free Burn token was consumed (failed burn, no penalty) */
+  freeBurnUsed?: boolean;
 }
 
 /**
@@ -269,6 +271,7 @@ export interface BurnResult {
  * - F-046: Success — card removed from hand to discard pile, hand shrinks
  * - F-047: Failure — card stays, penalty card drawn face-down
  * - F-048: No special effects trigger from burns
+ * - Free Burn: if freeBurn=true and burn fails, skip penalty. Token consumed on failure only.
  *
  * Mutates gameState.
  */
@@ -276,6 +279,7 @@ export function handleBurnAttempt(
   gameState: GameState,
   playerId: string,
   slot: SlotLabel,
+  freeBurn = false,
 ): BurnResult {
   // Validate player
   const player = gameState.players.find((p) => p.playerId === playerId);
@@ -327,6 +331,18 @@ export function handleBurnAttempt(
     };
   } else {
     // F-047: Burn failure — card stays, penalty card(s) drawn face-down
+    // Free Burn: skip penalty cards, consume the token
+    if (freeBurn) {
+      player.hasFreeBurn = false;
+      return {
+        success: true,
+        burnSuccess: false,
+        burnedCard: cardToBurn,
+        burnedSlot: slot,
+        freeBurnUsed: true,
+      };
+    }
+
     // Sudden Death: 2 penalty cards instead of 1
     const penaltyCount = gameState.gameMode === 'suddenDeath' ? 2 : 1;
     let penaltySlot: string | undefined;

@@ -85,6 +85,16 @@ async function executeStartNextRound(io: SocketIOServer, roomCode: string): Prom
       oldGameState.gameMode,
     );
 
+    // Carry over Free Burn tokens awarded at the end of the previous round
+    for (const oldPlayer of oldGameState.players) {
+      if (oldPlayer.hasFreeBurn) {
+        const newPlayer = newGameState.players.find((p) => p.playerId === oldPlayer.playerId);
+        if (newPlayer) {
+          newPlayer.hasFreeBurn = true;
+        }
+      }
+    }
+
     // Preserve gameStartedAt from the first round (F-234)
     if (oldGameState.gameStartedAt) {
       newGameState.gameStartedAt = oldGameState.gameStartedAt;
@@ -107,6 +117,19 @@ async function executeStartNextRound(io: SocketIOServer, roomCode: string): Prom
         gameState: clientState,
         peekedCards: peeked,
       });
+    }
+
+    // Blind rounds skip the peeking phase entirely, so the client never
+    // sends `endPeek` (which normally triggers emitYourTurn). We must
+    // kick off the first turn immediately for blind rounds.
+    if (newGameState.phase === 'playing') {
+      // Save turnStartedAt set by emitYourTurn before releasing the mutex
+      emitYourTurn(io, roomCode, newGameState);
+      scheduleBotTurnIfNeeded(io, roomCode, newGameState);
+
+      room.gameState = newGameState;
+      room.markModified('gameState');
+      await room.save();
     }
 
     console.log(`Room ${roomCode}: Auto-started new round ${newGameState.roundNumber}`);
@@ -352,6 +375,7 @@ async function advanceTurnAndCheckRoundEnd(
         updatedScores: roundResult.updatedScores,
         gameEnded: roundResult.gameEnded,
         nextRoundStarting: !roundResult.gameEnded,
+        freeBurnAwarded: roundResult.freeBurnAwarded,
       });
     }
   }
@@ -538,7 +562,11 @@ export function registerGameHandlers(io: SocketIOServer, socket: Socket): void {
   socket.on(
     'playerAction',
     async (
-      data: { roomCode: string; playerId: string; action: { type: ActionType; slot?: string } },
+      data: {
+        roomCode: string;
+        playerId: string;
+        action: { type: ActionType; slot?: string; freeBurn?: boolean };
+      },
       callback?: (response: { success: boolean; error?: string }) => void,
     ) => {
       const release = await getRoomMutex(data.roomCode).acquire();
@@ -632,7 +660,17 @@ export function registerGameHandlers(io: SocketIOServer, socket: Socket): void {
             return;
           }
 
-          const burnResult = handleBurnAttempt(gameState, data.playerId, data.action.slot);
+          // Validate freeBurn: player must actually have the token
+          const useFreeBurn =
+            data.action.freeBurn === true &&
+            gameState.players.find((p) => p.playerId === data.playerId)?.hasFreeBurn === true;
+
+          const burnResult = handleBurnAttempt(
+            gameState,
+            data.playerId,
+            data.action.slot,
+            useFreeBurn,
+          );
           if (!burnResult.success) {
             callback?.({ success: false, error: burnResult.error });
             return;
@@ -667,6 +705,7 @@ export function registerGameHandlers(io: SocketIOServer, socket: Socket): void {
                   updatedScores: roundResult.updatedScores,
                   gameEnded: roundResult.gameEnded,
                   nextRoundStarting: !roundResult.gameEnded,
+                  freeBurnAwarded: roundResult.freeBurnAwarded,
                 });
               }
             }
@@ -716,6 +755,7 @@ export function registerGameHandlers(io: SocketIOServer, socket: Socket): void {
             // Reveal the burned card to everyone on success
             burnedCard: burnResult.burnSuccess ? burnResult.burnedCard : undefined,
             penaltySlot: burnResult.penaltySlot,
+            freeBurnUsed: burnResult.freeBurnUsed,
           };
           for (const player of gameState.players) {
             const sid = getSocketByPlayer(player.playerId);
@@ -1055,6 +1095,55 @@ export function registerGameHandlers(io: SocketIOServer, socket: Socket): void {
       } catch (error) {
         console.error('Error in debugStackDeck:', error);
         callback?.({ success: false, error: 'Failed to stack deck' });
+      }
+    },
+  );
+
+  // ----------------------------------------------------------
+  // claimEasterEgg — Hidden easter egg: grants Free Burn token
+  // ----------------------------------------------------------
+  socket.on(
+    'claimEasterEgg',
+    async (
+      data: { roomCode: string; playerId: string },
+      callback?: (response: { success: boolean; error?: string }) => void,
+    ) => {
+      const release = await getRoomMutex(data.roomCode).acquire();
+      try {
+        const room = await RoomModel.findOne({ roomCode: data.roomCode });
+        if (!room || !room.gameState) {
+          callback?.({ success: false, error: 'Room or game not found' });
+          return;
+        }
+
+        const gameState = room.gameState as unknown as GameState;
+        const player = gameState.players.find((p) => p.playerId === data.playerId);
+        if (!player) {
+          callback?.({ success: false, error: 'Player not found' });
+          return;
+        }
+
+        // Only grant if they don't already have one
+        if (player.hasFreeBurn) {
+          callback?.({ success: false, error: 'Already has Free Burn' });
+          return;
+        }
+
+        player.hasFreeBurn = true;
+
+        room.gameState = gameState;
+        room.markModified('gameState');
+        await room.save();
+
+        // Broadcast updated state so the player sees the Free Burn indicator
+        await broadcastGameState(io, data.roomCode, gameState);
+
+        callback?.({ success: true });
+      } catch (error) {
+        console.error('Error in claimEasterEgg:', error);
+        callback?.({ success: false, error: 'Failed to claim' });
+      } finally {
+        release();
       }
     },
   );

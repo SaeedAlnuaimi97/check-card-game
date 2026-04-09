@@ -55,6 +55,8 @@ export interface PlayerState {
   isBot?: boolean;
   /** Bot difficulty level (F-301) */
   botDifficulty?: BotDifficulty;
+  /** Free Burn power-up: earned by scoring 0 in a round, consumed on failed burn to skip penalty */
+  hasFreeBurn?: boolean;
 }
 
 // ============================================================
@@ -160,6 +162,8 @@ export interface ClientPlayerState {
   totalScore: number;
   /** True if this player is a bot */
   isBot?: boolean;
+  /** Free Burn power-up available this round */
+  hasFreeBurn?: boolean;
 }
 
 /** Sanitized game state sent to clients (F-014). */

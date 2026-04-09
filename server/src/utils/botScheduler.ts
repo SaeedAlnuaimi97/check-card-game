@@ -181,6 +181,7 @@ async function botAdvanceTurnAndCheckRoundEnd(
         updatedScores: roundResult.updatedScores,
         gameEnded: roundResult.gameEnded,
         nextRoundStarting: !roundResult.gameEnded,
+        freeBurnAwarded: roundResult.freeBurnAwarded,
       });
     }
   }

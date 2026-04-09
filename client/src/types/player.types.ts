@@ -24,4 +24,6 @@ export interface ClientPlayerState {
   totalScore: number;
   /** True if this player is a bot */
   isBot?: boolean;
+  /** Free Burn power-up available this round */
+  hasFreeBurn?: boolean;
 }

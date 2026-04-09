@@ -36,6 +36,8 @@ export interface RoundResult {
   updatedScores: Record<string, number>;
   /** True if any player hit 100+ and the game should end */
   gameEnded: boolean;
+  /** Player IDs who earned a Free Burn this round (handSum === 0) */
+  freeBurnAwarded: string[];
 }
 
 /**
@@ -125,6 +127,18 @@ export function computeRoundResult(gameState: GameState): RoundResult {
   // Set phase
   gameState.phase = gameEnded ? 'gameEnd' : 'roundEnd';
 
+  // Award Free Burn to players whose handSum === 0 (Perfect Round)
+  const freeBurnAwarded: string[] = [];
+  for (const hand of allHands) {
+    if (hand.handSum === 0) {
+      const player = gameState.players.find((p) => p.playerId === hand.playerId);
+      if (player) {
+        player.hasFreeBurn = true;
+        freeBurnAwarded.push(hand.playerId);
+      }
+    }
+  }
+
   return {
     roundNumber: gameState.roundNumber,
     checkCalledBy: checkerId,
@@ -133,6 +147,7 @@ export function computeRoundResult(gameState: GameState): RoundResult {
     checkerDoubled: !isSuddenDeath && checkerId ? !checkerIsWinner : false,
     updatedScores,
     gameEnded,
+    freeBurnAwarded,
   };
 }
 

@@ -305,7 +305,6 @@ export const RoomLobby: FC = () => {
     (p) => p.isBot || p.id === roomData.host || p.isReady,
   );
   const canStart = isHost && roomData.players.length >= MIN_PLAYERS && allPlayersReady;
-  const playerSlots = Array.from({ length: MAX_PLAYERS }, (_, i) => roomData.players[i] ?? null);
 
   const handleLeave = () => {
     leaveRoom();
@@ -533,19 +532,16 @@ export const RoomLobby: FC = () => {
               </Text>
             </HStack>
             <VStack spacing={0} gap="6px">
-              {playerSlots.map((player, index) => (
+              {roomData.players.map((player) => (
                 <Box
-                  key={index}
+                  key={player.id}
                   w="100%"
                   px="10px"
                   py="9px"
                   borderRadius="8px"
                   bg="#1c1c28"
                   border="0.5px solid"
-                  borderColor={
-                    player ? (player.id === playerId ? '#3a3a6a' : '#2a2a3a') : '#2a2a3a'
-                  }
-                  opacity={player ? 1 : 0.5}
+                  borderColor={player.id === playerId ? '#3a3a6a' : '#2a2a3a'}
                   display="flex"
                   alignItems="center"
                   gap="8px"
@@ -556,30 +552,24 @@ export const RoomLobby: FC = () => {
                     h="8px"
                     borderRadius="full"
                     flexShrink={0}
-                    bg={player ? (player.isBot ? '#7a7aee' : '#4ecb4e') : '#2a2a3a'}
+                    bg={player.isBot ? '#7a7aee' : '#4ecb4e'}
                   />
                   {/* Name */}
-                  <Text
-                    fontSize="13px"
-                    color={player ? '#ccc' : '#333'}
-                    fontStyle={player ? 'normal' : 'italic'}
-                    flex={1}
-                    noOfLines={1}
-                  >
-                    {player ? player.username : 'Empty slot'}
+                  <Text fontSize="13px" color="#ccc" flex={1} noOfLines={1}>
+                    {player.username}
                   </Text>
                   {/* Badges */}
                   <HStack spacing="4px" flexShrink={0}>
-                    {player && player.id === roomData.host && <PlayerBadge type="host" />}
-                    {player && player.isBot && (
+                    {player.id === roomData.host && <PlayerBadge type="host" />}
+                    {player.isBot && (
                       <PlayerBadge type={player.botDifficulty === 'expert' ? 'expert' : 'easy'} />
                     )}
-                    {player && !player.isBot && player.id !== roomData.host && (
+                    {!player.isBot && player.id !== roomData.host && (
                       <PlayerBadge type={player.isReady ? 'ready' : 'notReady'} />
                     )}
-                    {player && player.id === playerId && <PlayerBadge type="you" />}
+                    {player.id === playerId && <PlayerBadge type="you" />}
                     {/* Kick/Remove — plain ✕ text */}
-                    {isHost && player?.isBot && (
+                    {isHost && player.isBot && (
                       <Box
                         as="span"
                         fontSize="14px"
@@ -593,7 +583,7 @@ export const RoomLobby: FC = () => {
                         ✕
                       </Box>
                     )}
-                    {isHost && player && !player.isBot && player.id !== playerId && (
+                    {isHost && !player.isBot && player.id !== playerId && (
                       <Box
                         as="span"
                         fontSize="14px"

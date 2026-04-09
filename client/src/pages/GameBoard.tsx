@@ -18,7 +18,7 @@ import {
   useDisclosure,
   useToast,
 } from '@chakra-ui/react';
-import { EyeOutlined, FireOutlined } from '@ant-design/icons';
+import { EyeOutlined, FireOutlined, AimOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { useSocket } from '../context/SocketContext';
 import { DEBUG_MODE } from '../context/SocketContext';
@@ -630,6 +630,7 @@ export const GameBoard: FC = () => {
     kickPlayer,
     debugPeek,
     debugStackDeck,
+    claimEasterEgg,
     endGame,
     startNextRound,
     pauseGame,
@@ -706,6 +707,10 @@ export const GameBoard: FC = () => {
 
   // Burn confirmation modal state
   const [pendingBurnSlot, setPendingBurnSlot] = useState<string | null>(null);
+
+  // Easter egg: click target pill X times to earn Free Burn (one-time per game)
+  const [easterEggClicks, setEasterEggClicks] = useState(0);
+  const [easterEggClaimed, setEasterEggClaimed] = useState(false);
 
   // Reaction button UI state
   const [reactionTrayOpen, setReactionTrayOpen] = useState(false);
@@ -883,15 +888,9 @@ export const GameBoard: FC = () => {
     return () => clearInterval(interval);
   }, [nextRoundStartsAt]);
 
-  const toggleDebugRevealAll = useCallback(async () => {
+  // Fetch all card values via debugPeek for every player slot
+  const refreshDebugReveal = useCallback(async () => {
     if (!DEBUG_MODE || !gameState) return;
-    if (debugRevealAll) {
-      // Toggle OFF — clear all revealed cards
-      setDebugRevealed({});
-      setDebugRevealAll(false);
-      return;
-    }
-    // Toggle ON — peek at every card for every player
     const results: Record<string, CardType> = {};
     const promises: Promise<void>[] = [];
     for (const player of gameState.players) {
@@ -908,8 +907,56 @@ export const GameBoard: FC = () => {
     }
     await Promise.all(promises);
     setDebugRevealed(results);
+  }, [gameState, debugPeek]);
+
+  const toggleDebugRevealAll = useCallback(async () => {
+    if (!DEBUG_MODE || !gameState) return;
+    if (debugRevealAll) {
+      // Toggle OFF — clear all revealed cards
+      setDebugRevealed({});
+      setDebugRevealAll(false);
+      return;
+    }
+    // Toggle ON — peek at every card for every player
+    await refreshDebugReveal();
     setDebugRevealAll(true);
-  }, [gameState, debugRevealAll, debugPeek]);
+  }, [gameState, debugRevealAll, refreshDebugReveal]);
+
+  // Auto-refresh debug revealed cards when game state changes while reveal-all is active
+  // Track hand slot structure AND turn index to detect swaps (slot labels stay the same on swap,
+  // but turn advances), burns (slot removed), and penalty cards (slot added)
+  const handFingerprint = useMemo(() => {
+    if (!gameState) return '';
+    const slots = gameState.players
+      .map((p) => `${p.playerId}:${p.hand.map((h) => h.slot).join(',')}`)
+      .join('|');
+    return `${slots}#${gameState.currentTurnIndex}#${gameState.discardPile.length}`;
+  }, [gameState]);
+
+  useEffect(() => {
+    if (!debugRevealAll || !handFingerprint) return;
+    refreshDebugReveal();
+  }, [handFingerprint]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Easter egg: handle target pill click
+  const easterEggThreshold = Math.floor((gameState?.targetScore ?? 70) / 10);
+  const hasFreeBurnAlready = gameState?.players.find((p) => p.playerId === playerId)?.hasFreeBurn;
+  const easterEggActive = !easterEggClaimed && !hasFreeBurnAlready;
+  const easterEggNearThreshold =
+    easterEggActive &&
+    easterEggClicks >= easterEggThreshold - 3 &&
+    easterEggClicks < easterEggThreshold;
+  const handleTargetClick = useCallback(() => {
+    if (easterEggClaimed || hasFreeBurnAlready) return;
+    setEasterEggClicks((prev) => {
+      const next = prev + 1;
+      if (next >= easterEggThreshold) {
+        setEasterEggClaimed(true);
+        claimEasterEgg();
+      }
+      return next;
+    });
+  }, [easterEggClaimed, easterEggThreshold, claimEasterEgg, hasFreeBurnAlready]);
 
   // Redirect if no game state
   useEffect(() => {
@@ -1001,9 +1048,11 @@ export const GameBoard: FC = () => {
   }, [gameState?.turnStartedAt, gameState?.phase, gameState?.paused, pendingEffect?.turnStartedAt]);
 
   // Burn result — play sound, haptics, and show inline feedback banner (RS-006) (F-044 to F-048)
-  const [burnBanner, setBurnBanner] = useState<{ success: boolean; isBountyBurn?: boolean } | null>(
-    null,
-  );
+  const [burnBanner, setBurnBanner] = useState<{
+    success: boolean;
+    isBountyBurn?: boolean;
+    freeBurnUsed?: boolean;
+  } | null>(null);
   useEffect(() => {
     if (!lastBurnResult) return;
     playBurnSound();
@@ -1017,7 +1066,11 @@ export const GameBoard: FC = () => {
       gameState?.gameMode === 'bountyHunt' &&
       !!gameState?.bountyRank &&
       lastBurnResult.burnedCard?.rank === gameState.bountyRank;
-    setBurnBanner({ success: lastBurnResult.burnSuccess, isBountyBurn });
+    setBurnBanner({
+      success: lastBurnResult.burnSuccess,
+      isBountyBurn,
+      freeBurnUsed: lastBurnResult.freeBurnUsed,
+    });
     const t = setTimeout(() => setBurnBanner(null), 2500);
     return () => clearTimeout(t);
   }, [lastBurnResult]);
@@ -1221,14 +1274,14 @@ export const GameBoard: FC = () => {
   }, [undoTakeDiscard, toast]);
 
   const handleBurnCard = useCallback(
-    async (slot: string) => {
+    async (slot: string, freeBurn = false) => {
       if (!canAct || hasDrawnCard || !turnData?.availableActions.includes('burn')) return;
       setSwapBannerData(null);
       // F-308: trigger shake animation on the burning slot
       setBurningSlot(slot);
       if (burningSlotTimerRef.current) clearTimeout(burningSlotTimerRef.current);
       burningSlotTimerRef.current = setTimeout(() => setBurningSlot(null), 500);
-      const result = await performAction('burn', slot);
+      const result = await performAction('burn', slot, freeBurn ? { freeBurn: true } : undefined);
       if (!result.success && result.error) {
         toast({ title: result.error, status: 'error', duration: 2000, position: 'top' });
       } else if (result.success) {
@@ -1557,11 +1610,26 @@ export const GameBoard: FC = () => {
                   {gameState.isBlindRound ? 'BLIND' : 'BLIND ROUNDS'}
                 </Text>
               )}
-              {gameState.targetScore !== 70 && (
-                <Text fontSize="11px" color="#c9a227" fontWeight="500" whiteSpace="nowrap">
-                  Target: {gameState.targetScore}pts
+              <Box
+                display="flex"
+                alignItems="center"
+                gap="3px"
+                h="20px"
+                px="6px"
+                borderRadius="10px"
+                border={`1px solid ${easterEggNearThreshold ? 'rgba(201,162,39,0.8)' : 'rgba(201,162,39,0.4)'}`}
+                bg={easterEggNearThreshold ? 'rgba(201,162,39,0.2)' : 'rgba(201,162,39,0.1)'}
+                cursor="default"
+                onClick={handleTargetClick}
+                transition="all 0.3s"
+                transform={easterEggNearThreshold ? 'scale(1.05)' : 'scale(1)'}
+                userSelect="none"
+              >
+                <AimOutlined style={{ fontSize: '10px', color: '#c9a227' }} />
+                <Text fontSize="11px" color="#c9a227" fontWeight="600" whiteSpace="nowrap">
+                  {gameState.targetScore}
                 </Text>
-              )}
+              </Box>
             </>
           )}
         </Flex>
@@ -1587,26 +1655,21 @@ export const GameBoard: FC = () => {
                   : ''}
               </Text>
             </Box>
-          ) : checkCalledData ? (
+          ) : checkCalledData && checkCalledData.playerId === playerId ? (
             <Box
               h="26px"
               minW="70px"
               borderRadius="13px"
               border="1.5px solid #4ade80"
-              bg={checkCalledData.playerId === playerId ? '#1a3b1a' : 'transparent'}
+              bg="#1a3b1a"
               display="flex"
               alignItems="center"
               justifyContent="center"
               px="10px"
               overflow="hidden"
             >
-              <Text
-                fontSize={checkCalledData.playerId === playerId ? '10px' : '11px'}
-                fontWeight="600"
-                color="#4ade80"
-                whiteSpace="nowrap"
-              >
-                CHECK ({checkCalledData.playerId === playerId ? 'YOU' : checkCalledData.username})
+              <Text fontSize="11px" fontWeight="600" color="#4ade80" whiteSpace="nowrap">
+                CHECK
               </Text>
             </Box>
           ) : turnData?.canCheck && !hasDrawnCard && !pendingEffect ? (
@@ -2584,12 +2647,20 @@ export const GameBoard: FC = () => {
                 bg={
                   burnBanner.isBountyBurn
                     ? 'rgba(201,162,39,0.15)'
-                    : burnBanner.success
-                      ? 'rgba(94,207,94,0.12)'
-                      : 'rgba(207,94,94,0.12)'
+                    : burnBanner.freeBurnUsed
+                      ? 'rgba(201,162,39,0.15)'
+                      : burnBanner.success
+                        ? 'rgba(94,207,94,0.12)'
+                        : 'rgba(207,94,94,0.12)'
                 }
                 border={`1px solid ${
-                  burnBanner.isBountyBurn ? '#c9a227' : burnBanner.success ? '#5ecf5e' : '#cf5e5e'
+                  burnBanner.isBountyBurn
+                    ? '#c9a227'
+                    : burnBanner.freeBurnUsed
+                      ? '#c9a227'
+                      : burnBanner.success
+                        ? '#5ecf5e'
+                        : '#cf5e5e'
                 }`}
                 textAlign="center"
               >
@@ -2597,14 +2668,22 @@ export const GameBoard: FC = () => {
                   fontSize="13px"
                   fontWeight="600"
                   color={
-                    burnBanner.isBountyBurn ? '#c9a227' : burnBanner.success ? '#5ecf5e' : '#cf5e5e'
+                    burnBanner.isBountyBurn
+                      ? '#c9a227'
+                      : burnBanner.freeBurnUsed
+                        ? '#c9a227'
+                        : burnBanner.success
+                          ? '#5ecf5e'
+                          : '#cf5e5e'
                   }
                 >
                   {burnBanner.isBountyBurn
                     ? 'BOUNTY BURN -5'
-                    : burnBanner.success
-                      ? '✓ Burned!'
-                      : 'X No match! +1 penalty card'}
+                    : burnBanner.freeBurnUsed
+                      ? '★ Free Burn used — no penalty!'
+                      : burnBanner.success
+                        ? '✓ Burned!'
+                        : 'X No match! +1 penalty card'}
                 </Text>
               </Box>
             )}
@@ -3372,6 +3451,27 @@ export const GameBoard: FC = () => {
             </HStack>
           </Box>
 
+          {/* Super Powers indicator */}
+          {myPlayer?.hasFreeBurn && !isPeeking && (
+            <Flex justify="center" mt="6px" gap="6px">
+              <Box
+                display="flex"
+                alignItems="center"
+                gap="4px"
+                px="8px"
+                h="22px"
+                borderRadius="11px"
+                bg="rgba(201,162,39,0.12)"
+                border="1px solid rgba(201,162,39,0.3)"
+              >
+                <FireOutlined style={{ fontSize: '10px', color: '#c9a227' }} />
+                <Text fontSize="10px" fontWeight="600" color="#c9a227" whiteSpace="nowrap">
+                  Free Burn
+                </Text>
+              </Box>
+            </Flex>
+          )}
+
           {/* Peeking timer bar (Option C) / hint-text */}
           {isPeeking ? (
             <Flex align="center" gap="8px" mt="10px" px="4px">
@@ -3620,16 +3720,20 @@ export const GameBoard: FC = () => {
                         bg={
                           burnBanner.isBountyBurn
                             ? 'rgba(201,162,39,0.15)'
-                            : burnBanner.success
-                              ? 'rgba(94,207,94,0.12)'
-                              : 'rgba(207,94,94,0.12)'
+                            : burnBanner.freeBurnUsed
+                              ? 'rgba(201,162,39,0.15)'
+                              : burnBanner.success
+                                ? 'rgba(94,207,94,0.12)'
+                                : 'rgba(207,94,94,0.12)'
                         }
                         border={`1px solid ${
                           burnBanner.isBountyBurn
                             ? '#c9a227'
-                            : burnBanner.success
-                              ? '#5ecf5e'
-                              : '#cf5e5e'
+                            : burnBanner.freeBurnUsed
+                              ? '#c9a227'
+                              : burnBanner.success
+                                ? '#5ecf5e'
+                                : '#cf5e5e'
                         }`}
                         textAlign="center"
                       >
@@ -3639,16 +3743,20 @@ export const GameBoard: FC = () => {
                           color={
                             burnBanner.isBountyBurn
                               ? '#c9a227'
-                              : burnBanner.success
-                                ? '#5ecf5e'
-                                : '#cf5e5e'
+                              : burnBanner.freeBurnUsed
+                                ? '#c9a227'
+                                : burnBanner.success
+                                  ? '#5ecf5e'
+                                  : '#cf5e5e'
                           }
                         >
                           {burnBanner.isBountyBurn
                             ? 'BOUNTY BURN -5'
-                            : burnBanner.success
-                              ? '✓ Burned!'
-                              : 'X No match! +1 penalty card'}
+                            : burnBanner.freeBurnUsed
+                              ? '★ Free Burn used — no penalty!'
+                              : burnBanner.success
+                                ? '✓ Burned!'
+                                : 'X No match! +1 penalty card'}
                         </Text>
                       </Box>
                     )}
@@ -4328,6 +4436,33 @@ export const GameBoard: FC = () => {
                         })}
                       </HStack>
                     </Box>
+
+                    {/* Super Powers indicator (desktop) */}
+                    {myPlayer?.hasFreeBurn && !isPeeking && (
+                      <Flex justify="center" mt="6px" gap="6px">
+                        <Box
+                          display="flex"
+                          alignItems="center"
+                          gap="4px"
+                          px="8px"
+                          h="22px"
+                          borderRadius="11px"
+                          bg="rgba(201,162,39,0.12)"
+                          border="1px solid rgba(201,162,39,0.3)"
+                        >
+                          <FireOutlined style={{ fontSize: '10px', color: '#c9a227' }} />
+                          <Text
+                            fontSize="10px"
+                            fontWeight="600"
+                            color="#c9a227"
+                            whiteSpace="nowrap"
+                          >
+                            Free Burn
+                          </Text>
+                        </Box>
+                      </Flex>
+                    )}
+
                     {/* Peeking timer bar (Option C) / hint-text */}
                     {isPeeking ? (
                       <Flex align="center" gap="8px" mt="10px" px="4px">
@@ -4582,22 +4717,33 @@ export const GameBoard: FC = () => {
             mt="10px"
             px="10px"
             py="8px"
-            bg="#1e1616"
-            border="0.5px solid #3a2020"
+            bg={myPlayer?.hasFreeBurn ? '#1a1610' : '#1e1616'}
+            border={`0.5px solid ${myPlayer?.hasFreeBurn ? '#3a3020' : '#3a2020'}`}
             borderRadius="8px"
           >
-            <Text fontSize="11px" color="#7a4a4a" lineHeight={1.5}>
-              Card {pendingBurnSlot} is{' '}
-              <Text as="strong" color="#cf7070" fontWeight="500">
-                face-down
-              </Text>{' '}
-              — you don&apos;t know its rank. If it doesn&apos;t match {topDiscard?.rank ?? '?'},
-              you&apos;ll receive a{' '}
-              <Text as="strong" color="#cf7070" fontWeight="500">
-                penalty card
-              </Text>{' '}
-              added face-down as slot E.
-            </Text>
+            {myPlayer?.hasFreeBurn ? (
+              <Text fontSize="11px" color="#b89a40" lineHeight={1.5}>
+                You have a{' '}
+                <Text as="strong" color="#c9a227" fontWeight="600">
+                  Free Burn
+                </Text>{' '}
+                — if card {pendingBurnSlot} doesn&apos;t match {topDiscard?.rank ?? '?'}, no penalty
+                card will be drawn.
+              </Text>
+            ) : (
+              <Text fontSize="11px" color="#7a4a4a" lineHeight={1.5}>
+                Card {pendingBurnSlot} is{' '}
+                <Text as="strong" color="#cf7070" fontWeight="500">
+                  face-down
+                </Text>{' '}
+                — you don&apos;t know its rank. If it doesn&apos;t match {topDiscard?.rank ?? '?'},
+                you&apos;ll receive a{' '}
+                <Text as="strong" color="#cf7070" fontWeight="500">
+                  penalty card
+                </Text>{' '}
+                added face-down as slot E.
+              </Text>
+            )}
           </Box>
 
           {/* Actions */}
@@ -4617,6 +4763,26 @@ export const GameBoard: FC = () => {
             >
               Cancel
             </Button>
+            {myPlayer?.hasFreeBurn && (
+              <Button
+                flex={2}
+                py="10px"
+                h="auto"
+                borderRadius="9px"
+                bg="#c9a227"
+                color="#1a0e00"
+                border="none"
+                fontSize="13px"
+                fontWeight="600"
+                _hover={{ bg: '#b8911e' }}
+                onClick={() => {
+                  if (pendingBurnSlot) handleBurnCard(pendingBurnSlot, true);
+                  setPendingBurnSlot(null);
+                }}
+              >
+                Free Burn
+              </Button>
+            )}
             <Button
               flex={2}
               py="10px"
@@ -6154,6 +6320,12 @@ export const GameBoard: FC = () => {
                               {gameState.bountyBurnCounts[hand.playerId] * 5}
                             </Text>
                           )}
+                        {/* Perfect Round: Free Burn earned annotation (visible only to the earner) */}
+                        {isMe && roundEndData?.freeBurnAwarded?.includes(hand.playerId) && (
+                          <Text fontSize="9px" color="#c9a227" mt="4px" fontWeight="700">
+                            ★ Perfect Round! Free Burn earned
+                          </Text>
+                        )}
                       </Box>
                     );
                   })}

@@ -275,6 +275,57 @@ describe('gameHandlers — startNextRound', () => {
     expect(newState.scores[hostId]).toBe(15);
     expect(newState.scores[player2Id]).toBe(22);
   });
+
+  it('emits yourTurn immediately for blind rounds (round 3) since peek phase is skipped', async () => {
+    // Create a room at round 2 with blindRounds mode in roundEnd phase.
+    // When startNextRound fires, it will create round 3 — a blind round.
+    const room = createRoundEndRoom('ABCD', hostId, players);
+    (room.gameState as GameState).roundNumber = 2;
+    (room.gameState as GameState).gameMode = 'blindRounds';
+
+    const callback = vi.fn();
+    await emitEvent('startNextRound', { roomCode: 'ABCD', playerId: hostId }, callback);
+
+    expect(callback).toHaveBeenCalledWith({ success: true });
+
+    // Advance past countdown to trigger auto-start
+    await vi.advanceTimersByTimeAsync(6000);
+
+    const newState = rooms['ABCD'].gameState as GameState;
+    expect(newState.roundNumber).toBe(3);
+    expect(newState.isBlindRound).toBe(true);
+    expect(newState.phase).toBe('playing');
+
+    // yourTurn should have been emitted to one of the players
+    const yourTurnEvents = mockIO._emittedEvents.filter((e) => e.event === 'yourTurn');
+    expect(yourTurnEvents).toHaveLength(1);
+
+    // turnStartedAt should be set (emitYourTurn sets this)
+    expect(newState.turnStartedAt).toBeTruthy();
+  });
+
+  it('does NOT emit yourTurn for non-blind rounds (waits for endPeek)', async () => {
+    // Create a room at round 1 (classic mode) in roundEnd phase.
+    // When startNextRound fires, it will create round 2 — a normal round with peeking.
+    const room = createRoundEndRoom('ABCD', hostId, players);
+    (room.gameState as GameState).roundNumber = 1;
+
+    const callback = vi.fn();
+    await emitEvent('startNextRound', { roomCode: 'ABCD', playerId: hostId }, callback);
+
+    expect(callback).toHaveBeenCalledWith({ success: true });
+
+    // Advance past countdown to trigger auto-start
+    await vi.advanceTimersByTimeAsync(6000);
+
+    const newState = rooms['ABCD'].gameState as GameState;
+    expect(newState.roundNumber).toBe(2);
+    expect(newState.phase).toBe('peeking');
+
+    // yourTurn should NOT have been emitted — must wait for endPeek
+    const yourTurnEvents = mockIO._emittedEvents.filter((e) => e.event === 'yourTurn');
+    expect(yourTurnEvents).toHaveLength(0);
+  });
 });
 
 // ============================================================

@@ -293,6 +293,7 @@ export function sanitizeGameState(gameState: GameState, _forPlayerId: string): C
         cardCount: 0,
         totalScore: p.totalScore,
         isBot: p.isBot || undefined,
+        ...(p.hasFreeBurn ? { hasFreeBurn: true } : {}),
       };
     }
 
@@ -306,6 +307,7 @@ export function sanitizeGameState(gameState: GameState, _forPlayerId: string): C
       cardCount: p.hand.length,
       totalScore: p.totalScore,
       isBot: p.isBot || undefined,
+      ...(p.hasFreeBurn ? { hasFreeBurn: true } : {}),
     };
   });
 

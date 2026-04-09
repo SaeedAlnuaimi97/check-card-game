@@ -120,6 +120,7 @@ interface SocketContextValue {
   performAction: (
     actionType: ActionType,
     slot?: string,
+    options?: { freeBurn?: boolean },
   ) => Promise<{ success: boolean; error?: string }>;
   /** After drawing from deck or taking from discard, choose to swap with a hand slot or discard the drawn card (F-038, F-042) */
   discardChoice: (slot: SlotLabel | null) => Promise<{ success: boolean; error?: string }>;
@@ -148,6 +149,8 @@ interface SocketContextValue {
   ) => Promise<{ success: boolean; card?: Card; error?: string }>;
   /** Debug: move a specific card (by rank+suit) to top of deck */
   debugStackDeck: (rank: string, suit: string) => Promise<{ success: boolean; error?: string }>;
+  /** Hidden easter egg: claim a Free Burn token */
+  claimEasterEgg: () => Promise<{ success: boolean; error?: string }>;
   /** Clear round end data (used by UI after showing modal) */
   clearRoundEndData: () => void;
   /** Clear game end data (used by UI after showing modal) */
@@ -1011,15 +1014,24 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
   // Perform Action — send a player action to the server (F-035)
   // ----------------------------------------------------------
   const performAction = useCallback(
-    (actionType: ActionType, slot?: string): Promise<{ success: boolean; error?: string }> => {
+    (
+      actionType: ActionType,
+      slot?: string,
+      options?: { freeBurn?: boolean },
+    ): Promise<{ success: boolean; error?: string }> => {
       return new Promise((resolve) => {
         if (!roomData || !playerId) {
           resolve({ success: false, error: 'Not in a room' });
           return;
         }
-        const action: { type: ActionType; slot?: string } = { type: actionType };
+        const action: { type: ActionType; slot?: string; freeBurn?: boolean } = {
+          type: actionType,
+        };
         if (slot) {
           action.slot = slot;
+        }
+        if (options?.freeBurn) {
+          action.freeBurn = true;
         }
         socket.emit(
           'playerAction',
@@ -1218,6 +1230,25 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
     },
     [roomData],
   );
+
+  // ----------------------------------------------------------
+  // claimEasterEgg — Hidden easter egg: claim Free Burn token
+  // ----------------------------------------------------------
+  const claimEasterEgg = useCallback((): Promise<{ success: boolean; error?: string }> => {
+    return new Promise((resolve) => {
+      if (!roomData || !playerId) {
+        resolve({ success: false, error: 'Not in a room' });
+        return;
+      }
+      socket.emit(
+        'claimEasterEgg',
+        { roomCode: roomData.roomCode, playerId },
+        (response: { success: boolean; error?: string }) => {
+          resolve(response);
+        },
+      );
+    });
+  }, [roomData, playerId]);
 
   // ----------------------------------------------------------
   // Clear round/game end data (for UI after showing modals)
@@ -1499,6 +1530,7 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
       redKingChoice,
       debugPeek,
       debugStackDeck,
+      claimEasterEgg,
       clearRoundEndData,
       clearGameEndData,
       sendReaction,
@@ -1553,6 +1585,7 @@ export const SocketProvider: FC<SocketProviderProps> = ({ children }) => {
       redKingChoice,
       debugPeek,
       debugStackDeck,
+      claimEasterEgg,
       clearRoundEndData,
       clearGameEndData,
       sendReaction,

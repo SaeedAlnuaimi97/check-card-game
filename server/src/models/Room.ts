@@ -45,6 +45,7 @@ const PlayerStateSchema = new Schema<PlayerState>(
     totalScore: { type: Number, required: true, default: 0 },
     isBot: { type: Boolean, default: undefined },
     botDifficulty: { type: String, enum: ['easy', 'expert'], default: undefined },
+    hasFreeBurn: { type: Boolean, default: undefined },
   },
   { _id: false },
 );

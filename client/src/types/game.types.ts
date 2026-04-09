@@ -110,6 +110,8 @@ export interface BurnResultPayload {
   burnedCard?: Card;
   /** Penalty slot added on failure */
   penaltySlot?: string;
+  /** True if a Free Burn token was consumed (failed burn, no penalty) */
+  freeBurnUsed?: boolean;
 }
 
 // ============================================================
@@ -166,6 +168,8 @@ export interface RoundEndedPayload {
   updatedScores: Record<string, number>;
   gameEnded: boolean;
   nextRoundStarting: boolean;
+  /** Player IDs who earned a Free Burn this round (handSum === 0) */
+  freeBurnAwarded?: string[];
 }
 
 export interface GameEndedPayload {
