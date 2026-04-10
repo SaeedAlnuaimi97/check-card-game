@@ -55,7 +55,7 @@ Then the player must choose exactly ONE of 3 actions:
    - Either discard the drawn card itself (keep hand unchanged)
    - Or replace a card in hand with the drawn card (discard the hand card)
 4. The discarded card goes to the discard pile
-5. If the discarded card is a RED Jack, Queen, or King that was JUST DRAWN from the deck, its special effect triggers (see Special Effects below)
+5. If the discarded card is a Jack, Queen, or King (any suit) that was JUST DRAWN from the deck, its special effect triggers (see Special Effects below)
 
 ### Action 2: Take from Discard Pile
 
@@ -83,7 +83,7 @@ Then the player must choose exactly ONE of 3 actions:
 
 ---
 
-## Special Effects (Red Face Cards)
+## Special Effects (Face Cards — All Suits)
 
 Special effects ONLY trigger when:
 
@@ -96,7 +96,7 @@ Special effects NEVER trigger:
 - When taking from discard pile (Action 2)
 - When discarding a card from hand that was not just drawn
 
-### Red Jack (Hearts Jack, Diamonds Jack)
+### Jack (All suits — Hearts, Diamonds, Spades, Clubs)
 
 - **Effect**: Swap one of your cards with any opponent's card
 - **This is optional** - the player can choose to skip the swap
@@ -107,14 +107,14 @@ Special effects NEVER trigger:
   3. One of the target opponent's slots
 - The cards are swapped without being revealed to either player
 
-### Red Queen (Hearts Queen, Diamonds Queen)
+### Queen (All suits — Hearts, Diamonds, Spades, Clubs)
 
 - **Effect**: Peek at one of your own face-down cards
 - The player chooses one of their own slots to peek at
 - Only the player sees the card (privately)
 - The card stays in its slot
 
-### Red King (Hearts King, Diamonds King)
+### King (All suits — Hearts, Diamonds, Spades, Clubs)
 
 - **Effect**: Draw 2 additional cards from the deck
 - Only the player sees the 2 drawn cards
@@ -122,6 +122,19 @@ Special effects NEVER trigger:
   1. **Return both**: Both drawn cards go back to the draw pile (shuffled back in). No hand changes.
   2. **Keep 1**: Keep 1 drawn card, replace 1 card from hand. The replaced hand card goes to discard pile. The other drawn card goes back to draw pile (shuffled in).
   3. **Keep 2**: Keep both drawn cards, replace 2 cards from hand. Both replaced hand cards go to discard pile.
+
+---
+
+## Super Powers
+
+### Free Burn
+
+- **How to earn**: Score a perfect round — finish a round with a hand sum of exactly **0 points** (e.g., all red 10s)
+- **What it does**: Allows the player to burn **any card** from their hand regardless of the top discard card's rank. No rank matching required — the burn always succeeds.
+- **One-time use**: The Free Burn token is consumed when used, whether the card would have matched or not
+- **Persists across rounds**: The token carries over to the next round if not used
+- **Visible to all**: All players can see who has a Free Burn token
+- **UI indicator**: A gold "Free Burn" pill is shown below the player's hand; tapping it opens an info modal explaining the power
 
 ---
 
@@ -195,3 +208,4 @@ Special effects NEVER trigger:
 - The initial 2-card peek slots should be randomly selected server-side
 - Red King return-to-deck cards must be shuffled back into random positions in the deck
 - Penalty cards from failed burns are drawn face-down - the player does NOT see them
+- Free Burn tokens are awarded by `computeRoundResult` (Scoring.ts) and carried over between rounds by `executeStartNextRound` (gameHandlers.ts)

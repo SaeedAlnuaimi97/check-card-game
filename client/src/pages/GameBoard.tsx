@@ -749,6 +749,12 @@ export const GameBoard: FC = () => {
   const { isOpen: isMenuOpen, onOpen: onMenuOpen, onClose: onMenuClose } = useDisclosure();
   // How to play modal
   const { isOpen: isInfoOpen, onOpen: onInfoOpen, onClose: onInfoClose } = useDisclosure();
+  // Free Burn info modal
+  const {
+    isOpen: isFreeBurnInfoOpen,
+    onOpen: onFreeBurnInfoOpen,
+    onClose: onFreeBurnInfoClose,
+  } = useDisclosure();
 
   // Responsive: tablet/desktop detection
   const isDesktop = useBreakpointValue({ base: false, md: true }, { ssr: false }) ?? false;
@@ -2366,6 +2372,7 @@ export const GameBoard: FC = () => {
                 </Text>
                 <Text color="gray.300" fontSize="xs" mt={1}>
                   Tap the deck → tap a hand card to swap, or tap discard to keep your hand.
+                  Discarding a J/Q/K triggers its special effect.
                 </Text>
               </Box>
               <Box bg="surface.tonal20" px={3} py={2} borderRadius="md">
@@ -2393,6 +2400,25 @@ export const GameBoard: FC = () => {
                   Tap CHECK before your action if you think you have the lowest hand.
                 </Text>
               </Box>
+              <Box bg="surface.tonal20" px={3} py={2} borderRadius="md">
+                <Text fontWeight="semibold" color="#c9a227">
+                  Face Card Effects (J / Q / K)
+                </Text>
+                <Text color="gray.300" fontSize="xs" mt={1}>
+                  <Text as="strong" color="white">
+                    J
+                  </Text>{' '}
+                  — Blind-swap one of your cards with any opponent&apos;s.{' '}
+                  <Text as="strong" color="white">
+                    Q
+                  </Text>{' '}
+                  — Peek at one of your own face-down cards.{' '}
+                  <Text as="strong" color="white">
+                    K
+                  </Text>{' '}
+                  — Draw 2 extra cards; keep 0, 1, or 2.
+                </Text>
+              </Box>
             </VStack>
           </ModalBody>
         </ModalContent>
@@ -2418,47 +2444,31 @@ export const GameBoard: FC = () => {
               {opponents.length}
             </Box>
           </Box>
-          {opponents.length >= 6 ? (
-            /* ── 2-column grid layout for 6+ opponents ── */
-            <Box display="grid" gridTemplateColumns="1fr 1fr">
-              {opponents.map((opp, idx) => {
-                const isLastOdd = idx === opponents.length - 1 && opponents.length % 2 !== 0;
-                const isLeftColumn = idx % 2 === 0 && !isLastOdd;
-                return (
-                  <Box
-                    key={opp.playerId}
-                    gridColumn={isLastOdd ? '1 / -1' : undefined}
-                    borderRight={isLeftColumn ? '0.5px solid #1e1e26' : undefined}
-                  >
-                    <MobileOpponentRow
-                      player={opp}
-                      playerIndex={playerIndexMap.get(opp.playerId) ?? 0}
-                      isCurrentTurn={
-                        gameState.players[gameState.currentTurnIndex]?.playerId === opp.playerId
-                      }
-                      targetScore={gameState.targetScore}
-                      debugRevealed={debugRevealed}
-                      modifiedSlots={modifiedSlots}
-                    />
-                  </Box>
-                );
-              })}
-            </Box>
-          ) : (
-            opponents.map((opp) => (
-              <MobileOpponentRow
-                key={opp.playerId}
-                player={opp}
-                playerIndex={playerIndexMap.get(opp.playerId) ?? 0}
-                isCurrentTurn={
-                  gameState.players[gameState.currentTurnIndex]?.playerId === opp.playerId
-                }
-                targetScore={gameState.targetScore}
-                debugRevealed={debugRevealed}
-                modifiedSlots={modifiedSlots}
-              />
-            ))
-          )}
+          {/* ── 2-column grid layout for all opponent counts ── */}
+          <Box display="grid" gridTemplateColumns="1fr 1fr">
+            {opponents.map((opp, idx) => {
+              const isLastOdd = idx === opponents.length - 1 && opponents.length % 2 !== 0;
+              const isLeftColumn = idx % 2 === 0 && !isLastOdd;
+              return (
+                <Box
+                  key={opp.playerId}
+                  gridColumn={isLastOdd ? '1 / -1' : undefined}
+                  borderRight={isLeftColumn ? '0.5px solid #1e1e26' : undefined}
+                >
+                  <MobileOpponentRow
+                    player={opp}
+                    playerIndex={playerIndexMap.get(opp.playerId) ?? 0}
+                    isCurrentTurn={
+                      gameState.players[gameState.currentTurnIndex]?.playerId === opp.playerId
+                    }
+                    targetScore={gameState.targetScore}
+                    debugRevealed={debugRevealed}
+                    modifiedSlots={modifiedSlots}
+                  />
+                </Box>
+              );
+            })}
+          </Box>
           {/* Float emoji zone — reactions animate up over the opponent area */}
           <Box position="absolute" inset={0} pointerEvents="none" overflow="visible" zIndex={20}>
             {floatEmojis.map((f) => (
@@ -2547,19 +2557,19 @@ export const GameBoard: FC = () => {
           display="flex"
           flexDirection="column"
           justifyContent="center"
-          px="14px"
-          py="14px"
+          px="10px"
+          py="8px"
           overflow="hidden"
         >
           <Box
             bg="#12181a"
             borderRadius="14px"
             border="0.5px solid #1a2a22"
-            px="14px"
-            py="14px"
+            px="12px"
+            py="10px"
             display="flex"
             flexDirection="column"
-            gap="12px"
+            gap="10px"
           >
             {/* Timer row — SVG ring + text label + progress bar */}
             {turnTimeLeft !== null &&
@@ -2680,7 +2690,7 @@ export const GameBoard: FC = () => {
                   {burnBanner.isBountyBurn
                     ? 'BOUNTY BURN -5'
                     : burnBanner.freeBurnUsed
-                      ? '★ Free Burn used — no penalty!'
+                      ? '★ Free Burn used — card burned!'
                       : burnBanner.success
                         ? '✓ Burned!'
                         : 'X No match! +1 penalty card'}
@@ -2707,11 +2717,12 @@ export const GameBoard: FC = () => {
                   letterSpacing="0.08em"
                   textTransform="uppercase"
                 >
-                  Bounty
+                  Bounty{' '}
+                  <Text as="span" fontSize="12px" fontWeight="800" letterSpacing="0">
+                    {gameState.bountyRank}
+                    {makeBountyDisplayCard(gameState.bountyRank).suit}
+                  </Text>
                 </Text>
-                <Box transform="scale(0.5)" transformOrigin="center" my="-16px" mx="-10px">
-                  <Card card={makeBountyDisplayCard(gameState.bountyRank)} size="sm" />
-                </Box>
                 <Text fontSize="9px" color="#8a7a3a">
                   2x in hand / -5 per burn
                 </Text>
@@ -2984,8 +2995,8 @@ export const GameBoard: FC = () => {
         <Box
           bg="#13131a"
           px="10px"
-          pt="20px"
-          pb="10px"
+          pt="8px"
+          pb="6px"
           flexShrink={0}
           overflow="visible"
           borderTop={canAct ? '2px solid #00e5cc' : '2px solid transparent'}
@@ -3068,7 +3079,7 @@ export const GameBoard: FC = () => {
             )}
           </AnimatePresence>
 
-          {/* hand label */}
+          {/* hand label — above cards only for blind countdown and peeking */}
           {isBlindCountdown ? (
             /* Blind round interstitial — no peeking */
             <Flex direction="column" align="center" justify="center" gap="8px" mb="10px" py="12px">
@@ -3121,7 +3132,7 @@ export const GameBoard: FC = () => {
             </Flex>
           ) : isPeeking ? (
             /* Option C memo pill — replaces plain label during peeking phase */
-            <VStack spacing="6px" mb="10px">
+            <VStack spacing="6px" mb="6px">
               {/* Bounty rank badge during peek (so it's visible at game start) */}
               {gameState.gameMode === 'bountyHunt' && gameState.bountyRank && (
                 <Flex
@@ -3141,11 +3152,12 @@ export const GameBoard: FC = () => {
                     letterSpacing="0.08em"
                     textTransform="uppercase"
                   >
-                    Bounty
+                    Bounty{' '}
+                    <Text as="span" fontSize="12px" fontWeight="800" letterSpacing="0">
+                      {gameState.bountyRank}
+                      {makeBountyDisplayCard(gameState.bountyRank).suit}
+                    </Text>
                   </Text>
-                  <Box transform="scale(0.5)" transformOrigin="center" my="-16px" mx="-10px">
-                    <Card card={makeBountyDisplayCard(gameState.bountyRank)} size="sm" />
-                  </Box>
                   <Text fontSize="9px" color="#8a7a3a">
                     2x in hand / -5 per burn
                   </Text>
@@ -3179,21 +3191,20 @@ export const GameBoard: FC = () => {
                 </Flex>
               </Flex>
             </VStack>
-          ) : (
+          ) : null}
+
+          {/* "pick a slot" label stays above cards when taking from discard */}
+          {!isBlindCountdown && !isPeeking && hasDrawnCard && drawnFromDiscard && (
             <Text
               fontSize="10px"
-              color={hasDrawnCard && drawnFromDiscard ? '#c9a227' : '#555'}
+              color="#c9a227"
               textAlign="center"
               textTransform="uppercase"
               letterSpacing="0.07em"
               fontWeight="500"
-              mb="16px"
+              mb="4px"
             >
-              {hasDrawnCard && drawnFromDiscard
-                ? 'pick a slot to replace'
-                : gameState.phase === 'roundEnd' || gameState.phase === 'gameEnd'
-                  ? 'round over'
-                  : 'your hand'}
+              pick a slot to replace
             </Text>
           )}
 
@@ -3223,7 +3234,7 @@ export const GameBoard: FC = () => {
             overflowX="auto"
             overflowY="visible"
             w="100%"
-            py={isPeeking ? '12px' : '1px'}
+            py={isPeeking ? '6px' : '1px'}
             sx={{
               '&::-webkit-scrollbar': { display: 'none' },
               scrollbarWidth: 'none',
@@ -3237,7 +3248,7 @@ export const GameBoard: FC = () => {
               minW="max-content"
               w="100%"
               px={2}
-              pt="8px"
+              pt="2px"
             >
               {myPlayer.hand.map((h: ClientHandSlot, cardIdx: number) => {
                 const peekedCard = getPeekedCardForSlot(h.slot);
@@ -3272,11 +3283,7 @@ export const GameBoard: FC = () => {
                 const isSwapTarget =
                   swapBannerData?.role === 'target' && swapBannerData.targetSlot === h.slot;
 
-                const cardSize = isDesktop
-                  ? 'lg'
-                  : isPeeking && myPlayer.hand.length <= 4
-                    ? 'md'
-                    : 'sm';
+                const cardSize = isDesktop ? 'lg' : 'md';
 
                 return (
                   <Tooltip
@@ -3451,9 +3458,26 @@ export const GameBoard: FC = () => {
             </HStack>
           </Box>
 
+          {/* "your hand" / "round over" label — below cards during playing phase */}
+          {!isBlindCountdown && !isPeeking && !(hasDrawnCard && drawnFromDiscard) && (
+            <Text
+              fontSize="9px"
+              color="#555"
+              textAlign="center"
+              textTransform="uppercase"
+              letterSpacing="0.07em"
+              fontWeight="500"
+              mt="4px"
+            >
+              {gameState.phase === 'roundEnd' || gameState.phase === 'gameEnd'
+                ? 'round over'
+                : 'your hand'}
+            </Text>
+          )}
+
           {/* Super Powers indicator */}
           {myPlayer?.hasFreeBurn && !isPeeking && (
-            <Flex justify="center" mt="6px" gap="6px">
+            <Flex justify="center" mt="2px" gap="6px">
               <Box
                 display="flex"
                 alignItems="center"
@@ -3463,6 +3487,9 @@ export const GameBoard: FC = () => {
                 borderRadius="11px"
                 bg="rgba(201,162,39,0.12)"
                 border="1px solid rgba(201,162,39,0.3)"
+                cursor="pointer"
+                onClick={onFreeBurnInfoOpen}
+                _hover={{ bg: 'rgba(201,162,39,0.2)' }}
               >
                 <FireOutlined style={{ fontSize: '10px', color: '#c9a227' }} />
                 <Text fontSize="10px" fontWeight="600" color="#c9a227" whiteSpace="nowrap">
@@ -3474,7 +3501,7 @@ export const GameBoard: FC = () => {
 
           {/* Peeking timer bar (Option C) / hint-text */}
           {isPeeking ? (
-            <Flex align="center" gap="8px" mt="10px" px="4px">
+            <Flex align="center" gap="8px" mt="6px" px="4px">
               <Text fontSize="16px" fontWeight="800" color="#c9a227" minW="24px">
                 {Math.ceil((peekProgress / 100) * (PEEK_DURATION_MS / 1000))}s
               </Text>
@@ -3753,7 +3780,7 @@ export const GameBoard: FC = () => {
                           {burnBanner.isBountyBurn
                             ? 'BOUNTY BURN -5'
                             : burnBanner.freeBurnUsed
-                              ? '★ Free Burn used — no penalty!'
+                              ? '★ Free Burn used — card burned!'
                               : burnBanner.success
                                 ? '✓ Burned!'
                                 : 'X No match! +1 penalty card'}
@@ -3780,11 +3807,12 @@ export const GameBoard: FC = () => {
                           letterSpacing="0.08em"
                           textTransform="uppercase"
                         >
-                          Bounty
+                          Bounty{' '}
+                          <Text as="span" fontSize="12px" fontWeight="800" letterSpacing="0">
+                            {gameState.bountyRank}
+                            {makeBountyDisplayCard(gameState.bountyRank).suit}
+                          </Text>
                         </Text>
-                        <Box transform="scale(0.5)" transformOrigin="center" my="-16px" mx="-10px">
-                          <Card card={makeBountyDisplayCard(gameState.bountyRank)} size="sm" />
-                        </Box>
                         <Text fontSize="9px" color="#8a7a3a">
                           2x in hand / -5 per burn
                         </Text>
@@ -4127,16 +4155,12 @@ export const GameBoard: FC = () => {
                               letterSpacing="0.08em"
                               textTransform="uppercase"
                             >
-                              Bounty
+                              Bounty{' '}
+                              <Text as="span" fontSize="12px" fontWeight="800" letterSpacing="0">
+                                {gameState.bountyRank}
+                                {makeBountyDisplayCard(gameState.bountyRank).suit}
+                              </Text>
                             </Text>
-                            <Box
-                              transform="scale(0.5)"
-                              transformOrigin="center"
-                              my="-16px"
-                              mx="-10px"
-                            >
-                              <Card card={makeBountyDisplayCard(gameState.bountyRank)} size="sm" />
-                            </Box>
                             <Text fontSize="9px" color="#8a7a3a">
                               2x in hand / -5 per burn
                             </Text>
@@ -4449,6 +4473,9 @@ export const GameBoard: FC = () => {
                           borderRadius="11px"
                           bg="rgba(201,162,39,0.12)"
                           border="1px solid rgba(201,162,39,0.3)"
+                          cursor="pointer"
+                          onClick={onFreeBurnInfoOpen}
+                          _hover={{ bg: 'rgba(201,162,39,0.2)' }}
                         >
                           <FireOutlined style={{ fontSize: '10px', color: '#c9a227' }} />
                           <Text
@@ -4483,7 +4510,7 @@ export const GameBoard: FC = () => {
                         </Text>
                       </Flex>
                     ) : (
-                      <Text fontSize="11px" color="#555" textAlign="center" mt="6px">
+                      <Text fontSize="10px" color="#555" textAlign="center" mt="2px">
                         {hasDrawnCard && drawnFromDiscard
                           ? 'tap a slot to place the discard card · tap discard again to cancel'
                           : hasDrawnCard
@@ -4727,8 +4754,11 @@ export const GameBoard: FC = () => {
                 <Text as="strong" color="#c9a227" fontWeight="600">
                   Free Burn
                 </Text>{' '}
-                — if card {pendingBurnSlot} doesn&apos;t match {topDiscard?.rank ?? '?'}, no penalty
-                card will be drawn.
+                — card {pendingBurnSlot} will be{' '}
+                <Text as="strong" color="#c9a227" fontWeight="600">
+                  burned regardless of rank
+                </Text>
+                . No matching required!
               </Text>
             ) : (
               <Text fontSize="11px" color="#7a4a4a" lineHeight={1.5}>
@@ -4800,6 +4830,130 @@ export const GameBoard: FC = () => {
               }}
             >
               Burn it
+            </Button>
+          </Box>
+        </ModalContent>
+      </Modal>
+      {/* ============================================================ */}
+      {/* Free Burn Info Modal                                          */}
+      {/* ============================================================ */}
+      <Modal
+        isOpen={isFreeBurnInfoOpen}
+        onClose={onFreeBurnInfoClose}
+        motionPreset="slideInBottom"
+        isCentered
+      >
+        <ModalOverlay bg="rgba(0,0,0,0.6)" />
+        <ModalContent
+          bg="#1c1c28"
+          borderRadius="16px 16px 0 0"
+          borderTop="0.5px solid #2a2a3a"
+          p={0}
+          mx={0}
+          mb={0}
+          mt="auto"
+          position="fixed"
+          bottom={0}
+          left={0}
+          right={0}
+          maxW="unset"
+          overflow="hidden"
+        >
+          {/* Drag handle */}
+          <Box w="32px" h="3px" bg="#2a2a3a" borderRadius="2px" mx="auto" mt="10px" />
+
+          {/* Header */}
+          <Box px="16px" pt="12px" pb="10px" borderBottom="0.5px solid #22222e">
+            <HStack spacing="8px" mb="4px">
+              <Box
+                w="28px"
+                h="28px"
+                borderRadius="8px"
+                bg="rgba(201,162,39,0.15)"
+                display="flex"
+                alignItems="center"
+                justifyContent="center"
+              >
+                <FireOutlined style={{ fontSize: '14px', color: '#c9a227' }} />
+              </Box>
+              <Text fontSize="16px" fontWeight="700" color="#eee">
+                Free Burn
+              </Text>
+            </HStack>
+            <Text fontSize="11px" color="#666">
+              Super Power
+            </Text>
+          </Box>
+
+          {/* Body */}
+          <Box px="16px" py="12px">
+            <VStack spacing="10px" align="stretch">
+              <Box
+                px="10px"
+                py="8px"
+                bg="rgba(201,162,39,0.08)"
+                border="0.5px solid rgba(201,162,39,0.2)"
+                borderRadius="8px"
+              >
+                <Text fontSize="12px" color="#c9a227" fontWeight="600" mb="4px">
+                  What it does
+                </Text>
+                <Text fontSize="12px" color="#b89a40" lineHeight={1.6}>
+                  Burn any card from your hand regardless of what&apos;s on the discard pile. The
+                  card is removed from your hand — no rank matching required!
+                </Text>
+              </Box>
+
+              <Box
+                px="10px"
+                py="8px"
+                bg="rgba(94,207,94,0.06)"
+                border="0.5px solid rgba(94,207,94,0.15)"
+                borderRadius="8px"
+              >
+                <Text fontSize="12px" color="#5ecf5e" fontWeight="600" mb="4px">
+                  How to earn
+                </Text>
+                <Text fontSize="12px" color="#70b070" lineHeight={1.6}>
+                  Score a perfect round — finish a round with a hand sum of exactly 0 points. All
+                  red 10s in hand!
+                </Text>
+              </Box>
+
+              <Box
+                px="10px"
+                py="8px"
+                bg="rgba(207,94,94,0.06)"
+                border="0.5px solid rgba(207,94,94,0.15)"
+                borderRadius="8px"
+              >
+                <Text fontSize="12px" color="#cf5e5e" fontWeight="600" mb="4px">
+                  One-time use
+                </Text>
+                <Text fontSize="12px" color="#a06060" lineHeight={1.6}>
+                  The Free Burn token is consumed when you use it. To get another, you need to score
+                  0 in a future round.
+                </Text>
+              </Box>
+            </VStack>
+          </Box>
+
+          {/* Action */}
+          <Box px="16px" pb="16px">
+            <Button
+              w="100%"
+              py="10px"
+              h="auto"
+              borderRadius="9px"
+              bg="#c9a227"
+              color="#1a0e00"
+              border="none"
+              fontSize="13px"
+              fontWeight="600"
+              _hover={{ bg: '#b8911e' }}
+              onClick={onFreeBurnInfoClose}
+            >
+              Got it
             </Button>
           </Box>
         </ModalContent>

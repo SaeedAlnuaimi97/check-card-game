@@ -14,7 +14,7 @@ import {
   useToast,
   VStack,
 } from '@chakra-ui/react';
-import { CheckOutlined } from '@ant-design/icons';
+import { CheckOutlined, ShareAltOutlined } from '@ant-design/icons';
 import { useSocket } from '../context/SocketContext';
 
 const MIN_PLAYERS = 2;
@@ -329,8 +329,25 @@ export const RoomLobby: FC = () => {
     toast({ title: 'Room code copied!', status: 'success', duration: 1500, position: 'top' });
   };
 
-  const handleShare = () => {
+  const handleShare = async () => {
     const shareUrl = `${window.location.origin}/lobby/${roomData.roomCode}`;
+
+    // Use native Web Share API if available (mobile share sheet)
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: 'Join my Check game!',
+          text: `Room code: ${roomData.roomCode}`,
+          url: shareUrl,
+        });
+        return;
+      } catch (err: unknown) {
+        // User cancelled share — silently ignore AbortError
+        if (err instanceof Error && err.name === 'AbortError') return;
+      }
+    }
+
+    // Fallback: copy to clipboard
     navigator.clipboard
       .writeText(shareUrl)
       .then(() => {
@@ -514,9 +531,9 @@ export const RoomLobby: FC = () => {
                 fontSize="13px"
                 onClick={handleShare}
                 _hover={{ color: '#aaa' }}
-                title="Copy invite link"
+                title="Share invite link"
               >
-                ↗
+                <ShareAltOutlined />
               </Box>
             </HStack>
           </Box>

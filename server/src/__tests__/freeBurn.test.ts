@@ -160,7 +160,7 @@ describe('Free Burn Award (computeRoundResult)', () => {
 // ============================================================
 
 describe('Free Burn Consumption (handleBurnAttempt)', () => {
-  it('on burn failure with freeBurn=true: skips penalty, consumes token, returns freeBurnUsed', () => {
+  it('on burn with freeBurn=true and mismatching rank: always succeeds, consumes token, returns freeBurnUsed', () => {
     const player = makePlayer('p1', [
       { slot: 'A', card: makeCard('5', '♠', 5) },
       { slot: 'B', card: makeCard('3', '♣', 3) },
@@ -170,23 +170,26 @@ describe('Free Burn Consumption (handleBurnAttempt)', () => {
     const gs = createTestGameState({
       players: [player],
       discardPile: [makeCard('7', '♠', 7)], // discard top is 7, burn slot A has 5 — mismatch
-      deck: [makeCard('9', '♠', 9)], // would be penalty card in normal case
+      deck: [makeCard('9', '♠', 9)],
     });
 
     const result = handleBurnAttempt(gs, 'p1', 'A' as any, true);
 
     expect(result.success).toBe(true);
-    expect(result.burnSuccess).toBe(false);
+    expect(result.burnSuccess).toBe(true); // Free Burn always succeeds
     expect(result.freeBurnUsed).toBe(true);
-    // No penalty card should be added
-    expect(player.hand).toHaveLength(2);
+    // Card should be removed from hand (burned)
+    expect(player.hand).toHaveLength(1);
+    expect(player.hand[0].slot).toBe('B');
     // Token should be consumed
     expect(player.hasFreeBurn).toBe(false);
-    // Deck should still have the card (no penalty draw)
+    // Deck should still have its card (no penalty draw)
     expect(gs.deck).toHaveLength(1);
+    // Burned card should be on discard pile
+    expect(gs.discardPile[gs.discardPile.length - 1].rank).toBe('5');
   });
 
-  it('on burn success with freeBurn=true: does NOT consume token, no freeBurnUsed', () => {
+  it('on burn with freeBurn=true and matching rank: succeeds, consumes token, returns freeBurnUsed', () => {
     const player = makePlayer('p1', [
       { slot: 'A', card: makeCard('7', '♣', 7) },
       { slot: 'B', card: makeCard('3', '♣', 3) },
@@ -202,11 +205,11 @@ describe('Free Burn Consumption (handleBurnAttempt)', () => {
 
     expect(result.success).toBe(true);
     expect(result.burnSuccess).toBe(true);
-    expect(result.freeBurnUsed).toBeUndefined();
+    expect(result.freeBurnUsed).toBe(true);
     // Card should be removed from hand (burned)
     expect(player.hand).toHaveLength(1);
-    // Token should be preserved (not consumed on success)
-    expect(player.hasFreeBurn).toBe(true);
+    // Token should be consumed on use (always consumed when freeBurn=true)
+    expect(player.hasFreeBurn).toBe(false);
   });
 
   it('on burn failure without freeBurn: penalty card is drawn normally', () => {
