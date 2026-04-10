@@ -6,6 +6,7 @@ import {
   validateDiscardChoice,
   processDiscardChoice,
   isRedFaceCard,
+  isFaceCard,
   getSpecialEffectType,
   getNextPenaltySlot,
   handleBurnAttempt,
@@ -69,40 +70,43 @@ function createTestGameState(overrides: Partial<GameState> = {}): GameState {
 }
 
 // ============================================================
-// isRedFaceCard (F-040)
+// isFaceCard / isRedFaceCard (F-040) — all suits trigger effects
 // ============================================================
 
-describe('isRedFaceCard', () => {
-  it('returns true for red Jack', () => {
-    expect(isRedFaceCard(makeCard('rj', 'J', '♥'))).toBe(true);
-    expect(isRedFaceCard(makeCard('rj2', 'J', '♦'))).toBe(true);
+describe('isFaceCard', () => {
+  it('returns true for red face cards', () => {
+    expect(isFaceCard(makeCard('rj', 'J', '♥'))).toBe(true);
+    expect(isFaceCard(makeCard('rj2', 'J', '♦'))).toBe(true);
+    expect(isFaceCard(makeCard('rq', 'Q', '♥'))).toBe(true);
+    expect(isFaceCard(makeCard('rq2', 'Q', '♦'))).toBe(true);
+    expect(isFaceCard(makeCard('rk', 'K', '♥'))).toBe(true);
+    expect(isFaceCard(makeCard('rk2', 'K', '♦'))).toBe(true);
   });
 
-  it('returns true for red Queen', () => {
-    expect(isRedFaceCard(makeCard('rq', 'Q', '♥'))).toBe(true);
-    expect(isRedFaceCard(makeCard('rq2', 'Q', '♦'))).toBe(true);
+  it('returns true for black face cards', () => {
+    expect(isFaceCard(makeCard('bj', 'J', '♠'))).toBe(true);
+    expect(isFaceCard(makeCard('bq', 'Q', '♣'))).toBe(true);
+    expect(isFaceCard(makeCard('bk', 'K', '♠'))).toBe(true);
   });
 
-  it('returns true for red King', () => {
-    expect(isRedFaceCard(makeCard('rk', 'K', '♥'))).toBe(true);
-    expect(isRedFaceCard(makeCard('rk2', 'K', '♦'))).toBe(true);
+  it('returns false for non-face cards', () => {
+    expect(isFaceCard(makeCard('r5', '5', '♥'))).toBe(false);
+    expect(isFaceCard(makeCard('r10', '10', '♦'))).toBe(false);
+    expect(isFaceCard(makeCard('ra', 'A', '♥'))).toBe(false);
+    expect(isFaceCard(makeCard('b5', '5', '♠'))).toBe(false);
+    expect(isFaceCard(makeCard('b10', '10', '♣'))).toBe(false);
+  });
+});
+
+describe('isRedFaceCard (backward compat alias)', () => {
+  it('is an alias for isFaceCard', () => {
+    expect(isRedFaceCard).toBe(isFaceCard);
   });
 
-  it('returns false for black face cards', () => {
-    expect(isRedFaceCard(makeCard('bj', 'J', '♠'))).toBe(false);
-    expect(isRedFaceCard(makeCard('bq', 'Q', '♣'))).toBe(false);
-    expect(isRedFaceCard(makeCard('bk', 'K', '♠'))).toBe(false);
-  });
-
-  it('returns false for red non-face cards', () => {
-    expect(isRedFaceCard(makeCard('r5', '5', '♥'))).toBe(false);
-    expect(isRedFaceCard(makeCard('r10', '10', '♦'))).toBe(false);
-    expect(isRedFaceCard(makeCard('ra', 'A', '♥'))).toBe(false);
-  });
-
-  it('returns false for black non-face cards', () => {
-    expect(isRedFaceCard(makeCard('b5', '5', '♠'))).toBe(false);
-    expect(isRedFaceCard(makeCard('b10', '10', '♣'))).toBe(false);
+  it('returns true for black face cards (all suits now trigger)', () => {
+    expect(isRedFaceCard(makeCard('bj', 'J', '♠'))).toBe(true);
+    expect(isRedFaceCard(makeCard('bq', 'Q', '♣'))).toBe(true);
+    expect(isRedFaceCard(makeCard('bk', 'K', '♠'))).toBe(true);
   });
 });
 
@@ -462,20 +466,21 @@ describe('processDiscardChoice', () => {
     expect(result.triggersSpecialEffect).toBe(false);
   });
 
-  it('does NOT trigger special effect when discarding a black face drawn card', () => {
+  it('triggers special effect when discarding a black face drawn card from deck', () => {
     const drawnCard = makeCard('black-king', 'K', '♠');
     const player = makePlayer('p1', [{ slot: 'A', card: makeCard('a') }]);
     const gs = createTestGameState({
       players: [player],
       drawnCard,
       drawnByPlayerId: 'p1',
+      drawnSource: 'deck',
       discardPile: [],
     });
 
     const result = processDiscardChoice(gs, 'p1', null);
 
     expect(result.success).toBe(true);
-    expect(result.triggersSpecialEffect).toBe(false);
+    expect(result.triggersSpecialEffect).toBe(true);
   });
 
   it('returns error when validation fails', () => {
@@ -599,16 +604,17 @@ describe('getSpecialEffectType', () => {
     expect(getSpecialEffectType(makeCard('rk2', 'K', '♦'))).toBe('redKing');
   });
 
-  it('returns null for black face cards', () => {
-    expect(getSpecialEffectType(makeCard('bj', 'J', '♠'))).toBeNull();
-    expect(getSpecialEffectType(makeCard('bq', 'Q', '♣'))).toBeNull();
-    expect(getSpecialEffectType(makeCard('bk', 'K', '♣'))).toBeNull();
+  it('returns effect types for black face cards (all suits trigger)', () => {
+    expect(getSpecialEffectType(makeCard('bj', 'J', '♠'))).toBe('redJack');
+    expect(getSpecialEffectType(makeCard('bq', 'Q', '♣'))).toBe('redQueen');
+    expect(getSpecialEffectType(makeCard('bk', 'K', '♣'))).toBe('redKing');
   });
 
-  it('returns null for red non-face cards', () => {
+  it('returns null for non-face cards', () => {
     expect(getSpecialEffectType(makeCard('r5', '5', '♥'))).toBeNull();
     expect(getSpecialEffectType(makeCard('ra', 'A', '♦'))).toBeNull();
     expect(getSpecialEffectType(makeCard('r10', '10', '♥'))).toBeNull();
+    expect(getSpecialEffectType(makeCard('b5', '5', '♠'))).toBeNull();
   });
 });
 

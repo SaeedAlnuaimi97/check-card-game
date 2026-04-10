@@ -532,3 +532,36 @@ Design system source of truth: `reskin/` folder (spec MD + two HTML mockups). Sk
 - [x] **CM-057**: Opponent card pips hidden (server sends hand=[] for opponents)
 - [x] **CM-058**: Round-end modal — "Next round: BLIND ROUND" warning when applicable
 - [x] **CM-059**: BlindRounds.test.ts — blind detection, peek skipping, opponent hiding, edge case tests
+
+---
+
+### 43. Gameplay & UX Polish
+
+#### Free Burn Rework
+
+- [x] **GP-001**: Free Burn guarantees burn — any card is burned regardless of discard pile rank match; token consumed on use
+- [x] **GP-002**: Free Burn info modal — tapping the Free Burn pill opens a modal explaining the power-up behavior
+- [x] **GP-003**: Burn banner text updated — "card burned!" for free burns instead of "no penalty!"
+- [x] **GP-004**: Burn confirmation modal text updated for new Free Burn behavior
+- [x] **GP-005**: freeBurn.test.ts updated for new guaranteed-burn behavior
+
+#### Face Card Effects — All Suits
+
+- [x] **GP-010**: `isFaceCard` replaces `isRedFaceCard` — J/Q/K special effects trigger for all suits (black and red); `isRedFaceCard` kept as deprecated backward-compat alias
+- [x] **GP-011**: `getSpecialEffectType` updated — removed `isRed` guard; all J/Q/K return their effect type regardless of suit
+- [x] **GP-012**: `processDiscardChoice` updated — uses `isFaceCard` for trigger condition
+- [x] **GP-013**: Server tests updated — `isFaceCard`, `getSpecialEffectType`, `processDiscardChoice` tests cover black face cards
+- [x] **GP-014**: How to Play modals updated — "Face Card Effects" title, "J/Q/K" (not "red J/Q/K"), no opacity dimming on black cards
+
+#### Bounty Badge Inline Text
+
+- [x] **GP-020**: Bounty badge shows rank+suit as text (e.g., "Bounty 5♠") — removed scaled `<Card>` component from all 4 occurrences (mobile playing, mobile peeking, desktop playing, desktop peeking)
+
+#### Lobby Share Button
+
+- [x] **GP-030**: Share button uses native Web Share API (`navigator.share`) — opens phone share menu with room link; falls back to clipboard copy on desktop/unsupported browsers
+- [x] **GP-031**: Share button icon updated to `ShareAltOutlined` from ant-design/icons
+
+#### Mobile Opponent Layout
+
+- [x] **GP-040**: Mobile opponent list always uses 2-column grid layout

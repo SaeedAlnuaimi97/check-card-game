@@ -451,7 +451,7 @@ export const HomePage: FC = () => {
                   {[
                     [
                       'Draw from deck',
-                      'Swap it with a hand card, or discard it. Discarding a red J/Q/K triggers its special effect.',
+                      'Swap it with a hand card, or discard it. Discarding a J/Q/K triggers its special effect.',
                     ],
                     ['Take from discard', 'Hold 2 sec to take — must swap with a hand card.'],
                     [
@@ -474,7 +474,7 @@ export const HomePage: FC = () => {
               {/* Special Effects */}
               <Box>
                 <Text fontWeight="bold" color="#7a7aee" mb={2}>
-                  Red Face Card Effects
+                  Face Card Effects
                 </Text>
                 <VStack align="stretch" spacing={2}>
                   {FACE_CARDS.map(({ rank, effect }) => (
@@ -489,7 +489,7 @@ export const HomePage: FC = () => {
                             isRed,
                           };
                           return (
-                            <Box key={suit} opacity={isRed ? 1 : 0.35} flexShrink={0}>
+                            <Box key={suit} flexShrink={0}>
                               <Card card={cardObj} size="sm" />
                             </Box>
                           );

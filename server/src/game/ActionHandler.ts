@@ -187,10 +187,10 @@ export function processDiscardChoice(
   // Place discarded card on discard pile
   addToDiscard(gameState, discardedCard);
 
-  // Check for special effect: red J/Q/K that was just drawn from DECK and then discarded
+  // Check for special effect: J/Q/K (any suit) that was just drawn from DECK and then discarded
   // (F-040, F-043) — only triggers when drawn from deck AND the drawn card itself is discarded
   // Never triggers for takeDiscard (F-043)
-  const triggersSpecialEffect = discardedDrawnCard && !fromDiscard && isRedFaceCard(discardedCard);
+  const triggersSpecialEffect = discardedDrawnCard && !fromDiscard && isFaceCard(discardedCard);
 
   // Clear pending draw state
   gameState.drawnCard = null;
@@ -206,22 +206,24 @@ export function processDiscardChoice(
 }
 
 // ============================================================
-// Helper: Red Face Card Detection (F-040)
+// Helper: Face Card Detection (F-040)
 // ============================================================
 
 /**
- * Returns true if the card is a red Jack, Queen, or King.
+ * Returns true if the card is a Jack, Queen, or King (any suit).
  * These trigger special effects when drawn from deck and then discarded.
  */
-export function isRedFaceCard(card: Card): boolean {
-  return card.isRed && (card.rank === 'J' || card.rank === 'Q' || card.rank === 'K');
+export function isFaceCard(card: Card): boolean {
+  return card.rank === 'J' || card.rank === 'Q' || card.rank === 'K';
 }
 
+/** @deprecated Use isFaceCard — kept for backward compatibility */
+export const isRedFaceCard = isFaceCard;
+
 /**
- * Returns the SpecialEffectType for a red face card.
+ * Returns the SpecialEffectType for a face card (any suit).
  */
 export function getSpecialEffectType(card: Card): SpecialEffectType | null {
-  if (!card.isRed) return null;
   if (card.rank === 'J') return 'redJack';
   if (card.rank === 'Q') return 'redQueen';
   if (card.rank === 'K') return 'redKing';
@@ -271,7 +273,8 @@ export interface BurnResult {
  * - F-046: Success — card removed from hand to discard pile, hand shrinks
  * - F-047: Failure — card stays, penalty card drawn face-down
  * - F-048: No special effects trigger from burns
- * - Free Burn: if freeBurn=true and burn fails, skip penalty. Token consumed on failure only.
+ * - Free Burn: if freeBurn=true, the burn ALWAYS succeeds regardless of rank match.
+ *   The card is removed from hand and placed on discard. Token consumed on use.
  *
  * Mutates gameState.
  */
@@ -302,6 +305,33 @@ export function handleBurnAttempt(
   const handSlot = player.hand[handSlotIndex];
   const cardToBurn = handSlot.card;
 
+  // Free Burn: always succeeds — burn any card regardless of rank match
+  if (freeBurn) {
+    player.hand.splice(handSlotIndex, 1);
+    cardToBurn.isBurned = true;
+    addToDiscard(gameState, cardToBurn);
+    player.hasFreeBurn = false;
+
+    // Bounty Hunt: track successful bounty burns for scoring bonus
+    if (
+      gameState.gameMode === 'bountyHunt' &&
+      gameState.bountyRank &&
+      cardToBurn.rank === gameState.bountyRank
+    ) {
+      if (!gameState.bountyBurnCounts) gameState.bountyBurnCounts = {};
+      gameState.bountyBurnCounts[player.playerId] =
+        (gameState.bountyBurnCounts[player.playerId] ?? 0) + 1;
+    }
+
+    return {
+      success: true,
+      burnSuccess: true,
+      burnedCard: cardToBurn,
+      burnedSlot: slot,
+      freeBurnUsed: true,
+    };
+  }
+
   // F-045: Check rank match (suit irrelevant)
   const ranksMatch = cardToBurn.rank === topDiscard.rank;
 
@@ -331,17 +361,6 @@ export function handleBurnAttempt(
     };
   } else {
     // F-047: Burn failure — card stays, penalty card(s) drawn face-down
-    // Free Burn: skip penalty cards, consume the token
-    if (freeBurn) {
-      player.hasFreeBurn = false;
-      return {
-        success: true,
-        burnSuccess: false,
-        burnedCard: cardToBurn,
-        burnedSlot: slot,
-        freeBurnUsed: true,
-      };
-    }
 
     // Sudden Death: 2 penalty cards instead of 1
     const penaltyCount = gameState.gameMode === 'suddenDeath' ? 2 : 1;
